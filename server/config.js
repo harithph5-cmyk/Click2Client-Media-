@@ -78,8 +78,9 @@ export const config = {
     city: 'Madurai',
     region: 'Tamil Nadu',
     country: 'India',
-    upiId: env.UPI_ID || '',
-    payeeName: env.UPI_PAYEE_NAME || 'Click2Client Media',
+    // Built-in payment QR (public/img/payment-qr.webp) pays this UPI ID.
+    upiId: env.UPI_ID || 'harithph5@oksbi',
+    payeeName: env.UPI_PAYEE_NAME || 'HARI Hari',
     testimonials: '',
     reportFooter: 'This report reflects data collected at the time of the audit. Search rankings depend on many factors; no ranking outcome is guaranteed.',
   },

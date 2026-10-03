@@ -174,7 +174,7 @@ async function orderView(o) {
     ref: o.id, plan: o.plan, planName: t.name, pages: t.pages, amount: o.amount,
     paymentStatus: o.payment_status, paymentStatusLabel: statusLabel(o.payment_status),
     name: o.name, business: o.business, website: o.website, email: o.email, createdAt: o.created_at,
-    qrAvailable: Boolean(await store.getSetting('payment_qr', null)), upiId: s.upiId || null, payeeName: s.payeeName,
+    qrAvailable: true, upiId: s.upiId || null, payeeName: s.payeeName,
     upiLink: upiLink({ upiId: s.upiId, payeeName: s.payeeName, amount: o.amount, note: `${t.short} ${o.id}` }),
     whatsappHref: `https://wa.me/${s.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`,
     auditId: o.payment_status === 'verified' ? o.audit_id : null,
@@ -196,9 +196,12 @@ pubApi.post('/orders/:token/submitted', h(async (req, res) => {
   res.json(await orderView(await store.getOrderByToken(req.params.token)));
 }));
 
+// QR uploaded in Admin → Settings takes priority; otherwise the built-in QR
+// (a static file, served by Vercel's CDN) is used.
+const DEFAULT_QR = '/img/payment-qr.webp';
 pubApi.get('/payment-qr', h(async (req, res) => {
   const qr = await store.getSetting('payment_qr', null);
-  if (!qr) return res.status(404).end();
+  if (!qr) return res.set('cache-control', 'no-cache').redirect(302, DEFAULT_QR);
   res.set({ 'content-type': qr.mime, 'cache-control': 'no-cache' }).send(Buffer.from(qr.data, 'base64'));
 }));
 

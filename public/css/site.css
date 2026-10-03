@@ -337,7 +337,7 @@ select.input { appearance: auto; }
 .pay-steps span { flex: 1; height: 4px; border-radius: 4px; background: var(--line); }
 .pay-steps span.on { background: var(--accent); }
 .qr-box { display: grid; place-items: center; padding: 18px; background: #fff; border: 1px solid var(--line); border-radius: 18px; }
-.qr-box img { width: 240px; height: 240px; object-fit: contain; image-rendering: pixelated; }
+.qr-box img { width: min(300px, 100%); height: auto; aspect-ratio: auto; border-radius: 14px; display: block; }
 .amount { font: 800 38px/1 var(--display); color: var(--ink); letter-spacing: -0.03em; }
 
 /* Reveal animation */

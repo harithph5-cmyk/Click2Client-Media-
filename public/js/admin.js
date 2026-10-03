@@ -248,8 +248,8 @@ async function settings(view) {
           <h3>Payment QR code</h3>
           <p class="small muted" style="margin-top:4px">Shown to customers on the ₹${pricing.p25} and ₹${pricing.p50} payment screens.</p>
           <div class="row" style="margin-top:14px;align-items:flex-start;gap:16px">
-            ${qrConfigured ? `<img class="qr-prev" src="/api/public/payment-qr?t=${Date.now()}" alt="Current payment QR">` : '<div class="qr-prev" style="display:grid;place-items:center;font-size:12px;color:var(--ink-4);text-align:center;padding:10px">No QR uploaded</div>'}
-            <div class="stack"><label class="btn sm accent" style="cursor:pointer">Upload QR image<input type="file" id="qrFile" accept="image/png,image/jpeg,image/webp" hidden></label>${qrConfigured ? '<button class="btn sm ghost" id="qrDel" type="button">Remove</button>' : ''}<span class="tiny muted">PNG, JPG or WebP, under 1 MB.</span></div>
+            <div><img class="qr-prev" src="/api/public/payment-qr?t=${Date.now()}" alt="Payment QR currently shown to customers"><div class="tiny muted" style="margin-top:6px;max-width:160px">${qrConfigured ? 'Uploaded QR (in use)' : 'Built-in QR — harithph5@oksbi'}</div></div>
+            <div class="stack"><label class="btn sm accent" style="cursor:pointer">Upload QR image<input type="file" id="qrFile" accept="image/png,image/jpeg,image/webp" hidden></label>${qrConfigured ? '<button class="btn sm ghost" id="qrDel" type="button">Remove (use built-in QR)</button>' : ''}<span class="tiny muted">PNG, JPG or WebP, under 1 MB.</span></div>
           </div>
         </div>
         <div class="card card-pad"><h3>Audit prices</h3><p class="small muted" style="margin-top:4px">25-page: <b style="color:var(--ink)">₹${pricing.p25}</b> · 50-page: <b style="color:var(--ink)">₹${pricing.p50}</b>. Prices are set on the server (<code>PRICE_25_PAGE_AUDIT</code>, <code>PRICE_50_PAGE_AUDIT</code>) so they can't be changed from a browser.</p></div>

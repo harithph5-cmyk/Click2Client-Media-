@@ -33,10 +33,11 @@ function render(o) {
       <h2 style="font:700 26px var(--display);margin:6px 0 4px;letter-spacing:-0.02em">Scan &amp; Pay ₹${o.amount}</h2>
       <p class="small">${esc(o.planName)} · one-time payment</p>
       <div class="qr-box" style="margin-top:18px">
-        ${o.qrAvailable ? `<img src="/api/public/payment-qr" alt="Click2Client Media UPI payment QR code" width="240" height="240">` : `<div style="text-align:center;padding:30px 10px"><b style="color:var(--ink)">QR code not configured yet</b><p class="small" style="margin-top:6px">Please message us on WhatsApp for payment details.</p></div>`}
+        ${o.qrAvailable ? `<img src="/api/public/payment-qr" alt="UPI payment QR code for ₹${o.amount} — scan with any UPI app">` : `<div style="text-align:center;padding:30px 10px"><b style="color:var(--ink)">QR code not configured yet</b><p class="small" style="margin-top:6px">Please message us on WhatsApp for payment details.</p></div>`}
         ${o.upiId ? `<p class="small" style="margin-top:12px">UPI ID: <b class="mono" style="color:var(--ink)">${esc(o.upiId)}</b> · ${esc(o.payeeName)}</p>` : ''}
         ${o.upiLink ? `<a class="btn outline sm" style="margin-top:10px" href="${esc(o.upiLink)}">Open in UPI app (mobile)</a>` : ''}
         <div class="amount" style="margin-top:14px">₹${o.amount}</div>
+        <p class="small" style="margin-top:6px;text-align:center">Enter <b style="color:var(--ink)">₹${o.amount}</b> as the amount in your UPI app after scanning.</p>
       </div>
       <p style="margin-top:18px;font-size:14.5px">After completing the payment, take a screenshot of your successful payment and send it to us on WhatsApp.</p>
       <a class="btn wa-btn" id="waBtn" href="${esc(o.whatsappHref)}" target="_blank" rel="noopener" style="margin-top:14px">${ICON.whatsapp} Send Payment Screenshot on WhatsApp</a>
