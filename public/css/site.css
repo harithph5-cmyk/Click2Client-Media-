@@ -236,7 +236,8 @@ h1, h2, h3, h4 { color: var(--ink); }
 .why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
 @media (max-width: 900px) { .why-grid { grid-template-columns: 1fr; } }
 .why-list { display: grid; gap: 16px; margin-top: 8px; }
-.why-list div { display: grid; grid-template-columns: 44px 1fr; gap: 14px; }
+.why-list > div { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; align-items: start; }
+.why-list > div > div { display: block; }
 .why-list h3 { font: 700 16.5px var(--display); }
 .why-list p { font-size: 14.5px; margin-top: 2px; }
 
