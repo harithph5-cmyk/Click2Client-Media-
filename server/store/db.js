@@ -1,17 +1,31 @@
-// Persistence layer. Two drivers behind one async API:
-//   • Postgres (Neon / Vercel Postgres / any Postgres) when DATABASE_URL or
-//     POSTGRES_URL is set — required on Vercel, whose disk is not persistent.
-//   • Node's built-in SQLite file otherwise — zero-setup local development.
-// SQL is written to run unchanged on both (ISO date strings in TEXT columns,
-// no JSON functions, `?` placeholders translated for Postgres).
+// Persistence layer — PostgreSQL only (Neon on Vercel, or any Postgres).
+// The app never stores data on the local filesystem: Vercel's disk is
+// read-only and not persistent. All application data — audits, leads,
+// orders/payments, admin sessions, login throttling and site settings —
+// lives in the database named by DATABASE_URL.
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-import { config } from '../config.js';
+import pg from 'pg';
+import { attachDatabasePool } from '@vercel/functions';
 
-const PG_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || '';
-export const driver = PG_URL ? 'postgres' : 'sqlite';
+// Neon's Vercel integration sets DATABASE_URL (and POSTGRES_URL); a custom
+// prefix chosen in the integration produces e.g. STORAGE_DATABASE_URL.
+const URL_VARS = ['DATABASE_URL', 'POSTGRES_URL', 'NEON_DATABASE_URL', 'POSTGRES_PRISMA_URL'];
+function findDatabaseUrl(env = process.env) {
+  for (const k of URL_VARS) if (env[k]) return { name: k, url: env[k] };
+  const k = Object.keys(env).sort().find((n) => /_(DATABASE_URL|POSTGRES_URL)$/.test(n) && env[n]);
+  return k ? { name: k, url: env[k] } : null;
+}
+const found = findDatabaseUrl();
+export const driver = 'postgres';
+export const databaseEnvVar = found?.name || null;
+
+export class DatabaseConfigError extends Error {
+  constructor() {
+    super('DATABASE_URL is not set. Connect a Postgres database (Vercel → Storage → Neon) and redeploy, or set DATABASE_URL in .env for local development.');
+    this.code = 'database_not_configured';
+  }
+}
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS customers (
@@ -31,6 +45,10 @@ const SCHEMA = [
     previous_audit_id TEXT, email TEXT, business TEXT, category TEXT,
     progress TEXT, input TEXT, data TEXT, error TEXT,
     created_at TEXT NOT NULL, completed_at TEXT)`,
+  // Columns added after the first release.
+  `ALTER TABLE audits ADD COLUMN IF NOT EXISTS business TEXT`,
+  `ALTER TABLE audits ADD COLUMN IF NOT EXISTS category TEXT`,
+  `ALTER TABLE audits ADD COLUMN IF NOT EXISTS progress TEXT`,
   `CREATE INDEX IF NOT EXISTS idx_audits_domain ON audits(domain, created_at)`,
   `CREATE TABLE IF NOT EXISTS audit_findings (
     audit_id TEXT NOT NULL, url TEXT, category TEXT, issue TEXT, severity TEXT, priority TEXT,
@@ -49,43 +67,57 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 ];
 
-// ── Driver setup ─────────────────────────────────────────────────────────
-let exec; // (sql, params) => Promise<rows[]>
-let ready;
+// ── Connection pool (one per serverless instance) ────────────────────────
+let pool = null;
+function getPool() {
+  if (pool) return pool;
+  if (!found) throw new DatabaseConfigError();
+  const local = /@(localhost|127\.0\.0\.1)[:/]/.test(found.url);
+  pool = new pg.Pool({
+    connectionString: found.url,
+    max: Number(process.env.PG_POOL_MAX || 5),
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    ...(local ? {} : { ssl: { rejectUnauthorized: false } }),
+  });
+  pool.on('error', (err) => console.error('[db] idle client error:', err.message));
+  // Lets Vercel Fluid compute close idle connections before an instance is suspended.
+  try { attachDatabasePool(pool); } catch {}
+  return pool;
+}
 
-async function init() {
-  if (PG_URL) {
-    const { default: pg } = await import('pg');
-    const pool = new pg.Pool({
-      connectionString: PG_URL,
-      max: Number(process.env.PG_POOL_MAX || 5),
-      ssl: /localhost|127\.0\.0\.1/.test(PG_URL) ? false : { rejectUnauthorized: false },
-    });
-    exec = async (sql, params = []) => {
-      let i = 0;
-      const text = sql.replace(/\?/g, () => `$${++i}`);
-      return (await pool.query(text, params)).rows;
-    };
-  } else {
-    const { DatabaseSync } = await import('node:sqlite');
-    fs.mkdirSync(config.dataDir, { recursive: true });
-    const db = new DatabaseSync(path.join(config.dataDir, 'click2client.db'));
-    db.exec('PRAGMA journal_mode = WAL;');
-    exec = async (sql, params = []) => {
-      const st = db.prepare(sql);
-      return /^\s*(SELECT|WITH)/i.test(sql) || /RETURNING/i.test(sql) ? st.all(...params) : (st.run(...params), []);
-    };
-  }
-  for (const s of SCHEMA) await exec(s);
-  // Columns added after the first release (ignore "already exists").
-  for (const col of ['business TEXT', 'category TEXT', 'progress TEXT']) {
-    try { await exec(`ALTER TABLE audits ADD COLUMN ${col}`); } catch {}
+// ── Migrations ───────────────────────────────────────────────────────────
+// Every statement is idempotent. A transaction-scoped advisory lock stops two
+// cold-starting instances from running the DDL at the same moment.
+const MIGRATION_LOCK = 7_301_102_400;
+async function migrate() {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK]);
+    for (const s of SCHEMA) await client.query(s);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
   }
 }
 
+let ready = null;
+function ensureReady() {
+  // If initialisation fails (e.g. database briefly unreachable), the next request retries.
+  ready ||= migrate().catch((err) => { ready = null; throw err; });
+  return ready;
+}
+
 const q = async (sql, params = []) => {
-  await (ready ||= init());
-  return exec(sql, params.map((v) => (v === undefined || v === '' ? null : v)));
+  await ensureReady();
+  let i = 0;
+  const text = sql.replace(/\?/g, () => `$${++i}`);
+  const values = params.map((v) => (v === undefined || v === '' ? null : v));
+  return (await getPool().query(text, values)).rows;
 };
 const one = async (sql, params) => (await q(sql, params))[0] || null;
 const num = (v) => (v == null ? null : Number(v));

@@ -11,7 +11,6 @@ const int = (v, d) => {
 export const config = {
   port: int(env.PORT, 3000),
   publicUrl: (env.PUBLIC_URL || '').replace(/\/$/, ''),
-  dataDir: env.DATA_DIR || './data',
   isProduction: env.NODE_ENV === 'production',
 
   crawler: {

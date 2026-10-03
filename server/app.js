@@ -274,7 +274,7 @@ admin.post('/orders/:id/restart', h(async (req, res) => {
 admin.get('/audits', h(async (req, res) => res.json({ audits: await store.listAudits({ plan: req.query.plan || undefined, limit: 300 }) })));
 
 admin.get('/settings', h(async (req, res) => {
-  res.json({ settings: await siteSettings(), qrConfigured: Boolean(await store.getSetting('payment_qr', null)), integrations: integrationStatus(), pricing: { p25: TIERS.p25.price, p50: TIERS.p50.price }, database: store.driver });
+  res.json({ settings: await siteSettings(), qrConfigured: Boolean(await store.getSetting('payment_qr', null)), integrations: integrationStatus(), pricing: { p25: TIERS.p25.price, p50: TIERS.p50.price }, database: store.databaseEnvVar });
 }));
 admin.put('/settings', h(async (req, res) => {
   const allowed = ['phone', 'whatsapp', 'email', 'instagram', 'facebook', 'upiId', 'payeeName', 'reportFooter', 'city', 'region'];
@@ -367,9 +367,14 @@ app.use(express.static(pub, { index: false, maxAge: 0, extensions: [] }));
 app.use((req, res) => res.status(404).type('html').send(page404));
 
 app.use((err, req, res, next) => {
-  console.error(err);
-  if (req.path.startsWith('/api')) return bad(res, 'internal', 'Unexpected server error. Please try again.', 500);
-  res.status(500).type('text').send('Unexpected server error.');
+  const dbMissing = err instanceof store.DatabaseConfigError;
+  console.error(dbMissing ? `[config] ${err.message}` : err);
+  if (req.path.startsWith('/api')) {
+    return dbMissing
+      ? bad(res, 'service_unavailable', 'This service is being set up. Please try again shortly or contact us on WhatsApp.', 503)
+      : bad(res, 'internal', 'Unexpected server error. Please try again.', 500);
+  }
+  res.status(dbMissing ? 503 : 500).type('text').send(dbMissing ? 'This page is temporarily unavailable. Please try again shortly.' : 'Unexpected server error.');
 });
 
 export default app;

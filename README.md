@@ -18,7 +18,7 @@ The Click2Client Media agency website (Home, SEO Audit, Services, Enquire Now) w
 
 ### How the app runs on Vercel
 
-- **State lives in Postgres:** leads, orders, audits, admin sessions, login throttling and settings. Nothing is kept in memory between requests.
+- **State lives in Postgres:** leads, orders, audits, admin sessions, login throttling, settings and the payment QR image. Nothing is written to disk, and nothing is kept in memory between requests.
 - **Audits run inside the request:** each audit runs through `waitUntil()` with a 270-second budget. On very slow or very large sites the crawl stops early and the report says so. PageSpeed checks and AI analysis are skipped if time runs short.
 - **Progress is polled:** each step is saved to the database, and the browser checks it every 2 seconds.
 - **Form rate limits are per instance:** the limits on audits, orders and leads are held in memory, so on Vercel they are approximate. For stricter limits, add Vercel Firewall rules or a Redis-based limiter.
@@ -31,7 +31,7 @@ cp .env.example .env      # set PUBLIC_URL, change ADMIN_PASSWORD, add PAGESPEED
 npm start                 # http://localhost:3000  ·  admin: http://localhost:3000/admin
 ```
 
-Requires Node 24. Without `DATABASE_URL` it uses a local SQLite file (`data/click2client.db`). Set `DATABASE_URL` to use Postgres instead.
+Requires Node 24 and a PostgreSQL database: set `DATABASE_URL` in `.env`. A free Neon "dev" branch works well. The app never writes data to the local filesystem. Without a database the marketing pages still load, but audits, forms and the admin portal return a "being set up" message.
 
 ## Pages and routes
 
@@ -83,7 +83,7 @@ Statuses: Payment Pending · Screenshot Received · Payment Under Verification �
 
 ### Security
 
-- The password is hashed with scrypt. Sessions are stored hashed in SQLite.
+- The password is hashed with scrypt. Sessions are stored hashed in Postgres.
 - The session cookie is `HttpOnly` and `SameSite=Strict` (plus `Secure` when `NODE_ENV=production`).
 - Every admin write needs a CSRF token header.
 - Logins are limited to 5 failed attempts per 15 minutes. All inputs are validated on the server, with rate limits on forms.
@@ -92,9 +92,9 @@ Statuses: Payment Pending · Screenshot Received · Payment Under Verification �
 
 **Before going live:** change the default password `2004` (it is a 4-digit code and easy to guess). Use a long `ADMIN_PASSWORD`, or better `ADMIN_PASSWORD_HASH`, and serve the site over HTTPS.
 
-## Data model (Postgres on Vercel, SQLite locally)
+## Data model (PostgreSQL)
 
-`customers`, `leads`, `audits` (the id doubles as the private report token), `audit_findings` (one row per issue per URL), `orders` (payments), `sessions`, `projects`, `settings`. All database access goes through `server/store/db.js`, which uses the same SQL on both databases.
+`customers`, `leads`, `audits` (the id doubles as the private report token), `audit_findings` (one row per issue per URL), `orders` (payments), `sessions`, `projects`, `settings`. All database access goes through `server/store/db.js`. Tables are created and upgraded automatically on the first request after each deploy. The migrations are idempotent and protected by a Postgres advisory lock, so parallel serverless cold starts are safe. The connection string is read from `DATABASE_URL`, falling back to `POSTGRES_URL`, `NEON_DATABASE_URL` or any `*_DATABASE_URL` set by a prefixed Neon integration.
 
 ## Payment gateway later
 

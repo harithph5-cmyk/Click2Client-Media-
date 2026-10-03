@@ -24,7 +24,14 @@ function read(name) {
 }
 
 export async function siteSettings() {
-  return { ...config.siteDefaults, ...(await store.getSetting('site', {})) };
+  // Marketing pages must render even if the database is briefly unreachable:
+  // fall back to the default contact details instead of failing the page.
+  try {
+    return { ...config.siteDefaults, ...(await store.getSetting('site', {})) };
+  } catch (err) {
+    console.error('[settings] using defaults —', err.message);
+    return { ...config.siteDefaults };
+  }
 }
 
 export const siteUrl = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
