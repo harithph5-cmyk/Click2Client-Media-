@@ -2,19 +2,23 @@
 // The app never stores data on the local filesystem: Vercel's disk is
 // read-only and not persistent. All application data — audits, leads,
 // orders/payments, admin sessions, login throttling and site settings —
-// lives in the database named by DATABASE_URL.
+// lives in the Postgres database configured below.
 
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
 
-// Neon's Vercel integration sets DATABASE_URL (and POSTGRES_URL); a custom
-// prefix chosen in the integration produces e.g. STORAGE_DATABASE_URL.
-const URL_VARS = ['DATABASE_URL', 'POSTGRES_URL', 'NEON_DATABASE_URL', 'POSTGRES_PRISMA_URL'];
+// Connection URL, in order of preference:
+//  1. database_POSTGRES_URL — set by this project's Vercel ↔ Neon integration
+//     (environment-variable prefix "database_").
+//  2. DATABASE_URL — standard name; use it in .env for local development.
+// Deliberately NOT used: *_POSTGRES_PRISMA_URL (its pgbouncer/connect_timeout
+// query parameters are Prisma-specific and are rejected by the pg driver).
+const URL_VARS = ['database_POSTGRES_URL', 'DATABASE_URL'];
+export const DATABASE_URL_VARS = URL_VARS;
 function findDatabaseUrl(env = process.env) {
   for (const k of URL_VARS) if (env[k]) return { name: k, url: env[k] };
-  const k = Object.keys(env).sort().find((n) => /_(DATABASE_URL|POSTGRES_URL)$/.test(n) && env[n]);
-  return k ? { name: k, url: env[k] } : null;
+  return null;
 }
 const found = findDatabaseUrl();
 export const driver = 'postgres';
@@ -22,7 +26,7 @@ export const databaseEnvVar = found?.name || null;
 
 export class DatabaseConfigError extends Error {
   constructor() {
-    super('DATABASE_URL is not set. Connect a Postgres database (Vercel → Storage → Neon) and redeploy, or set DATABASE_URL in .env for local development.');
+    super('No database URL found. Set database_POSTGRES_URL (created by the Vercel Neon integration) or DATABASE_URL, then redeploy. For local development, set DATABASE_URL in .env.');
     this.code = 'database_not_configured';
   }
 }

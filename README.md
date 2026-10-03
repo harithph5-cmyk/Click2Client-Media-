@@ -6,7 +6,7 @@ The Click2Client Media agency website (Home, SEO Audit, Services, Enquire Now) w
 
 1. **Push to GitHub.** Use a private repo. `.env`, `data/` and `node_modules/` are ignored by git.
 2. **Import it on Vercel.** On vercel.com, choose **Add New → Project → Import** your repo. Leave the framework as *Other* and the build settings empty; `vercel.json` handles routing and sets a 300-second function limit.
-3. **Add a database.** Open the project's **Storage** tab, choose **Create / Connect → Neon (Postgres)**, and connect it to all environments. This sets `DATABASE_URL`, and the tables are created automatically on first request.
+3. **Add a database.** Open the project's **Storage** tab, choose **Create / Connect → Neon (Postgres)**, and connect it to all environments. The integration creates `database_POSTGRES_URL` (with the `database_` prefix), which the app uses automatically. The tables are created on the first request.
 4. **Set environment variables** under **Settings → Environment Variables**:
    - `NODE_ENV` = `production`
    - `PUBLIC_URL` = your site address, e.g. `https://click2clientmedia.com` (your `*.vercel.app` address until the domain is connected)
@@ -31,7 +31,7 @@ cp .env.example .env      # set PUBLIC_URL, change ADMIN_PASSWORD, add PAGESPEED
 npm start                 # http://localhost:3000  ·  admin: http://localhost:3000/admin
 ```
 
-Requires Node 24 and a PostgreSQL database: set `DATABASE_URL` in `.env`. A free Neon "dev" branch works well. The app never writes data to the local filesystem. Without a database the marketing pages still load, but audits, forms and the admin portal return a "being set up" message.
+Requires Node 24 and a PostgreSQL database: set `DATABASE_URL` in `.env` (on Vercel, `database_POSTGRES_URL` from the Neon integration is used instead). A free Neon "dev" branch works well. The app never writes data to the local filesystem. Without a database the marketing pages still load, but audits, forms and the admin portal return a "being set up" message.
 
 ## Pages and routes
 
@@ -94,7 +94,7 @@ Statuses: Payment Pending · Screenshot Received · Payment Under Verification �
 
 ## Data model (PostgreSQL)
 
-`customers`, `leads`, `audits` (the id doubles as the private report token), `audit_findings` (one row per issue per URL), `orders` (payments), `sessions`, `projects`, `settings`. All database access goes through `server/store/db.js`. Tables are created and upgraded automatically on the first request after each deploy. The migrations are idempotent and protected by a Postgres advisory lock, so parallel serverless cold starts are safe. The connection string is read from `DATABASE_URL`, falling back to `POSTGRES_URL`, `NEON_DATABASE_URL` or any `*_DATABASE_URL` set by a prefixed Neon integration.
+`customers`, `leads`, `audits` (the id doubles as the private report token), `audit_findings` (one row per issue per URL), `orders` (payments), `sessions`, `projects`, `settings`. All database access goes through `server/store/db.js`. Tables are created and upgraded automatically on the first request after each deploy. The migrations are idempotent and protected by a Postgres advisory lock, so parallel serverless cold starts are safe. The connection string is read from `database_POSTGRES_URL` (set by the Vercel Neon integration), falling back to `DATABASE_URL` (for local development).
 
 ## Payment gateway later
 
