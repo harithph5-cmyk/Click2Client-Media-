@@ -31,6 +31,14 @@
   .badge-n { background: var(--fail); color: #fff; border-radius: 99px; font: 700 10.5px var(--body); padding: 2px 6px; margin-left: 4px; }
   td .who b { color: var(--ink); }
   .qr-prev { width: 160px; height: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .bulk { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--fail-soft); border-bottom: 1px solid #F3C9C6; position: sticky; left: 0; }
+  .bulk[hidden] { display: none; }
+  .btn.danger { background: var(--fail); border-color: var(--fail); color: #fff; }
+  .btn.danger:hover { background: #A82623; border-color: #A82623; }
+  .btn.del { color: var(--fail); }
+  .btn.del:hover { background: var(--fail-soft); }
+  th.sel, td.sel { width: 36px; padding-right: 0 !important; }
+  td.sel input, th.sel input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
 </style>
 </head>
 <body>

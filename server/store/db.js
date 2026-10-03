@@ -278,6 +278,46 @@ export const markLeadForwarded = (id) => q('UPDATE leads SET forwarded = 1 WHERE
 export const listLeads = () => q('SELECT * FROM leads ORDER BY created_at DESC LIMIT 1000');
 export const updateLeadStatus = (id, status) => q('UPDATE leads SET status = ? WHERE id = ?', [status, id]);
 
+// ── Permanent deletion (admin) ───────────────────────────────────────────
+// Each function takes an array of ids, removes dependent rows, and clears
+// references so nothing points at a deleted record. Returns the count removed.
+const inList = (ids) => ids.map(() => '?').join(',');
+const cleanIds = (ids) => [...new Set((Array.isArray(ids) ? ids : [ids]).filter((x) => typeof x === 'string' && x.length <= 64))].slice(0, 500);
+
+export async function deleteLeads(ids) {
+  ids = cleanIds(ids);
+  if (!ids.length) return 0;
+  const before = await one(`SELECT COUNT(*) AS n FROM leads WHERE id IN (${inList(ids)})`, ids);
+  await q(`DELETE FROM leads WHERE id IN (${inList(ids)})`, ids);
+  return num(before.n);
+}
+
+export async function deleteAudits(ids) {
+  ids = cleanIds(ids);
+  if (!ids.length) return 0;
+  const before = await one(`SELECT COUNT(*) AS n FROM audits WHERE id IN (${inList(ids)})`, ids);
+  await q(`DELETE FROM audit_findings WHERE audit_id IN (${inList(ids)})`, ids);
+  await q(`UPDATE orders SET audit_id = NULL WHERE audit_id IN (${inList(ids)})`, ids);
+  await q(`UPDATE leads SET audit_id = NULL WHERE audit_id IN (${inList(ids)})`, ids);
+  await q(`UPDATE audits SET previous_audit_id = NULL WHERE previous_audit_id IN (${inList(ids)})`, ids);
+  await q(`DELETE FROM audits WHERE id IN (${inList(ids)})`, ids);
+  // Drop projects that no longer have any audits.
+  await q('DELETE FROM projects WHERE domain NOT IN (SELECT DISTINCT domain FROM audits WHERE domain IS NOT NULL)');
+  return num(before.n);
+}
+
+/** Deletes orders, the audits they produced, and (optionally) their leads. */
+export async function deleteOrders(ids, { withLeads = true } = {}) {
+  ids = cleanIds(ids);
+  if (!ids.length) return 0;
+  const rows = await q(`SELECT id, audit_id FROM orders WHERE id IN (${inList(ids)})`, ids);
+  const auditIds = rows.map((r) => r.audit_id).filter(Boolean);
+  if (auditIds.length) await deleteAudits(auditIds);
+  if (withLeads) await q(`DELETE FROM leads WHERE order_id IN (${inList(ids)})`, ids);
+  await q(`DELETE FROM orders WHERE id IN (${inList(ids)})`, ids);
+  return rows.length;
+}
+
 // ── Admin sessions & login throttling (stored in the DB so they work across serverless instances)
 export async function createSession(tokenHash, csrf, hours, ip) {
   await q('DELETE FROM sessions WHERE expires_at < ?', [now()]);

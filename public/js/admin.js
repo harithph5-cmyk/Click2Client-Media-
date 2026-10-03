@@ -83,6 +83,54 @@ const bars = (rows) => {
   return rows.length ? `<div class="hbars">${rows.map((r) => `<div class="r"><span class="break">${esc(r.label)}</span><div class="bar"><span style="width:${(100 * r.n) / max}%"></span></div><b style="text-align:right">${r.n}</b></div>`).join('')}</div>` : '<p class="small muted" style="margin-top:10px">No data yet.</p>';
 };
 
+// ── Selection & permanent deletion (for clearing test entries) ─────────
+const selHead = '<th class="sel"><input type="checkbox" data-sel-all aria-label="Select all"></th>';
+const selCell = (id, enabled = true) => `<td class="sel">${enabled ? `<input type="checkbox" data-sel="${esc(id)}" aria-label="Select row">` : ''}</td>`;
+const delBtn = '<button class="btn sm quiet del" data-del title="Delete permanently">Delete</button>';
+const bulkBar = '<div class="bulk" hidden><b data-sel-count></b><span class="spacer"></span><button class="btn sm danger" data-del-selected>Delete selected</button><button class="btn sm quiet" data-sel-clear>Clear selection</button></div>';
+
+function updateBulk(view) {
+  const n = view.querySelectorAll('[data-sel]:checked').length;
+  const bar = view.querySelector('.bulk');
+  if (!bar) return;
+  bar.hidden = !n;
+  bar.querySelector('[data-sel-count]').textContent = `${n} selected`;
+}
+
+async function deleteIds({ kind, noun, warn }, ids) {
+  if (!ids.length) return false;
+  const label = `${ids.length} ${noun}${ids.length > 1 ? 's' : ''}`;
+  if (!confirm(`Permanently delete ${label}?
+
+${warn}
+
+This cannot be undone.`)) return false;
+  try {
+    const r = await api(`/admin/${kind}/delete`, { method: 'POST', body: { ids } });
+    toast(`Deleted ${r.deleted} ${noun}${r.deleted === 1 ? '' : 's'}`);
+    return true;
+  } catch (ex) { toast(ex.message); return false; }
+}
+
+/** Handles checkbox / delete clicks. Returns true when the click was handled. */
+function selectionClick(e, view, opts) {
+  const t = e.target;
+  if (t.matches('[data-sel-all]')) { view.querySelectorAll('[data-sel]').forEach((c) => (c.checked = t.checked)); updateBulk(view); return true; }
+  if (t.matches('[data-sel]')) { updateBulk(view); return true; }
+  if (t.closest('[data-sel-clear]')) { view.querySelectorAll('[data-sel], [data-sel-all]').forEach((c) => (c.checked = false)); updateBulk(view); return true; }
+  if (t.closest('[data-del-selected]')) {
+    const ids = [...view.querySelectorAll('[data-sel]:checked')].map((c) => c.dataset.sel);
+    deleteIds(opts, ids).then((ok) => ok && opts.reload());
+    return true;
+  }
+  if (t.closest('[data-del]')) {
+    const id = t.closest('tr[data-id]')?.dataset.id;
+    if (id) deleteIds(opts, [id]).then((ok) => ok && opts.reload());
+    return true;
+  }
+  return false;
+}
+
 // ── Overview / analytics ─────────────────────────────────────────────────
 async function overview(view) {
   const s = await api('/admin/stats');
@@ -120,10 +168,11 @@ async function payments(view) {
   const { orders, statuses } = await api('/admin/orders');
   setBadge(orders.filter((o) => o.payment_status === 'screenshot_received' || o.payment_status === 'under_verification').length);
   view.innerHTML = `${head('Payments', 'Payment Verification', 'Check the WhatsApp screenshot against your UPI app or bank statement, then mark the payment. Only "Payment Verified" starts the paid audit.')}
-    ${orders.length ? `<div class="card table-wrap"><table class="t"><thead><tr><th>Date</th><th>Customer</th><th>Website</th><th>Plan</th><th class="num">Amount</th><th>Payment status</th><th>Transaction ID</th><th>Audit</th><th></th></tr></thead><tbody>
+    ${orders.length ? `<div class="card table-wrap">${bulkBar}<table class="t"><thead><tr>${selHead}<th>Date</th><th>Customer</th><th>Website</th><th>Plan</th><th class="num">Amount</th><th>Payment status</th><th>Transaction ID</th><th>Audit</th><th></th></tr></thead><tbody>
     ${orders.map((o) => {
       const w = wa(o.phone, `Hi ${o.name}, this is Click2Client Media regarding your ${o.plan === 'p50' ? '50-Page SEO Growth Audit' : '25-Page SEO Audit'} order (${o.id}).`);
       return `<tr data-id="${esc(o.id)}">
+        ${selCell(o.id, o.audit_status !== 'running')}
         <td class="small nowrap">${fmtDate(o.created_at, true)}</td>
         <td class="small who"><b>${esc(o.name)}</b><br>${esc(o.business || '')}<br><a href="mailto:${esc(o.email)}">${esc(o.email)}</a><br>${esc(o.phone)} ${w ? `· <a href="${w}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</td>
         <td class="small break">${esc(o.website)}${o.location ? `<br><span class="muted">${esc(o.category || '')} ${esc(o.location)}</span>` : ''}</td>
@@ -132,7 +181,7 @@ async function payments(view) {
         <td><select class="mini" data-ps>${statuses.map((st) => `<option value="${st}" ${st === o.payment_status ? 'selected' : ''}>${PS[st]}</option>`).join('')}</select></td>
         <td><input class="input" style="height:34px;width:140px;font-size:12.5px" data-txn placeholder="UPI ref (optional)" value="${esc(o.transaction_id || '')}"></td>
         <td class="small">${o.audit_id ? `${o.audit_status === 'complete' ? `<span class="pill pass">Completed</span> ${o.audit_score ?? ''}` : o.audit_status === 'failed' ? '<span class="pill fail">Failed</span>' : '<span class="pill info">Processing</span>'}` : '<span class="pill unavailable">Pending</span>'}</td>
-        <td class="nowrap">${o.payment_status !== 'verified' ? `<button class="btn sm accent" data-verify>Verify Payment</button>` : o.audit_id ? `<a class="btn sm ghost" href="/audit/${esc(o.audit_id)}" target="_blank">Open report</a>${o.audit_status === 'failed' ? ' <button class="btn sm" data-restart>Re-run</button>' : ''}` : '<button class="btn sm" data-restart>Start audit</button>'}</td>
+        <td class="nowrap">${o.payment_status !== 'verified' ? `<button class="btn sm accent" data-verify>Verify Payment</button>` : o.audit_id ? `<a class="btn sm ghost" href="/audit/${esc(o.audit_id)}" target="_blank">Open report</a>${o.audit_status === 'failed' ? ' <button class="btn sm" data-restart>Re-run</button>' : ''}` : '<button class="btn sm" data-restart>Start audit</button>'}${o.audit_status !== 'running' ? delBtn : ''}</td>
       </tr>`;
     }).join('')}</tbody></table></div>` : '<div class="card empty"><h3>No paid orders yet</h3><p>Orders appear here when a visitor chooses the ₹125 or ₹399 audit.</p></div>'}`;
 
@@ -154,6 +203,7 @@ async function payments(view) {
     if (e.target.matches('[data-txn]')) save(tr, { transactionId: e.target.value });
   };
   view.onclick = async (e) => {
+    if (selectionClick(e, view, { kind: 'orders', noun: 'order', warn: 'The order, the audit it produced and its lead entry will be removed. Revenue and dashboard numbers update immediately.', reload: () => payments(view) })) return;
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;
     if (e.target.closest('[data-verify]')) {
@@ -173,8 +223,9 @@ async function leads(view) {
   const list = f === 'all' ? all : all.filter((l) => l.status === f);
   view.innerHTML = `${head('CRM', 'Leads', `${all.length} lead${all.length === 1 ? '' : 's'} from forms, free audits and paid orders.`, `<button class="btn ghost sm" id="csv">Export CSV</button>`)}
     <div class="filters">${['all', ...statuses].map((s) => `<button class="chip ${f === s ? 'on' : ''}" data-lf="${s}">${s === 'all' ? 'All' : LS[s]}<span class="n">${s === 'all' ? all.length : all.filter((l) => l.status === s).length}</span></button>`).join('')}</div>
-    ${list.length ? `<div class="card table-wrap"><table class="t"><thead><tr><th>Date</th><th>Name</th><th>Contact</th><th>Company / website</th><th>Service</th><th>Source</th><th>Status</th></tr></thead><tbody>
+    ${list.length ? `<div class="card table-wrap">${bulkBar}<table class="t"><thead><tr>${selHead}<th>Date</th><th>Name</th><th>Contact</th><th>Company / website</th><th>Service</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>
       ${list.map((l) => { const w = wa(l.whatsapp || l.phone, `Hi ${l.name}, this is Click2Client Media.`); return `<tr data-id="${esc(l.id)}">
+        ${selCell(l.id)}
         <td class="small nowrap">${fmtDate(l.created_at, true)}</td>
         <td><b>${esc(l.name)}</b>${l.message ? `<div class="tiny muted" style="max-width:260px">${esc(l.message.slice(0, 160))}</div>` : ''}</td>
         <td class="small">${l.email ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a><br>` : ''}${esc(l.phone || '')}${w ? ` · <a href="${w}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</td>
@@ -182,8 +233,10 @@ async function leads(view) {
         <td class="small">${esc(l.service || '—')}</td>
         <td class="small">${esc(SRC[l.source] || l.source || '')}</td>
         <td><select class="mini" data-ls>${statuses.map((s) => `<option value="${s}" ${s === l.status ? 'selected' : ''}>${LS[s]}</option>`).join('')}</select></td>
+        <td>${delBtn}</td>
       </tr>`; }).join('')}</tbody></table></div>` : '<div class="card empty"><p>No leads in this view.</p></div>'}`;
   view.onclick = (e) => {
+    if (selectionClick(e, view, { kind: 'leads', noun: 'lead', warn: 'Only the lead entries are removed; any linked audits and orders are kept.', reload: () => leads(view) })) return;
     const c = e.target.closest('[data-lf]');
     if (c) { state.leadFilter = c.dataset.lf; leads(view); }
     if (e.target.id === 'csv') {
@@ -208,8 +261,9 @@ async function audits(view) {
   const F = [['all', 'All'], ['free', 'Free'], ['paid', 'Paid'], ['p25', '25-page'], ['p50', '50-page'], ['internal', 'Internal']];
   view.innerHTML = `${head('Audit management', 'SEO Audits', 'Every audit run from the website and the internal workspace.', `<a class="btn sm accent" href="/app#/new">+ Run internal audit</a>`)}
     <div class="filters">${F.map(([k, l]) => `<button class="chip ${f === k ? 'on' : ''}" data-af="${k}">${l}</button>`).join('')}</div>
-    ${list.length ? `<div class="card table-wrap"><table class="t"><thead><tr><th>Date</th><th>Website</th><th>Customer</th><th>Plan</th><th>Payment</th><th>Audit status</th><th class="num">Pages</th><th class="num">Score</th><th>Report</th></tr></thead><tbody>
-      ${list.map((a) => `<tr>
+    ${list.length ? `<div class="card table-wrap">${bulkBar}<table class="t"><thead><tr>${selHead}<th>Date</th><th>Website</th><th>Customer</th><th>Plan</th><th>Payment</th><th>Audit status</th><th class="num">Pages</th><th class="num">Score</th><th>Report</th></tr></thead><tbody>
+      ${list.map((a) => `<tr data-id="${esc(a.id)}">
+        ${selCell(a.id, a.status !== 'running')}
         <td class="small nowrap">${fmtDate(a.created_at, true)}</td>
         <td class="break"><b>${esc(hostOf(a.website))}</b></td>
         <td class="small">${esc(a.business || '')}${a.email ? `<br><span class="muted">${esc(a.email)}</span>` : ''}</td>
@@ -218,9 +272,13 @@ async function audits(view) {
         <td>${a.status === 'complete' ? '<span class="pill pass">Completed</span>' : a.status === 'running' ? '<span class="pill info">Processing</span>' : '<span class="pill fail">Failed</span>'}</td>
         <td class="num">${a.pages ?? '—'}</td>
         <td class="num">${a.score != null ? `<b style="color:${scoreColor(a.score)}">${a.score}</b>` : '—'}</td>
-        <td class="nowrap">${a.status === 'complete' ? (a.plan === 'internal' ? `<a class="btn quiet sm" href="/app#/audit/${esc(a.id)}">Open</a>` : `<a class="btn quiet sm" href="/audit/${esc(a.id)}" target="_blank">Customer view</a><a class="btn quiet sm" href="/app#/audit/${esc(a.id)}">Full data</a>`) : ''}</td>
+        <td class="nowrap">${a.status === 'complete' ? (a.plan === 'internal' ? `<a class="btn quiet sm" href="/app#/audit/${esc(a.id)}">Open</a>` : `<a class="btn quiet sm" href="/audit/${esc(a.id)}" target="_blank">Customer view</a><a class="btn quiet sm" href="/app#/audit/${esc(a.id)}">Full data</a>`) : ''}${a.status !== 'running' ? delBtn : ''}</td>
       </tr>`).join('')}</tbody></table></div>` : '<div class="card empty"><p>No audits in this view yet.</p></div>'}`;
-  view.onclick = (e) => { const c = e.target.closest('[data-af]'); if (c) { state.auditFilter = c.dataset.af; audits(view); } };
+  view.onclick = (e) => {
+    if (selectionClick(e, view, { kind: 'audits', noun: 'audit', warn: 'The audit report and its customer link will stop working. Linked orders and leads are kept.', reload: () => audits(view) })) return;
+    const c = e.target.closest('[data-af]');
+    if (c) { state.auditFilter = c.dataset.af; audits(view); }
+  };
 }
 
 // ── Settings ─────────────────────────────────────────────────────────────

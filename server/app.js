@@ -276,6 +276,17 @@ admin.post('/orders/:id/restart', h(async (req, res) => {
 
 admin.get('/audits', h(async (req, res) => res.json({ audits: await store.listAudits({ plan: req.query.plan || undefined, limit: 300 }) })));
 
+// Permanent deletion of test or unwanted entries. Body: { ids: [...] }.
+// Protected by the admin session + CSRF token like every other admin write.
+const deleter = (fn) => h(async (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  if (!ids.length) return bad(res, 'no_ids', 'Select at least one entry to delete.');
+  res.json({ ok: true, deleted: await fn(ids) });
+});
+admin.post('/leads/delete', deleter((ids) => store.deleteLeads(ids)));
+admin.post('/orders/delete', deleter((ids) => store.deleteOrders(ids)));
+admin.post('/audits/delete', deleter((ids) => store.deleteAudits(ids)));
+
 admin.get('/settings', h(async (req, res) => {
   res.json({ settings: await siteSettings(), qrConfigured: Boolean(await store.getSetting('payment_qr', null)), integrations: integrationStatus(), pricing: { p25: TIERS.p25.price, p50: TIERS.p50.price }, database: store.databaseEnvVar });
 }));
