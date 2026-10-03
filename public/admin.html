@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Portal | Click2Client Media</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .login { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: radial-gradient(900px 500px at 70% -10%, rgba(0,168,255,.18), transparent), var(--bg); }
+  .login .card { width: min(420px, 100%); padding: 32px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .kpi { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+  .kpi .n { font: 800 28px/1 var(--display); color: var(--ink); letter-spacing: -0.03em; }
+  .kpi .l { font: 600 12px var(--body); color: var(--ink-3); margin-top: 8px; }
+  .kpi.hl { background: linear-gradient(135deg, #0066FF, #00A8FF); border: 0; }
+  .kpi.hl .n, .kpi.hl .l { color: #fff; }
+  .hbars { display: grid; gap: 10px; margin-top: 12px; }
+  .hbars .r { display: grid; grid-template-columns: 150px 1fr 36px; gap: 10px; align-items: center; font-size: 13px; }
+  .hbars .r .bar span { background: linear-gradient(90deg, #0066FF, #00C9B7); }
+  select.mini { height: 34px; border: 1px solid var(--line-2); border-radius: 8px; padding: 0 8px; font: 500 13px var(--body); background: #fff; }
+  .pill.ps-pending { background: var(--warn-soft); color: var(--warn); }
+  .pill.ps-screenshot_received, .pill.ps-under_verification { background: var(--info-soft); color: var(--info); }
+  .pill.ps-verified { background: var(--pass-soft); color: var(--pass); }
+  .pill.ps-rejected { background: var(--fail-soft); color: var(--fail); }
+  .badge-n { background: var(--fail); color: #fff; border-radius: 99px; font: 700 10.5px var(--body); padding: 2px 6px; margin-left: 4px; }
+  td .who b { color: var(--ink); }
+  .qr-prev { width: 160px; height: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module" src="/js/admin.js"></script>
+</body>
+</html>

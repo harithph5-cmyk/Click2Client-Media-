@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Complete Your Payment | Click2Client Media</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/site.css">
+<style>
+  body { background: radial-gradient(1200px 600px at 80% -10%, rgba(0,168,255,.12), transparent), var(--bg); }
+  .pay { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: 1.05fr .95fr; gap: 22px; align-items: start; }
+  @media (max-width: 860px) { .pay { grid-template-columns: 1fr; } }
+  .timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 0; }
+  .timeline li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 10px 0; position: relative; font-size: 14px; }
+  .timeline li:not(:last-child)::after { content: ''; position: absolute; left: 13px; top: 34px; bottom: -6px; width: 2px; background: var(--line); }
+  .timeline .d { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line-2); background: #fff; display: grid; place-items: center; z-index: 1; }
+  .timeline .d svg { width: 14px; height: 14px; color: #fff; }
+  .timeline li.done .d { background: var(--pass); border-color: var(--pass); }
+  .timeline li.now .d { border-color: var(--accent); box-shadow: 0 0 0 5px rgba(0,102,255,.12); }
+  .timeline li.done::after { background: var(--pass); }
+  .timeline b { color: var(--ink); font-family: var(--display); }
+  .status-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 99px; font: 700 13px var(--display); }
+  .status-chip.pending { background: var(--warn-soft); color: var(--warn); }
+  .status-chip.verifying { background: var(--info-soft); color: var(--info); }
+  .status-chip.verified { background: var(--pass-soft); color: var(--pass); }
+  .status-chip.rejected { background: var(--fail-soft); color: var(--fail); }
+  .wa-btn { background: #25D366; border-color: #25D366; color: #fff; width: 100%; height: 56px; font-size: 15.5px; }
+  .wa-btn:hover { background: #1EBE5A; border-color: #1EBE5A; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <a class="logo-box" href="/" aria-label="Click2Client Media"><span class="logo-crop"><img src="/img/click2client-media-logo.webp" alt="Click2Client Media" width="2000" height="774"></span></a>
+    <span class="spacer"></span>
+    <a class="btn ghost sm" href="/seo-audit">Back to SEO Audit</a>
+  </div>
+</header>
+<main id="view" class="view"><p class="muted">Loading your order…</p></main>
+<script type="module" src="/js/order.js"></script>
+</body>
+</html>

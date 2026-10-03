@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Plus Jakarta Sans, Inter, Arial, sans-serif">
+  <title>Website development illustration: a responsive website on desktop and mobile with a code editor</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8F1FF"/><stop offset="1" stop-color="#F1F6FA"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0066FF"/><stop offset="1" stop-color="#00A8FF"/></linearGradient>
+    <linearGradient id="grow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#00C9B7"/><stop offset="1" stop-color="#35D07F"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#0B3A75" flood-opacity=".16"/></filter>
+  </defs>
+  <rect width="640" height="400" rx="24" fill="url(#bg)"/>
+  <circle cx="590" cy="350" r="90" fill="#0066FF" opacity=".06"/>
+
+  <!-- browser -->
+  <g filter="url(#sh)"><rect x="48" y="44" width="420" height="290" rx="16" fill="#fff"/></g>
+  <path d="M48 60a16 16 0 0 1 16-16h388a16 16 0 0 1 16 16v18H48z" fill="#F4F8FC"/>
+  <circle cx="68" cy="61" r="5" fill="#FF6B5E"/><circle cx="84" cy="61" r="5" fill="#FFC145"/><circle cx="100" cy="61" r="5" fill="#35D07F"/>
+  <rect x="120" y="53" width="250" height="16" rx="8" fill="#fff" stroke="#DCE5EC"/>
+  <!-- site wireframe -->
+  <rect x="68" y="92" width="70" height="10" rx="5" fill="#071A2B"/>
+  <rect x="300" y="93" width="34" height="8" rx="4" fill="#C9D6E2"/><rect x="342" y="93" width="34" height="8" rx="4" fill="#C9D6E2"/>
+  <rect x="388" y="88" width="60" height="18" rx="9" fill="url(#blue)"/>
+  <rect x="68" y="128" width="190" height="16" rx="6" fill="#071A2B"/>
+  <rect x="68" y="152" width="150" height="16" rx="6" fill="#0066FF"/>
+  <rect x="68" y="180" width="180" height="7" rx="3.5" fill="#DCE5EC"/>
+  <rect x="68" y="194" width="150" height="7" rx="3.5" fill="#DCE5EC"/>
+  <rect x="68" y="214" width="84" height="24" rx="8" fill="url(#blue)"/>
+  <rect x="160" y="214" width="76" height="24" rx="8" fill="#fff" stroke="#C9D6E2"/>
+  <rect x="284" y="124" width="164" height="118" rx="12" fill="url(#grow)" opacity=".9"/>
+  <path d="M300 222 l30-34 24 22 18-16 44 28" stroke="#fff" stroke-width="5" fill="none" stroke-linejoin="round" opacity=".9"/>
+  <circle cx="420" cy="152" r="12" fill="#fff" opacity=".85"/>
+  <g fill="#F1F6FA" stroke="#DCE5EC"><rect x="68" y="262" width="120" height="56" rx="10"/><rect x="198" y="262" width="120" height="56" rx="10"/><rect x="328" y="262" width="120" height="56" rx="10"/></g>
+  <g fill="#0066FF"><circle cx="86" cy="280" r="7"/><circle cx="216" cy="280" r="7" fill="#00C9B7"/><circle cx="346" cy="280" r="7" fill="#35D07F"/></g>
+  <g fill="#C9D6E2"><rect x="80" y="296" width="80" height="6" rx="3"/><rect x="210" y="296" width="80" height="6" rx="3"/><rect x="340" y="296" width="80" height="6" rx="3"/></g>
+
+  <!-- code editor -->
+  <g filter="url(#sh)"><rect x="392" y="196" width="210" height="160" rx="14" fill="#071A2B"/></g>
+  <circle cx="410" cy="214" r="4" fill="#FF6B5E"/><circle cx="424" cy="214" r="4" fill="#FFC145"/><circle cx="438" cy="214" r="4" fill="#35D07F"/>
+  <g font-family="Consolas, monospace" font-size="12">
+    <text x="410" y="244" fill="#7FB2FF">&lt;section</text><text x="472" y="244" fill="#5BD8C9">class</text><text x="508" y="244" fill="#FFC145">="hero"&gt;</text>
+    <text x="424" y="264" fill="#7FB2FF">&lt;h1&gt;</text><text x="458" y="264" fill="#E6EEF5">Grow online</text>
+    <text x="424" y="284" fill="#7FB2FF">&lt;a</text><text x="444" y="284" fill="#5BD8C9">href</text><text x="473" y="284" fill="#FFC145">="/enquire"</text>
+    <text x="410" y="304" fill="#7FB2FF">&lt;/section&gt;</text>
+  </g>
+  <rect x="410" y="322" width="120" height="6" rx="3" fill="#1E3A57"/>
+
+  <!-- phone -->
+  <g filter="url(#sh)"><rect x="500" y="40" width="96" height="176" rx="18" fill="#071A2B"/></g>
+  <rect x="507" y="48" width="82" height="160" rx="12" fill="#fff"/>
+  <rect x="515" y="62" width="34" height="6" rx="3" fill="#071A2B"/>
+  <rect x="569" y="61" width="12" height="8" rx="2" fill="#C9D6E2"/>
+  <rect x="515" y="80" width="66" height="10" rx="4" fill="#071A2B"/>
+  <rect x="515" y="94" width="50" height="10" rx="4" fill="#0066FF"/>
+  <rect x="515" y="112" width="66" height="44" rx="8" fill="url(#grow)" opacity=".9"/>
+  <rect x="515" y="164" width="66" height="16" rx="6" fill="url(#blue)"/>
+  <rect x="525" y="190" width="46" height="5" rx="2.5" fill="#DCE5EC"/>
+</svg>

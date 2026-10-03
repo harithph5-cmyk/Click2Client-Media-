@@ -1,0 +1,24 @@
+{
+  "name": "click2client-media",
+  "version": "1.0.0",
+  "description": "Click2Client Media — agency website with a built-in SEO audit platform, paid audit tiers and admin portal.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/index.js",
+    "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "audit": "node --env-file-if-exists=.env scripts/cli-audit.js"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
+    "@vercel/functions": "^3.9.11",
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1",
+    "pg": "^8.23.1"
+  }
+}

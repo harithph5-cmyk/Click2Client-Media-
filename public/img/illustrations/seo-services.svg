@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="Plus Jakarta Sans, Inter, Arial, sans-serif">
+  <title>SEO services illustration: a business climbing to the top of Google search results</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EAF3FF"/><stop offset="1" stop-color="#E6FAF6"/></linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0066FF"/><stop offset="1" stop-color="#00A8FF"/></linearGradient>
+    <linearGradient id="grow" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#00C9B7"/><stop offset="1" stop-color="#35D07F"/></linearGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0B3A75" flood-opacity=".14"/></filter>
+  </defs>
+  <rect width="640" height="400" rx="24" fill="url(#bg)"/>
+  <circle cx="560" cy="60" r="90" fill="#00A8FF" opacity=".08"/>
+  <circle cx="70" cy="360" r="70" fill="#35D07F" opacity=".10"/>
+
+  <!-- search bar -->
+  <g filter="url(#sh)">
+    <rect x="60" y="44" width="420" height="52" rx="26" fill="#fff"/>
+  </g>
+  <circle cx="92" cy="70" r="9" fill="none" stroke="#8A98A8" stroke-width="3"/>
+  <path d="m99 77 7 7" stroke="#8A98A8" stroke-width="3" stroke-linecap="round"/>
+  <text x="118" y="76" font-size="17" fill="#071A2B" font-weight="600">seo services near me</text>
+  <rect x="418" y="54" width="52" height="32" rx="16" fill="url(#blue)"/>
+  <path d="m437 70 h14 m-5 -5 5 5 -5 5" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- results -->
+  <g filter="url(#sh)">
+    <rect x="60" y="122" width="420" height="72" rx="14" fill="#fff" stroke="#0066FF" stroke-width="2"/>
+  </g>
+  <rect x="80" y="138" width="22" height="22" rx="6" fill="url(#blue)"/>
+  <text x="112" y="154" font-size="13" fill="#526273">yourbusiness.in</text>
+  <text x="80" y="181" font-size="17" fill="#0052CC" font-weight="700">Your Business — Trusted Local Experts</text>
+  <rect x="420" y="134" width="44" height="24" rx="12" fill="#E3F8EC"/>
+  <path d="m434 151 8-8 8 8" stroke="#138A57" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <g opacity=".85">
+    <rect x="60" y="208" width="420" height="62" rx="14" fill="#fff"/>
+    <rect x="80" y="224" width="120" height="9" rx="4.5" fill="#C9D6E2"/>
+    <rect x="80" y="244" width="260" height="11" rx="5.5" fill="#8AB8FF"/>
+    <rect x="60" y="282" width="420" height="62" rx="14" fill="#fff"/>
+    <rect x="80" y="298" width="96" height="9" rx="4.5" fill="#C9D6E2"/>
+    <rect x="80" y="318" width="220" height="11" rx="5.5" fill="#8AB8FF"/>
+  </g>
+
+  <!-- growth bars -->
+  <g filter="url(#sh)">
+    <rect x="500" y="150" width="104" height="194" rx="18" fill="#fff"/>
+  </g>
+  <rect x="518" y="292" width="16" height="36" rx="5" fill="url(#grow)" opacity=".55"/>
+  <rect x="544" y="258" width="16" height="70" rx="5" fill="url(#grow)" opacity=".75"/>
+  <rect x="570" y="214" width="16" height="114" rx="5" fill="url(#grow)"/>
+  <path d="M520 246 L552 216 L568 228 L592 176" stroke="#0066FF" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M580 176 h12 v12" stroke="#0066FF" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+</svg>

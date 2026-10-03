@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEO Audit Report</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/base.css">
+<style>
+  body { background: var(--surface-2); }
+  .toolbar { position: sticky; top: 0; z-index: 10; background: rgba(7, 26, 43, .96); color: #EEE; }
+  .toolbar .in { max-width: 900px; margin: 0 auto; padding: 10px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .btn.ghost { color: #fff; border-color: #444; }
+  .toolbar .btn.ghost:hover { background: #2A2A2A; }
+  .doc { max-width: 900px; margin: 28px auto 60px; background: var(--bg); box-shadow: var(--shadow-3); border-radius: 4px; }
+  .pg { padding: 64px 72px; border-bottom: 1px solid var(--line); }
+  @media (max-width: 720px) { .pg { padding: 36px 20px; } .doc { margin: 0; border-radius: 0; } }
+  .cover { min-height: 860px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  .cover h1 { font-size: clamp(38px, 6vw, 60px); line-height: 1.02; letter-spacing: -0.045em; margin-top: 18px; }
+  .cover h1 { font-family: var(--serif); }
+  .cover h1 .grad { background: linear-gradient(120deg,#0066FF,#00A8FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .cover-meta { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px 28px; margin: 30px 0 0; }
+  .cover-meta dt { font: 600 11px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); }
+  .cover-meta dd { margin: 4px 0 0; font: 700 16px var(--display); color: var(--ink); overflow-wrap: anywhere; }
+  .cn { font: 800 30px/1 var(--display); }
+  .ptable { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px; }
+  .ptable th { text-align: left; font: 600 11px var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-4); border-bottom: 1px solid var(--line); padding: 8px; }
+  .ptable td { border-bottom: 1px solid var(--line); padding: 8px; overflow-wrap: anywhere; }
+  h2.sec { font-family: var(--serif); }
+  .cover .site { font: 700 22px var(--display); margin-top: 26px; overflow-wrap: anywhere; }
+  .cover .scorebox { margin-top: auto; display: flex; gap: 40px; align-items: flex-end; flex-wrap: wrap; }
+  h2.sec { font-size: 28px; letter-spacing: -0.035em; margin-bottom: 6px; }
+  .sec-no { font: 600 12px var(--mono); color: var(--accent); }
+  .lead { font-size: 16.5px; line-height: 1.7; color: var(--ink-2); margin-top: 16px; }
+  .rgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 36px; margin-top: 22px; }
+  @media (max-width: 640px) { .rgrid { grid-template-columns: 1fr; } }
+  .ritem { display: grid; grid-template-columns: 74px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; align-items: start; }
+  .ritem .t { font-weight: 650; }
+  .ritem .v { color: var(--ink-3); font-size: 13px; overflow-wrap: anywhere; }
+  .iss { padding: 20px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
+  .iss h3 { font-size: 17px; }
+  .iss .meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 10px; }
+  .iss p { font-size: 14px; color: var(--ink-2); margin-top: 6px; }
+  .iss .fix { margin-top: 10px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 12px; font-size: 13.5px; }
+  .ev { font: 500 12px var(--mono); color: var(--ink-3); margin-top: 6px; overflow-wrap: anywhere; }
+  .cat-row { display: grid; grid-template-columns: 170px 1fr 44px; gap: 14px; align-items: center; padding: 8px 0; font-size: 14px; }
+  .wk { display: grid; grid-template-columns: 90px 1fr; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); break-inside: avoid; }
+  .wk .n { font: 780 32px/1 var(--display); letter-spacing: -0.04em; }
+  .wk .n small { display: block; font: 650 10.5px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 4px; }
+  .wk ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; display: grid; gap: 5px; }
+  .checklist { list-style: none; padding: 0; margin: 16px 0 0; display: grid; gap: 8px; }
+  .checklist li { display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; font-size: 14px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; break-inside: avoid; }
+  .box { width: 14px; height: 14px; border: 1.5px solid var(--ink-4); border-radius: 3px; margin-top: 3px; }
+  .cta { background: linear-gradient(120deg, #0052CC, #0066FF 55%, #00A8FF); color: #EAF3FF; }
+  .cta .btn.white { background: #fff; color: #0066FF; border-color: #fff; }
+  .cta h2 { color: #fff; }
+  .cta .btn.ghost { color: #fff; border-color: rgba(255,255,255,.5); background: transparent; }
+  .foot { padding: 28px 72px 36px; font-size: 12px; color: var(--ink-4); display: flex; gap: 20px; flex-wrap: wrap; }
+  @media (max-width: 720px) { .foot { padding: 24px 20px; } }
+  @media print {
+    @page { size: A4; margin: 14mm 0; }
+    body { background: #fff; }
+    .doc { box-shadow: none; margin: 0; max-width: none; }
+    .pg { padding: 18px 16mm; border: 0; }
+    .cover { min-height: 250mm; break-after: page; }
+    .page-break { break-before: page; }
+    .cta { background: #fff; color: var(--ink); border-top: 2px solid var(--ink); }
+    .cta h2 { color: var(--ink); }
+    .cta .btn { display: none; }
+    .print-contact { display: block !important; }
+    .foot { padding: 12px 16mm; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar no-print"><div class="in">
+  <span class="small" style="opacity:.75" id="tbTitle">SEO audit report</span><span class="spacer"></span>
+  <button class="btn ghost sm" id="copy">Copy link</button>
+  <button class="btn sm accent" id="pdf">Download PDF</button>
+  <a class="btn ghost sm" id="back" href="/">Click2Client Media</a>
+</div></div>
+<div class="doc" id="doc"><div class="pg"><p class="muted">Loading report…</p></div></div>
+<script type="module" src="/js/report.js"></script>
+</body>
+</html>
