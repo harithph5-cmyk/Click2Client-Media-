@@ -106,6 +106,10 @@ export async function renderPage(id, req) {
     'price.p50': String(TIERS.p50.price),
     'schema': schemaFor(id, s, base),
     'testimonials': testimonialsHtml(s.testimonials),
+    'gscMeta': s.gscVerification ? `<meta name="google-site-verification" content="${esc(s.gscVerification)}">` : '',
+    'analyticsNote': s.ga4Id || s.gtmId
+      ? 'We use Google Analytics to understand how visitors use this website (for example, which pages are viewed and whether forms are submitted). Google Analytics sets its own cookies (named _ga). You can block them in your browser settings or with the Google Analytics opt-out browser add-on.'
+      : 'The public website does not currently use advertising or analytics cookies.',
     [`nav.${id}`]: 'aria-current="page"',
   };
   let html = read(p.file);

@@ -79,6 +79,7 @@ h1, h2, h3, h4 { color: var(--ink); }
 .hero::after { content: ''; position: absolute; inset: 30% 55% auto -20%; height: 700px; background: radial-gradient(closest-side, rgba(0, 201, 183, .10), transparent 70%); pointer-events: none; }
 .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; position: relative; z-index: 1; }
 @media (max-width: 1020px) { .hero-grid { grid-template-columns: 1fr; gap: 44px; } }
+.hero-grid > *, .about-grid > *, .audit-band > *, .why-grid > *, .problem-grid > * { min-width: 0; }
 .hero h1 { margin: 18px 0 22px; }
 .hero h1 .kicker { display: block; font: 700 clamp(15px, 1.6vw, 18px)/1.4 var(--display); color: var(--ink-3); letter-spacing: 0; margin-bottom: 14px; }
 .hero h1 .big { display: block; font-family: var(--serif); font-weight: 700; font-size: clamp(46px, 6.6vw, 82px); line-height: 1.02; letter-spacing: -0.03em; color: var(--ink); }
@@ -363,3 +364,5 @@ select.input { appearance: auto; }
 @media (max-width: 560px) { .about-points { grid-template-columns: 1fr; } }
 .outcomes .media { margin-bottom: 18px; box-shadow: none; }
 .wide-figure { max-width: 1040px; margin: 0 auto 48px; }
+
+.media picture, .svc .media-top picture { display: block; }

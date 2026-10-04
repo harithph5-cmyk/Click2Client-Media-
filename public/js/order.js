@@ -2,7 +2,7 @@
 // verification by the Click2Client team → audit unlocks.
 // The amount shown always comes from the server.
 
-import { api, esc, fmtDate, ICON } from './common.js';
+import { api, esc, fmtDate, ICON, track } from './common.js';
 
 const view = document.getElementById('view');
 const token = location.pathname.split('/').pop();
@@ -90,6 +90,7 @@ function render(o) {
   const wa = document.getElementById('waBtn');
   if (wa) wa.addEventListener('click', async () => {
     // Opening WhatsApp records that a screenshot is on its way; it does NOT mark the order paid.
+    track('payment_submitted', { audit_plan: o.plan, currency: 'INR', value: o.amount });
     try { render(await api(`/public/orders/${encodeURIComponent(token)}/submitted`, { method: 'POST' })); } catch {}
   });
 

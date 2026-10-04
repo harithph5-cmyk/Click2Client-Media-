@@ -3,6 +3,11 @@
 export const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+/** Sends a funnel event to GA4 / GTM when analytics is configured (no-op otherwise). */
+export function track(event, params = {}) {
+  try { window.c2cTrack ? window.c2cTrack(event, params) : (window.dataLayer = window.dataLayer || []).push({ event, ...params }); } catch {}
+}
+
 let csrfToken = '';
 export const setCsrf = (t) => (csrfToken = t || '');
 
@@ -146,6 +151,7 @@ export function openLeadForm({ branding, auditId = '', website = '', intent = 'a
         err.hidden = true;
         try {
           await api('/leads', { method: 'POST', body: { ...data, auditId, intent } });
+          track('generate_lead', { lead_source: intent });
           close();
           toast('Thank you — we will be in touch shortly.');
         } catch (ex) {

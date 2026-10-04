@@ -202,3 +202,12 @@ pre.raw { background: var(--surface-2); border: 1px solid var(--line); border-ra
 .tier-bar .pill { background: var(--accent-soft); color: var(--accent); }
 .topbar .logo-crop { width: 168px; }
 .topbar .logo-box { padding: 5px 10px; border-radius: 10px; }
+
+/* Small phones (≤ 480px): keep page headers within the screen */
+@media (max-width: 480px) {
+  .hide-xs { display: none !important; }
+  .topbar .logo-crop { width: 136px; }
+  .topbar-in { gap: 8px; padding: 0 12px; }
+  .topbar-in .btn.sm { padding: 0 10px; }
+  .view { padding-left: 12px; padding-right: 12px; }
+}

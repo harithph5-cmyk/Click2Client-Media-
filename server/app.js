@@ -291,12 +291,18 @@ admin.get('/settings', h(async (req, res) => {
   res.json({ settings: await siteSettings(), qrConfigured: Boolean(await store.getSetting('payment_qr', null)), integrations: integrationStatus(), pricing: { p25: TIERS.p25.price, p50: TIERS.p50.price }, database: store.databaseEnvVar });
 }));
 admin.put('/settings', h(async (req, res) => {
-  const allowed = ['phone', 'whatsapp', 'email', 'instagram', 'facebook', 'upiId', 'payeeName', 'reportFooter', 'city', 'region'];
+  const allowed = ['phone', 'whatsapp', 'email', 'instagram', 'facebook', 'upiId', 'payeeName', 'reportFooter', 'city', 'region', 'ga4Id', 'gtmId', 'gscVerification'];
   const next = {};
   for (const k of allowed) if (typeof req.body?.[k] === 'string') next[k] = clean(req.body[k], 400);
   if (typeof req.body?.testimonials === 'string') next.testimonials = String(req.body.testimonials).slice(0, 4000);
   const badUrl = (v) => v !== undefined && v !== '' && !/^https:\/\//.test(v);
   if (badUrl(next.instagram) || badUrl(next.facebook)) return bad(res, 'invalid_url', 'Social links must start with https://');
+  if (next.ga4Id) next.ga4Id = next.ga4Id.toUpperCase();
+  if (next.gtmId) next.gtmId = next.gtmId.toUpperCase();
+  if (next.ga4Id && !/^G-[A-Z0-9]{4,15}$/.test(next.ga4Id)) return bad(res, 'invalid_ga4', 'The GA4 Measurement ID looks like G-XXXXXXXXXX.');
+  if (next.gtmId && !/^GTM-[A-Z0-9]{4,10}$/.test(next.gtmId)) return bad(res, 'invalid_gtm', 'The Tag Manager container ID looks like GTM-XXXXXXX.');
+  if (next.gscVerification) next.gscVerification = next.gscVerification.replace(/^.*content="([^"]+)".*$/, '$1').trim();
+  if (next.gscVerification && !/^[A-Za-z0-9_-]{10,100}$/.test(next.gscVerification)) return bad(res, 'invalid_gsc', 'Paste the Search Console HTML-tag verification code (the content="…" value).');
   if (next.whatsapp && next.whatsapp.replace(/\D/g, '').length < 10) return bad(res, 'invalid_whatsapp', 'Enter the WhatsApp number with country code, e.g. 919940411837.');
   await store.setSetting('site', { ...(await store.getSetting('site', {})), ...next });
   res.json({ settings: await siteSettings() });
@@ -365,6 +371,19 @@ for (const [id, p] of Object.entries(PAGES)) {
 }
 app.get(['/index.html', '/home'], (req, res) => res.redirect(301, '/'));
 app.get(['/seo-audit/', '/services/', '/enquire/'], (req, res) => res.redirect(301, req.path.replace(/\/$/, '')));
+// Analytics loader used by every public page. Loads nothing unless a GA4 or
+// GTM ID is set in Admin → Settings. Exposes window.c2cTrack(event, params)
+// and auto-tracks WhatsApp and phone clicks.
+app.get('/analytics.js', h(async (req, res) => {
+  const s = await siteSettings();
+  const cfg = JSON.stringify({ ga4: /^G-[A-Z0-9]+$/.test(s.ga4Id || '') ? s.ga4Id : '', gtm: /^GTM-[A-Z0-9]+$/.test(s.gtmId || '') ? s.gtmId : '' });
+  res.set({ 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'public, max-age=300' }).send(`(function(){var c=${cfg};var w=window,d=document;w.dataLayer=w.dataLayer||[];
+if(c.gtm){w.dataLayer.push({'gtm.start':Date.now(),event:'gtm.js'});var g=d.createElement('script');g.async=true;g.src='https://www.googletagmanager.com/gtm.js?id='+c.gtm;d.head.appendChild(g);}
+if(c.ga4){var s=d.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id='+c.ga4;d.head.appendChild(s);w.gtag=function(){w.dataLayer.push(arguments);};w.gtag('js',new Date());w.gtag('config',c.ga4);}
+w.c2cTrack=function(n,p){p=p||{};try{w.dataLayer.push(Object.assign({event:n},p));if(c.ga4&&w.gtag)w.gtag('event',n,p);}catch(e){}};
+d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target:null;if(!t)return;if(t.closest('a[href*="wa.me/"]'))w.c2cTrack('whatsapp_click',{link_location:location.pathname});else if(t.closest('a[href^="tel:"]'))w.c2cTrack('phone_click',{link_location:location.pathname});},true);})();`);
+}));
+
 app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(sitemap(req)));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send(robots(req)));
 

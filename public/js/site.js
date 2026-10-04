@@ -1,7 +1,7 @@
 // Public website behaviour. Progressive enhancement only: every page's
 // content is already in the server-rendered HTML.
 
-import { api, esc, modal } from './common.js';
+import { api, esc, modal, track } from './common.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
@@ -67,6 +67,8 @@ if (freeForm) {
     submitting(freeForm, async () => {
       try {
         const r = await api('/public/audits/free', { method: 'POST', body: Object.fromEntries(new FormData(freeForm)) });
+        track('audit_started', { audit_plan: 'free' });
+        track('generate_lead', { lead_source: 'free_audit' });
         location.href = `/audit/${encodeURIComponent(r.id)}${r.existing ? '?existing=1' : ''}`;
       } catch (ex) { showMsg(freeForm, ex.message); }
     });
@@ -86,9 +88,18 @@ if (enquiry) {
     e.preventDefault();
     submitting(enquiry, async () => {
       try {
-        await api('/public/leads', { method: 'POST', body: { ...Object.fromEntries(new FormData(enquiry)), source: 'enquiry_page' } });
+        const data = Object.fromEntries(new FormData(enquiry));
+        await api('/public/leads', { method: 'POST', body: { ...data, source: 'enquiry_page' } });
+        track('generate_lead', { lead_source: 'enquiry_page', service: data.service || '' });
         enquiry.reset();
-        showMsg(enquiry, 'Thank you — your enquiry has been received. We will get back to you shortly.', true);
+        // Hand the enquiry straight to WhatsApp so it reaches the team instantly.
+        const cfg = await api('/public/config').catch(() => null);
+        const text = ['Hi Click2Client Media, I just sent an enquiry on your website.', '', 'Name: ' + data.name, data.company && 'Company: ' + data.company, data.website && 'Website: ' + data.website, data.service && 'Service: ' + data.service, data.message && 'Message: ' + data.message].filter(Boolean).join('\n');
+        const wa = cfg?.whatsapp ? 'https://wa.me/' + cfg.whatsapp.replace(/\D/g, '') + '?text=' + encodeURIComponent(text) : null;
+        const m = $('.form-msg', enquiry);
+        m.className = 'full form-msg ok';
+        m.hidden = false;
+        m.innerHTML = '<b>Thank you — your enquiry has been received.</b> We will get back to you shortly.' + (wa ? '<br><a class="btn primary sm" style="margin-top:10px;background:#25D366;border-color:#25D366" href="' + esc(wa) + '" target="_blank" rel="noopener">Also send it on WhatsApp for the fastest reply</a>' : '');
       } catch (ex) { showMsg(enquiry, ex.message); }
     });
   });
@@ -159,6 +170,8 @@ function openOrder(plan) {
         submitting(form, async () => {
           try {
             const r = await api('/public/orders', { method: 'POST', body: { ...Object.fromEntries(new FormData(form)), plan } });
+            track('begin_checkout', { audit_plan: plan, currency: 'INR', value: plan === 'p50' ? 399 : 125 });
+            track('generate_lead', { lead_source: 'order_' + plan });
             location.href = `/order/${encodeURIComponent(r.token)}`;
           } catch (ex) { showMsg(form, ex.message); }
         });

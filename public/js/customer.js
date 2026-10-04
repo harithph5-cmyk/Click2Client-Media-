@@ -1,7 +1,7 @@
 // Customer audit page: live progress while the crawl runs, then the
 // dashboard. All tier restrictions are already applied by the server.
 
-import { api, esc, fmtMs, hostOf, ICON } from './common.js';
+import { api, esc, fmtMs, hostOf, ICON, track } from './common.js';
 import { renderDashboard } from './dashboard.js';
 
 const view = document.getElementById('view');
@@ -54,8 +54,8 @@ function progress(rec) {
   const poll = async () => {
     try {
       const r = await api(`/public/audits/${encodeURIComponent(id)}`);
-      if (r.status === 'complete') return load();
-      if (r.status === 'failed') return failed(r);
+      if (r.status === 'complete') { track('audit_completed', { audit_plan: r.plan }); return load(); }
+      if (r.status === 'failed') { track('audit_failed', { audit_plan: r.plan }); return failed(r); }
       apply(r.progress);
     } catch {}
     setTimeout(poll, 2000);
@@ -69,7 +69,9 @@ function show(rec) {
   document.title = `${hostOf(a.website)} — ${a.score.overall}/100 | Click2Client Media SEO Audit`;
   const section = location.hash.replace(/^#\/?/, '') || 'overview';
   const branding = { companyName: cfg.company, whatsapp: cfg.whatsapp, phone: cfg.phone };
-  const actions = `<a class="btn ghost sm" href="/report/${encodeURIComponent(rec.id)}" target="_blank">${ICON.file} Download PDF report</a>`;
+  const saveText = `My SEO audit for ${hostOf(a.website)} (score ${a.score.overall}/100) from Click2Client Media:\n${location.origin}/audit/${rec.id}\n\nPDF report: ${location.origin}/report/${rec.id}`;
+  const actions = `<a class="btn ghost sm" href="/report/${encodeURIComponent(rec.id)}" target="_blank">${ICON.file} Download PDF report</a>
+    <a class="btn ghost sm" href="https://wa.me/?text=${encodeURIComponent(saveText)}" target="_blank" rel="noopener">${ICON.whatsapp} Save to my WhatsApp</a>`;
   renderDashboard(view, a, { section, base: '#', branding, actions });
 
   const upgrade = rec.plan === 'free'

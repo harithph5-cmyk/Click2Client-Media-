@@ -181,7 +181,7 @@ async function payments(view) {
         <td><select class="mini" data-ps>${statuses.map((st) => `<option value="${st}" ${st === o.payment_status ? 'selected' : ''}>${PS[st]}</option>`).join('')}</select></td>
         <td><input class="input" style="height:34px;width:140px;font-size:12.5px" data-txn placeholder="UPI ref (optional)" value="${esc(o.transaction_id || '')}"></td>
         <td class="small">${o.audit_id ? `${o.audit_status === 'complete' ? `<span class="pill pass">Completed</span> ${o.audit_score ?? ''}` : o.audit_status === 'failed' ? '<span class="pill fail">Failed</span>' : '<span class="pill info">Processing</span>'}` : '<span class="pill unavailable">Pending</span>'}</td>
-        <td class="nowrap">${o.payment_status !== 'verified' ? `<button class="btn sm accent" data-verify>Verify Payment</button>` : o.audit_id ? `<a class="btn sm ghost" href="/audit/${esc(o.audit_id)}" target="_blank">Open report</a>${o.audit_status === 'failed' ? ' <button class="btn sm" data-restart>Re-run</button>' : ''}` : '<button class="btn sm" data-restart>Start audit</button>'}${o.audit_status !== 'running' ? delBtn : ''}</td>
+        <td class="nowrap">${o.payment_status !== 'verified' ? `<button class="btn sm accent" data-verify>Verify Payment</button>` : o.audit_id ? `<a class="btn sm ghost" href="/audit/${esc(o.audit_id)}" target="_blank">Open report</a>${o.audit_status === 'complete' && wa(o.phone) ? `<a class="btn sm" style="background:#25D366;border-color:#25D366;color:#fff;margin-left:6px" target="_blank" rel="noopener" href="${wa(o.phone, `Hi ${o.name}, your ${o.plan === 'p50' ? '50-Page SEO Growth Audit' : '25-Page SEO Audit'} for ${o.website} is ready.\n\nView your dashboard: ${location.origin}/audit/${o.audit_id}\nDownload the PDF report: ${location.origin}/report/${o.audit_id}\n\n— Click2Client Media`)}">Send report on WhatsApp</a>` : ''}${o.audit_status === 'failed' ? ' <button class="btn sm" data-restart>Re-run</button>' : ''}` : '<button class="btn sm" data-restart>Start audit</button>'}${o.audit_status !== 'running' ? delBtn : ''}</td>
       </tr>`;
     }).join('')}</tbody></table></div>` : '<div class="card empty"><h3>No paid orders yet</h3><p>Orders appear here when a visitor chooses the ₹125 or ₹399 audit.</p></div>'}`;
 
@@ -296,6 +296,13 @@ async function settings(view) {
         </div>
         <h3 style="margin-top:24px">UPI payment details</h3>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">${F('upiId', 'UPI ID', 'Shown under the QR and used for the “Open in UPI app” link')}${F('payeeName', 'Payee name')}</div>
+        <h3 style="margin-top:24px">Analytics &amp; Google Search Console</h3>
+        <p class="small muted" style="margin-top:4px">Optional. Leave empty to keep the site free of analytics. Once set, these funnel events are tracked: <code>audit_started</code>, <code>audit_completed</code>, <code>generate_lead</code>, <code>begin_checkout</code>, <code>payment_submitted</code>, <code>whatsapp_click</code>, <code>phone_click</code>.</p>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">
+          ${F('ga4Id', 'GA4 Measurement ID', 'GA4 → Admin → Data streams → Web, e.g. G-AB12CD34EF')}
+          ${F('gtmId', 'Google Tag Manager ID (optional)', 'e.g. GTM-ABC1234. Use GA4 or GTM, not both for the same GA4 property.')}
+        </div>
+        <div style="margin-top:14px">${F('gscVerification', 'Search Console verification code', 'Search Console → Add property → URL prefix → HTML tag: paste the content="…" value (or the whole tag).')}</div>
         <h3 style="margin-top:24px">Testimonials</h3>
         <div class="field" style="margin-top:10px"><textarea class="input" name="testimonials" rows="4" placeholder="Name | Business | Quote">${esc(s.testimonials || '')}</textarea><span class="hint">One per line: <code>Name | Business | Quote</code>. Only add real testimonials you have permission to publish. The section stays hidden while this is empty.</span></div>
         <div class="field" style="margin-top:14px"><label>Report footer</label><textarea class="input" name="reportFooter" rows="2">${esc(s.reportFooter || '')}</textarea></div>
