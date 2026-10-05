@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -58,7 +58,7 @@ function shell() {
     </div></header>
     <main class="view" id="view"></main>`;
   document.getElementById('logout').onclick = async () => { await api('/admin/logout', { method: 'POST' }).catch(() => {}); setCsrf(''); loginView(); };
-  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; route(); }); state.bound = true; }
+  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; state.blogEdit = null; route(); }); state.bound = true; }
   route();
 }
 
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, portfolio, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, portfolio, blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -461,6 +461,86 @@ function portfolioForm(view, p, categories) {
       await api(`/admin/portfolio/${encodeURIComponent(p.id)}/image/${kind}`, { method: 'PUT', body: { dataUrl: await shrinkImage(file) } });
       toast('Image uploaded');
       portfolio(view);
+    } catch (ex) { toast(ex.message || 'Could not read that image.'); }
+  };
+}
+
+// ── Blog ─────────────────────────────────────────────────────────────────
+async function blogTab(view) {
+  const { posts } = await api('/admin/blog');
+  posts.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const editing = state.blogEdit === 'new' ? {} : posts.find((p) => p.id === state.blogEdit);
+  if (editing) return blogForm(view, editing);
+  view.innerHTML = `${head('Website', 'Blog', `${posts.filter((p) => p.published).length} published · ${posts.filter((p) => !p.published).length} draft. Published posts appear on <a href="/blog" target="_blank">/blog</a> and in the sitemap.`, '<a class="btn ghost sm" href="/blog" target="_blank">View blog ↗</a><button class="btn sm accent" data-new>+ New post</button>')}
+    ${posts.length ? `<div class="card table-wrap"><table class="t"><thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>
+      ${posts.map((p) => `<tr data-id="${esc(p.id)}">
+        <td class="small nowrap">${esc(p.date)}</td>
+        <td><b>${esc(p.title)}</b><div class="tiny muted">/blog/${esc(p.id)}</div></td>
+        <td class="small">${esc(p.category || '—')}</td>
+        <td>${p.published ? '<span class="pill pass">Published</span>' : '<span class="pill unavailable">Draft</span>'}</td>
+        <td class="nowrap">${p.published ? `<a class="btn sm quiet" href="/blog/${esc(p.id)}" target="_blank">View</a>` : ''}<button class="btn sm ghost" data-edit>Edit</button>${delBtn}</td>
+      </tr>`).join('')}</tbody></table></div>` : '<div class="card empty"><h3>No posts yet</h3><p>Write your first article — it shows on /blog as soon as you publish it.</p></div>'}`;
+  view.onclick = async (e) => {
+    if (e.target.closest('[data-new]')) { state.blogEdit = 'new'; return blogTab(view); }
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    if (e.target.closest('[data-edit]')) { state.blogEdit = tr.dataset.id; return blogTab(view); }
+    if (e.target.closest('[data-del]') && confirm(`Delete "${tr.querySelector('b').textContent}"? This cannot be undone.`)) {
+      try { await api(`/admin/blog/${encodeURIComponent(tr.dataset.id)}`, { method: 'DELETE' }); toast('Post deleted'); blogTab(view); } catch (ex) { toast(ex.message); }
+    }
+  };
+}
+
+function blogForm(view, p) {
+  const isNew = !p.id;
+  const F = (k, l, hint = '', extra = '') => `<div class="field"><label for="b-${k}">${l}</label><input class="input" id="b-${k}" name="${k}" value="${esc(p[k] || '')}" ${extra}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  view.innerHTML = `${head('Blog', isNew ? 'New post' : 'Edit post', '', '<button class="btn ghost sm" data-back>← All posts</button>')}
+    <div class="two" style="align-items:start;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)">
+      <form class="card card-pad stack" id="bf" style="gap:14px">
+        ${F('title', 'Title *', '', 'required maxlength="140"')}
+        ${F('excerpt', 'Summary', 'One or two sentences. Shown on the blog page and used as the Google description.', 'maxlength="300"')}
+        <div class="field"><label for="b-body">Article</label><textarea class="input" id="b-body" name="body" rows="22" style="font:15px/1.6 var(--mono)">${esc(p.body || '')}</textarea>
+          <span class="hint">Leave a blank line between paragraphs. <code>## Heading</code> · <code>### Sub-heading</code> · <code>- bullet</code> · <code>1. numbered</code> · <code>&gt; quote</code> · <code>**bold**</code> · <code>*italic*</code> · <code>[link text](https://…)</code> · <code>![image description](https://…)</code></span></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
+          ${F('category', 'Category', 'e.g. SEO, Meta Ads, Websites', 'maxlength="40"')}
+          ${F('author', 'Author', '', 'placeholder="Hari"')}
+          ${F('date', 'Publish date', '', 'type="date"')}
+          ${F('slug', 'URL slug', 'Leave empty to create it from the title.', `placeholder="${esc(p.id || 'auto')}"`)}
+        </div>
+        <label class="small" style="display:inline-flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${p.published ? 'checked' : ''}> <b>Published</b> — visible on the website (unticked = draft)</label>
+        <div class="row"><button class="btn accent" type="submit">${isNew ? 'Create post' : 'Save post'}</button></div>
+      </form>
+      <div class="card card-pad"><h3>Cover image</h3><p class="small muted" style="margin-top:4px">Shown on the blog page, at the top of the article and when the link is shared. Wide images (16:9) work best. Resized automatically.</p>
+        ${isNew ? '<p class="small" style="margin-top:12px">Save the post first, then add a cover image.</p>' : `<div style="margin-top:12px">${p.cover ? `<img src="/blog-img/${esc(p.id)}?v=${p.cover}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : '<div class="small muted" style="aspect-ratio:16/9;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:10px">No cover yet</div>'}</div>
+        <div class="row wrap-row" style="margin-top:12px"><label class="btn sm accent" style="cursor:pointer">${p.cover ? 'Replace' : 'Upload'} cover<input type="file" data-cover accept="image/png,image/jpeg,image/webp" hidden></label>${p.cover ? '<button class="btn sm ghost" type="button" data-cover-del>Remove</button>' : ''}</div>`}
+      </div>
+    </div>`;
+  if (!p.slug) view.querySelector('#b-slug').value = p.id || '';
+  document.getElementById('bf').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = { ...Object.fromEntries(f), published: f.has('published') };
+    try {
+      const r = await api(isNew ? '/admin/blog' : `/admin/blog/${encodeURIComponent(p.id)}`, { method: isNew ? 'POST' : 'PUT', body });
+      toast(r.published ? 'Saved and published' : 'Saved as draft');
+      state.blogEdit = r.id;
+      blogTab(view);
+    } catch (ex) { toast(ex.message); }
+  };
+  view.onclick = async (e) => {
+    if (e.target.closest('[data-back]')) { state.blogEdit = null; return blogTab(view); }
+    if (e.target.closest('[data-cover-del]') && confirm('Remove the cover image?')) {
+      try { await api(`/admin/blog/${encodeURIComponent(p.id)}/cover`, { method: 'DELETE' }); toast('Cover removed'); blogTab(view); } catch (ex) { toast(ex.message); }
+    }
+  };
+  view.onchange = async (e) => {
+    const file = e.target.matches('[data-cover]') && e.target.files[0];
+    if (!file) return;
+    try {
+      toast('Uploading…');
+      await api(`/admin/blog/${encodeURIComponent(p.id)}/cover`, { method: 'PUT', body: { dataUrl: await shrinkImage(file) } });
+      toast('Cover uploaded');
+      blogTab(view);
     } catch (ex) { toast(ex.message || 'Could not read that image.'); }
   };
 }
