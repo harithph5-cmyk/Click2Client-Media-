@@ -63,6 +63,15 @@ Public pages are rendered on the server from `views/*.html`, so headings, copy, 
 
 Tier limits are enforced on the server (`server/commerce/plans.js → shapeAudit`). Locked content is never sent to the browser.
 
+### Optional: route AI calls through OmniRoute
+
+[OmniRoute](https://www.omniroute.online/) is a self-hosted AI gateway. Vercel can't run it, so host it yourself (e.g. `docker run … diegosouzapw/omniroute` on a VPS behind HTTPS), then set in Vercel:
+
+- `ANTHROPIC_BASE_URL` = your gateway's public URL
+- `ANTHROPIC_API_KEY` = an API key created in the OmniRoute dashboard
+
+No code change is needed; the Anthropic SDK reads `ANTHROPIC_BASE_URL` automatically. Remove the variable to go back to Anthropic directly. Customer site data in AI prompts passes through the gateway, so use API-key providers only.
+
 ### Paid audit flow (manual UPI)
 
 1. Visitor picks ₹125 or ₹399 and enters their details. The **server** sets the amount.
