@@ -261,13 +261,15 @@ const FOLDER_FOR = { websites: 'websites', seo: 'seo', 'social-media': 'smm', 'a
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
 const tokens = (s) => norm(s).split(' ').filter((t) => t.length >= 3 && !['the', 'and', 'for', 'website', 'media', 'system', 'list'].includes(t));
 /** Best file for a project: name contains the project/client words; same-category folder wins ties. */
+/** Only files in the project's own category folder count (an SMM project never takes an SEO image). */
 export function matchScore(project, file) {
+  if (!norm(file.folder).includes(FOLDER_FOR[project.category] || '\u0000')) return 0;
   const name = norm(file.name.replace(/\.[a-z0-9]+$/i, ''));
   const words = [...new Set([...tokens(project.title), ...tokens(project.client)])];
-  const hits = words.filter((w) => name.includes(w)).length;
-  if (!hits) return 0;
-  const folderHit = norm(file.folder).includes(FOLDER_FOR[project.category] || '\u0000') ? 1 : 0;
-  return hits * 10 + folderHit * 5;
+  let hits = words.filter((w) => name.includes(w)).length;
+  const compact = (v) => norm(v).replace(/ /g, '');
+  if (compact(project.title).length >= 5 && compact(name).includes(compact(project.title))) hits += 1; // "To-Do List" → todolist
+  return hits ? hits * 10 + 5 : 0;
 }
 /** Sets a cover for every project that has none, from the best-matching file. */
 /** Also fills an empty gallery when several files in the project's own folder match it. */
@@ -300,9 +302,17 @@ export function autoMatchOnce(listMedia, configured) {
   if (autoRan || !configured) return;
   autoRan = true;
   (async () => {
-    if (await store.getSetting('portfolio_auto_media_v1', null)) return;
-    const matched = await autoMatchCovers(await listMedia({ fresh: true }));
-    await store.setSetting('portfolio_auto_media_v1', { at: new Date().toISOString(), matched });
+    if (await store.getSetting('portfolio_auto_media_v2', null)) return;
+    const files = await listMedia({ fresh: true });
+    // v1 could match across folders: undo those, unless the admin has since changed the image.
+    const v1 = await store.getSetting('portfolio_auto_media_v1', null);
+    for (const m of v1?.matched || []) {
+      const p = await getBySlug(m.slug);
+      const f = files.find((x) => x.path === m.file);
+      if (p && f && p.cover_image === f.url && !matchScore(p, f)) await q('UPDATE portfolio_projects SET cover_image = NULL, updated_at = NOW() WHERE id = ?', [p.id]);
+    }
+    const matched = await autoMatchCovers(files);
+    await store.setSetting('portfolio_auto_media_v2', { at: new Date().toISOString(), matched });
     console.log(`[portfolio] matched Supabase images to ${matched.length} project(s)`);
   })().catch((e) => { autoRan = false; console.error('[portfolio] auto image match skipped —', e.message); });
 }
