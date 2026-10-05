@@ -18,10 +18,9 @@ import * as store from './store/db.js';
 import { TIERS, publicTiers, shapeAudit, rateLimited } from './commerce/plans.js';
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
-import { renderPage, renderPost, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
+import { renderPage, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
 import * as portfolio from './portfolio.js';
-import * as blog from './blog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(here, '..', 'public');
@@ -329,14 +328,6 @@ admin.delete('/portfolio/:id', h(async (req, res) => { await portfolio.deletePro
 admin.put('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 admin.delete('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 
-// Blog management
-admin.get('/blog', h(async (req, res) => res.json(await blog.getBlog())));
-admin.post('/blog', h(async (req, res) => { try { res.status(201).json(await blog.upsertPost(null, req.body || {})); } catch (e) { pfErr(res, e); } }));
-admin.put('/blog/:id', h(async (req, res) => { try { res.json(await blog.upsertPost(req.params.id, req.body || {})); } catch (e) { pfErr(res, e); } }));
-admin.delete('/blog/:id', h(async (req, res) => { await blog.deletePost(req.params.id); res.json({ ok: true }); }));
-admin.put('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
-admin.delete('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
-
 app.use('/api/admin', admin);
 
 // ── Internal audit workspace API (admin only) ───────────────────────────
@@ -412,18 +403,7 @@ app.get('/portfolio-img/:id/:kind', h(async (req, res) => {
   res.set({ 'content-type': img.mime, 'cache-control': 'public, max-age=31536000, immutable' }).send(Buffer.from(img.data, 'base64'));
 }));
 
-app.get('/blog/:slug', h(async (req, res, next) => {
-  const post = (await blog.publishedPosts()).find((p) => p.id === req.params.slug);
-  if (!post) return next();
-  res.type('html').send(await renderPost(req, post));
-}));
-app.get('/blog-img/:id', h(async (req, res) => {
-  const img = await blog.getCover(req.params.id);
-  if (!img) return res.status(404).end();
-  res.set({ 'content-type': img.mime, 'cache-control': 'public, max-age=31536000, immutable' }).send(Buffer.from(img.data, 'base64'));
-}));
-
-app.get('/sitemap.xml', h(async (req, res) => res.type('application/xml').send(await sitemap(req))));
+app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(sitemap(req)));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send(robots(req)));
 
 const privatePage = (file) => (req, res) => res.set('x-robots-tag', 'noindex, nofollow').sendFile(path.join(pub, file));

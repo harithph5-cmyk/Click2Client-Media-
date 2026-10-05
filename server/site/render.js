@@ -10,7 +10,6 @@ import { config } from '../config.js';
 import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
 import { portfolioVars } from '../portfolio.js';
-import { blogListVars, postVars, publishedPosts } from '../blog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIEWS = path.join(here, '..', '..', 'views');
@@ -42,7 +41,6 @@ export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
   portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO & Digital Campaigns | Click2Client Media', description: 'Explore websites, digital campaigns, SEO projects and creative work built by Click2Client Media for businesses in automotive, education, photography, technology and more.', priority: '0.8', crumb: 'Portfolio' },
-  blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
   services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
   enquire: { path: '/enquire', file: 'enquire', title: 'Book a Consultation | Click2Client Media', description: 'Tell us about your business and goals. Click2Client Media will get back to you about SEO, digital marketing or website development.', priority: '0.7', crumb: 'Enquire Now' },
   privacy: { path: '/privacy-policy', file: 'privacy', title: 'Privacy Policy | Click2Client Media', description: 'How Click2Client Media collects, uses and protects your information.', priority: '0.2', crumb: 'Privacy Policy' },
@@ -50,7 +48,7 @@ export const PAGES = {
   cookies: { path: '/cookie-policy', file: 'cookies', title: 'Cookie Policy | Click2Client Media', description: 'How the Click2Client Media website uses cookies.', priority: '0.2', crumb: 'Cookie Policy' },
 };
 
-function schemaFor(id, s, base, p = PAGES[id]) {
+function schemaFor(id, s, base) {
   const org = {
     '@type': ['Organization', 'ProfessionalService'],
     '@id': `${base}/#organization`,
@@ -69,10 +67,8 @@ function schemaFor(id, s, base, p = PAGES[id]) {
     founder: { '@type': 'Person', name: 'Hari', jobTitle: 'Founder', image: `${base}/img/founder-hari.webp` },
   };
   const graph = [org, { '@type': 'WebSite', '@id': `${base}/#website`, url: `${base}/`, name: s.companyName, publisher: { '@id': `${base}/#organization` } }];
-  if (p.post) {
-    graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: 'Blog', item: `${base}/blog` }, { '@type': 'ListItem', position: 3, name: p.post.title, item: `${base}${p.path}` }] });
-    graph.push({ '@type': 'BlogPosting', headline: p.post.title, description: p.description, datePublished: p.post.date, dateModified: p.post.updated || p.post.date, author: { '@type': 'Person', name: p.post.author || 'Hari' }, publisher: { '@id': `${base}/#organization` }, mainEntityOfPage: `${base}${p.path}`, ...(p.image ? { image: p.image } : {}) });
-  } else if (p.crumb) graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: p.crumb, item: `${base}${p.path}` }] });
+  const p = PAGES[id];
+  if (p.crumb) graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: p.crumb, item: `${base}${p.path}` }] });
   if (id === 'audit') {
     graph.push({
       '@type': 'Service', name: 'Website SEO Audit', provider: { '@id': `${base}/#organization` }, areaServed: 'Worldwide',
@@ -89,8 +85,8 @@ function testimonialsHtml(raw) {
     <div class="testimonials reveal">${items.slice(0, 6).map(([n, b, q]) => `<figure class="card testimonial"><blockquote>“${esc(q)}”</blockquote><figcaption><b>${esc(n)}</b><span>${esc(b)}</span></figcaption></figure>`).join('')}</div></div></section>`;
 }
 
-export async function renderPage(id, req, override = {}) {
-  const p = override.page || PAGES[id];
+export async function renderPage(id, req) {
+  const p = PAGES[id];
   const s = await siteSettings();
   const base = siteUrl(req);
   const tel = s.phone.replace(/[^\d+]/g, '');
@@ -111,41 +107,25 @@ export async function renderPage(id, req, override = {}) {
     'year': String(new Date().getFullYear()),
     'price.p25': String(TIERS.p25.price),
     'price.p50': String(TIERS.p50.price),
-    'schema': schemaFor(id, s, base, p),
-    'ogImage': esc(`${base}/img/click2client-media-logo.webp`),
-    'ogType': 'website',
+    'schema': schemaFor(id, s, base),
     'testimonials': testimonialsHtml(s.testimonials),
     'gscMeta': s.gscVerification ? `<meta name="google-site-verification" content="${esc(s.gscVerification)}">` : '',
     'analyticsNote': s.ga4Id || s.gtmId
       ? 'We use Google Analytics to understand how visitors use this website (for example, which pages are viewed and whether forms are submitted). Google Analytics sets its own cookies (named _ga). You can block them in your browser settings or with the Google Analytics opt-out browser add-on.'
       : 'The public website does not currently use advertising or analytics cookies.',
-    [`nav.${p.nav || id}`]: 'aria-current="page"',
+    [`nav.${id}`]: 'aria-current="page"',
   };
   if (id === 'portfolio') Object.assign(vars, await portfolioVars());
-  if (id === 'blog') Object.assign(vars, await blogListVars());
-  Object.assign(vars, override.vars);
   let html = read(p.file);
   html = html.replace(/<!--#include (\w+)-->/g, (_, n) => read('_' + n));
   html = html.replace(/\{\{([\w.]+)\}\}/g, (_, k) => vars[k] ?? '');
   return html;
 }
 
-/** A published blog post, rendered with the shared head/header/footer. */
-export async function renderPost(req, post) {
-  const base = siteUrl(req);
-  const v = await postVars(post, base);
-  const page = { path: `/blog/${post.id}`, file: 'blog-post', nav: 'blog', title: `${post.title} | Click2Client Media Blog`, description: post.excerpt || post.title, post, image: post.cover ? v.ogImage : '' };
-  return renderPage('blogPost', req, { page, vars: v });
-}
-
-export async function sitemap(req) {
+export function sitemap(req) {
   const base = siteUrl(req);
   const today = new Date().toISOString().slice(0, 10);
-  const posts = await publishedPosts().catch(() => []);
-  const urls = [
-    ...Object.values(PAGES).map((p) => `  <url><loc>${base}${p.path}</loc><lastmod>${today}</lastmod><priority>${p.priority}</priority></url>`),
-    ...posts.map((p) => `  <url><loc>${base}/blog/${p.id}</loc><lastmod>${(p.updated || p.date).slice(0, 10)}</lastmod><priority>0.7</priority></url>`),
-  ].join('\n');
+  const urls = Object.values(PAGES).map((p) => `  <url><loc>${base}${p.path}</loc><lastmod>${today}</lastmod><priority>${p.priority}</priority></url>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
 
