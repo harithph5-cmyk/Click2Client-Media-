@@ -396,6 +396,8 @@ app.use('/api', ws);
 app.use('/api', (req, res) => bad(res, 'not_found', 'Unknown API route.', 404));
 
 // ═════════════════════════════ PAGES ══════════════════════════════════════
+// First request after start-up: link uploaded Supabase images to projects (once, in the background).
+app.use((req, res, next) => { portfolio.autoMatchOnce(media.listMedia, media.mediaStatus().configured); next(); });
 for (const [id, p] of Object.entries(PAGES)) {
   app.get(p.path, h(async (req, res) => res.type('html').send(await renderPage(id, req))));
 }

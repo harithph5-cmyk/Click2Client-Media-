@@ -270,16 +270,41 @@ export function matchScore(project, file) {
   return hits * 10 + folderHit * 5;
 }
 /** Sets a cover for every project that has none, from the best-matching file. */
+/** Also fills an empty gallery when several files in the project's own folder match it. */
 export async function autoMatchCovers(files) {
   const projects = await listProjects({ publishedOnly: false });
   const done = [];
-  for (const p of projects.filter((x) => !x.cover_image)) {
-    const best = files.map((f) => [matchScore(p, f), f]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0])[0];
-    if (!best) continue;
-    await q('UPDATE portfolio_projects SET cover_image = ?, updated_at = NOW() WHERE id = ?', [best[1].url, p.id]);
-    done.push({ project: p.title, slug: p.slug, file: best[1].path });
+  for (const p of projects) {
+    const ranked = files.map((f) => [matchScore(p, f), f]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]);
+    if (!ranked.length) continue;
+    if (!p.cover_image) {
+      await q('UPDATE portfolio_projects SET cover_image = ?, updated_at = NOW() WHERE id = ?', [ranked[0][1].url, p.id]);
+      done.push({ project: p.title, slug: p.slug, file: ranked[0][1].path });
+    }
+    const own = ranked.filter(([s]) => s % 10 === 5).map(([, f]) => f); // same-category folder
+    const hasGallery = await one('SELECT 1 FROM portfolio_project_images WHERE project_id = ? LIMIT 1', [p.id]);
+    if (own.length >= 2 && !hasGallery) {
+      for (const [i, f] of own.slice(0, 20).entries()) {
+        await q('INSERT INTO portfolio_project_images (id, project_id, image_url, alt_text, display_order) VALUES (?, ?, ?, ?, ?)', [store.newId(), p.id, f.url, `${p.title} — ${f.name.replace(/\.[a-z0-9]+$/i, '')}`, i + 1]);
+      }
+    }
   }
   return done;
+}
+
+// Runs once, in the background, the first time the site starts with Supabase
+// connected — so uploaded images appear without any admin clicks. Images the
+// admin already chose are never replaced.
+let autoRan = false;
+export function autoMatchOnce(listMedia, configured) {
+  if (autoRan || !configured) return;
+  autoRan = true;
+  (async () => {
+    if (await store.getSetting('portfolio_auto_media_v1', null)) return;
+    const matched = await autoMatchCovers(await listMedia({ fresh: true }));
+    await store.setSetting('portfolio_auto_media_v1', { at: new Date().toISOString(), matched });
+    console.log(`[portfolio] matched Supabase images to ${matched.length} project(s)`);
+  })().catch((e) => { autoRan = false; console.error('[portfolio] auto image match skipped —', e.message); });
 }
 
 // ── Public HTML ──────────────────────────────────────────────────────────
