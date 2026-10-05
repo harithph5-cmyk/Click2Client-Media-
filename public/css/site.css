@@ -366,3 +366,56 @@ select.input { appearance: auto; }
 .wide-figure { max-width: 1040px; margin: 0 auto 48px; }
 
 .media picture, .svc .media-top picture { display: block; }
+
+/* ── Meet the founder ─────────────────────────────── */
+.founder { --fg: #1E7A4E; overflow: hidden; }
+.founder-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+.founder-grid > * { min-width: 0; }
+.founder-eyebrow { display: inline-flex; align-items: center; gap: 18px; font: 600 13px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.founder-eyebrow::after { content: ''; width: 90px; height: 2px; background: linear-gradient(90deg, var(--ink), var(--fg)); }
+.founder-title { font: 800 clamp(44px, 6vw, 76px)/1 var(--display); letter-spacing: -0.04em; margin: 18px 0 14px; }
+.founder-title span { color: var(--fg); }
+.founder-sub { font: 700 clamp(21px, 2.2vw, 28px)/1.25 var(--display); color: var(--ink); letter-spacing: -0.02em; max-width: 560px; margin-bottom: 18px; }
+.founder-grid p { max-width: 600px; }
+.founder-grid p + p { margin-top: 14px; }
+.founder-grid p b { color: var(--ink); }
+.founder-values { list-style: none; padding: 0; margin: 28px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); max-width: 580px; }
+.founder-values li { text-align: center; font: 600 14px/1.35 var(--display); color: var(--ink); padding: 0 8px; }
+.founder-values li + li { border-left: 1px solid var(--line); }
+.founder-values .ic-chip { width: 52px; height: 52px; border-radius: 14px; margin: 0 auto 10px; }
+.founder-values .ic-chip svg { width: 24px; height: 24px; }
+.ic-chip.amber { background: #FFF4DC; color: #C98A00; }
+.ic-chip.rose { background: #FDE8EA; color: #D23B4B; }
+.founder-quote { margin: 30px 0 0; padding-left: 64px; position: relative; max-width: 520px; }
+.founder-quote::before { content: '“'; position: absolute; left: 0; top: -18px; font: 800 72px/1 var(--serif); color: #B7D9C6; }
+.founder-quote blockquote { margin: 0; padding-left: 20px; border-left: 2px solid #CFE3D7; font-style: italic; font-size: 17px; line-height: 1.6; color: var(--ink-2); }
+.founder-quote figcaption { padding-left: 16px; margin-top: 4px; }
+.founder-quote figcaption img { width: 130px; height: auto; display: block; mix-blend-mode: multiply; }
+
+.founder-media { position: relative; padding-right: 110px; }
+.founder-photo { display: block; width: 100%; aspect-ratio: 482 / 600; object-fit: cover; object-position: center 20%; border-radius: 36px; clip-path: polygon(22% 0, 100% 0, 100% 100%, 0 100%); box-shadow: var(--shadow-3); }
+.founder-media::before { content: ''; position: absolute; left: -26px; top: 40px; bottom: 60px; width: 40%; border-radius: 40px; background: #E6F2EC; z-index: -1; }
+.founder-stats { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 200px; list-style: none; margin: 0; padding: 8px 22px; background: #fff; border-radius: 22px; box-shadow: var(--shadow-2); border: 1px solid var(--line); }
+.founder-stats li { padding: 18px 0; display: grid; gap: 4px; font-size: 13.5px; color: var(--ink-3); line-height: 1.35; }
+.founder-stats li + li { border-top: 1px solid var(--line); }
+.founder-stats b { font: 800 26px/1.1 var(--display); color: var(--ink); letter-spacing: -0.02em; margin-top: 6px; }
+.founder-stats .ic-chip { width: 44px; height: 44px; }
+
+@media (max-width: 1020px) {
+  .founder-grid { grid-template-columns: 1fr; gap: 40px; }
+  .founder-media { padding-right: 0; max-width: 560px; margin: 0 auto; width: 100%; }
+  .founder-stats { position: static; transform: none; width: auto; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-top: -40px; margin-inline: 16px; position: relative; padding: 4px 8px; }
+  .founder-stats li { padding: 14px 10px; text-align: center; justify-items: center; }
+  .founder-stats li + li { border-top: 0; border-left: 1px solid var(--line); }
+  .founder-stats b { font-size: 19px; }
+}
+@media (max-width: 560px) {
+  .founder-values { grid-template-columns: repeat(2, 1fr); row-gap: 18px; }
+  .founder-values li:nth-child(3) { border-left: 0; }
+  .founder-photo { clip-path: none; border-radius: 26px; aspect-ratio: 4 / 4.2; max-height: 440px; }
+  .founder-stats b { font-size: 16px; white-space: nowrap; }
+  .founder-quote { padding-left: 44px; }
+  .founder-quote::before { font-size: 56px; }
+  .founder-stats .ic-chip { display: none; }
+  .founder-stats li { font-size: 12px; }
+}

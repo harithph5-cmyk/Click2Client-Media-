@@ -62,6 +62,7 @@ function schemaFor(id, s, base) {
     areaServed: [{ '@type': 'Country', name: 'India' }, 'Worldwide'],
     sameAs: [s.instagram, s.facebook].filter(Boolean),
     knowsAbout: ['Search Engine Optimization', 'Digital Marketing', 'Website Development', 'Performance Marketing', 'UI/UX Design', 'Web Applications'],
+    founder: { '@type': 'Person', name: 'Hari', jobTitle: 'Founder', image: `${base}/img/founder-hari.webp` },
   };
   const graph = [org, { '@type': 'WebSite', '@id': `${base}/#website`, url: `${base}/`, name: s.companyName, publisher: { '@id': `${base}/#organization` } }];
   const p = PAGES[id];
