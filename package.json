@@ -10,7 +10,7 @@
     "audit": "node --env-file-if-exists=.env scripts/cli-audit.js"
   },
   "engines": {
-    "node": "24.x"
+    "node": ">=22.13"
   },
   "license": "UNLICENSED",
   "private": true,
