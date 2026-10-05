@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
+import { portfolioVars } from '../portfolio.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIEWS = path.join(here, '..', '..', 'views');
@@ -39,6 +40,7 @@ export const siteUrl = (req) => config.publicUrl || `${req.protocol}://${req.get
 export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
+  portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO & Digital Campaigns | Click2Client Media', description: 'Explore websites, digital campaigns, SEO projects and creative work built by Click2Client Media for businesses in automotive, education, photography, technology and more.', priority: '0.8', crumb: 'Portfolio' },
   services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
   enquire: { path: '/enquire', file: 'enquire', title: 'Book a Consultation | Click2Client Media', description: 'Tell us about your business and goals. Click2Client Media will get back to you about SEO, digital marketing or website development.', priority: '0.7', crumb: 'Enquire Now' },
   privacy: { path: '/privacy-policy', file: 'privacy', title: 'Privacy Policy | Click2Client Media', description: 'How Click2Client Media collects, uses and protects your information.', priority: '0.2', crumb: 'Privacy Policy' },
@@ -113,6 +115,7 @@ export async function renderPage(id, req) {
       : 'The public website does not currently use advertising or analytics cookies.',
     [`nav.${id}`]: 'aria-current="page"',
   };
+  if (id === 'portfolio') Object.assign(vars, await portfolioVars());
   let html = read(p.file);
   html = html.replace(/<!--#include (\w+)-->/g, (_, n) => read('_' + n));
   html = html.replace(/\{\{([\w.]+)\}\}/g, (_, k) => vars[k] ?? '');

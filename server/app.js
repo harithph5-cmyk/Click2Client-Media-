@@ -20,6 +20,7 @@ import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
 import { renderPage, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
+import * as portfolio from './portfolio.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(here, '..', 'public');
@@ -316,6 +317,17 @@ admin.put('/settings/qr', h(async (req, res) => {
 }));
 admin.delete('/settings/qr', h(async (req, res) => { await store.setSetting('payment_qr', null); res.json({ ok: true }); }));
 
+// Portfolio management
+const pfErr = (res, e) => bad(res, 'invalid', e.message, e.status || 400);
+admin.get('/portfolio', h(async (req, res) => res.json({ ...(await portfolio.getPortfolio()), categories: portfolio.CATEGORIES })));
+admin.post('/portfolio', h(async (req, res) => { try { res.status(201).json(await portfolio.upsertProject(null, req.body || {})); } catch (e) { pfErr(res, e); } }));
+admin.put('/portfolio/stats', h(async (req, res) => { await portfolio.saveStats(req.body?.stats); res.json({ ok: true }); }));
+admin.put('/portfolio/order', h(async (req, res) => { await portfolio.reorder(Array.isArray(req.body?.ids) ? req.body.ids : []); res.json({ ok: true }); }));
+admin.put('/portfolio/:id', h(async (req, res) => { try { res.json(await portfolio.upsertProject(req.params.id, req.body || {})); } catch (e) { pfErr(res, e); } }));
+admin.delete('/portfolio/:id', h(async (req, res) => { await portfolio.deleteProject(req.params.id); res.json({ ok: true }); }));
+admin.put('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
+admin.delete('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
+
 app.use('/api/admin', admin);
 
 // ── Internal audit workspace API (admin only) ───────────────────────────
@@ -382,6 +394,13 @@ if(c.gtm){w.dataLayer.push({'gtm.start':Date.now(),event:'gtm.js'});var g=d.crea
 if(c.ga4){var s=d.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id='+c.ga4;d.head.appendChild(s);w.gtag=function(){w.dataLayer.push(arguments);};w.gtag('js',new Date());w.gtag('config',c.ga4);}
 w.c2cTrack=function(n,p){p=p||{};try{w.dataLayer.push(Object.assign({event:n},p));if(c.ga4&&w.gtag)w.gtag('event',n,p);}catch(e){}};
 d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target:null;if(!t)return;if(t.closest('a[href*="wa.me/"]'))w.c2cTrack('whatsapp_click',{link_location:location.pathname});else if(t.closest('a[href^="tel:"]'))w.c2cTrack('phone_click',{link_location:location.pathname});},true);})();`);
+}));
+
+// Portfolio images live in the database; URLs carry a version, so cache them hard.
+app.get('/portfolio-img/:id/:kind', h(async (req, res) => {
+  const img = await portfolio.getImage(req.params.id, req.params.kind);
+  if (!img) return res.status(404).end();
+  res.set({ 'content-type': img.mime, 'cache-control': 'public, max-age=31536000, immutable' }).send(Buffer.from(img.data, 'base64'));
 }));
 
 app.get('/sitemap.xml', (req, res) => res.type('application/xml').send(sitemap(req)));

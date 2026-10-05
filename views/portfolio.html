@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<!--#include head-->
+</head>
+<body class="pf-page">
+<!--#include header-->
+<main id="main">
+
+<!-- HERO -->
+<section class="pf-hero" id="pfHero">
+  <div class="pf-float" aria-hidden="true">
+    <span class="fl fl1" data-depth="18"><i class="dot g"></i>Website launched</span>
+    <span class="fl fl2" data-depth="-14"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Ranking on Google</span>
+    <span class="fl fl3" data-depth="24"><i class="bars"><b></b><b></b><b></b></i>Campaign live</span>
+    <span class="fl fl4" data-depth="-20"><i class="dot b"></i>New enquiry</span>
+    <span class="fl fl5" data-depth="12">UI / UX</span>
+  </div>
+  <div class="wrap pf-hero-in">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Portfolio</nav>
+    <span class="eyebrow">Our work · {{pf.count}} projects</span>
+    <h1 class="pf-h1">We Build. We Market.<br><span class="grad-text">We Create Results.</span></h1>
+    <p class="lede">Explore websites, digital campaigns, SEO projects and creative work built by Click2Client Media.</p>
+    <div class="ctas"><a class="btn primary lg magnetic" href="#work">View Our Work</a><a class="btn outline lg magnetic" href="/enquire?service=Website%20Development">Start Your Project</a></div>
+  </div>
+</section>
+
+<!-- GALLERY -->
+<section class="section pf-work" id="work" aria-labelledby="work-h">
+  <div class="wrap">
+    <div class="split-head reveal">
+      <div class="sec-head"><span class="eyebrow">Selected work</span><h2 id="work-h">Digital experiences designed to get clients.</h2></div>
+      <p>Click2Client Media doesn't just make things look good. Every project is built to bring businesses enquiries, leads and sales.</p>
+    </div>
+    <div class="pf-filters reveal" role="toolbar" aria-label="Filter projects">{{pf.filters}}</div>
+    <div class="pf-grid" id="pfGrid">{{pf.cards}}</div>
+    <p class="pf-empty" hidden>No projects in this category yet.</p>
+    <span class="pf-cursor" aria-hidden="true">View</span>
+  </div>
+</section>
+
+{{pf.featured}}
+{{pf.stats}}
+{{pf.before}}
+
+<!-- FINAL CTA -->
+<section class="section tight" aria-labelledby="pf-cta-h">
+  <div class="wrap">
+    <div class="pf-cta reveal">
+      <div><span class="eyebrow">Let's build yours</span><h2 id="pf-cta-h">Your business could be our next case study.</h2><p>Tell us what you're building. We'll show you what's possible.</p></div>
+      <div class="row wrap-row"><a class="btn white lg magnetic" href="/enquire">Start a Project →</a><a class="btn glass lg magnetic" href="{{whatsappHref}}" target="_blank" rel="noopener">Talk on WhatsApp →</a></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<!-- Case study modal -->
+<div class="pf-modal" id="pfModal" hidden role="dialog" aria-modal="true" aria-labelledby="pfmTitle">
+  <div class="pf-modal-card">
+    <button class="pf-close" type="button" aria-label="Close">✕</button>
+    <div class="pf-modal-body"></div>
+  </div>
+</div>
+<script type="application/json" id="pfData">{{pf.data}}</script>
+<!--#include footer-->
+<script type="module" src="/js/portfolio.js"></script>
+</body>
+</html>

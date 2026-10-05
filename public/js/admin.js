@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -58,7 +58,7 @@ function shell() {
     </div></header>
     <main class="view" id="view"></main>`;
   document.getElementById('logout').onclick = async () => { await api('/admin/logout', { method: 'POST' }).catch(() => {}); setCsrf(''); loginView(); };
-  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; route(); }); state.bound = true; }
+  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; route(); }); state.bound = true; }
   route();
 }
 
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, portfolio, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -337,6 +337,132 @@ async function settings(view) {
   };
   const del = document.getElementById('qrDel');
   if (del) del.onclick = async () => { if (!confirm('Remove the payment QR code?')) return; await api('/admin/settings/qr', { method: 'DELETE' }); toast('QR removed'); settings(view); };
+}
+
+// ── Portfolio ────────────────────────────────────────────────────────────
+// Downscale screenshots in the browser (≤1600px wide, top crop, WebP) so
+// uploads stay well under the 1 MB server limit.
+async function shrinkImage(file) {
+  const bmp = await createImageBitmap(file);
+  const w = Math.min(1600, bmp.width);
+  const sh = Math.min(bmp.height, Math.round(bmp.width * 0.75)); // keep the top of tall full-page screenshots
+  const c = Object.assign(document.createElement('canvas'), { width: w, height: Math.round((sh * w) / bmp.width) });
+  c.getContext('2d').drawImage(bmp, 0, 0, bmp.width, sh, 0, 0, c.width, c.height);
+  for (const q of [0.85, 0.75, 0.6, 0.45]) {
+    const url = c.toDataURL('image/webp', q);
+    if (url.startsWith('data:image/webp') && url.length < 1_300_000) return url;
+  }
+  return c.toDataURL('image/jpeg', 0.6);
+}
+
+async function portfolio(view) {
+  const { projects, stats, categories } = await api('/admin/portfolio');
+  const editing = state.pfEdit === 'new' ? {} : projects.find((p) => p.id === state.pfEdit);
+  if (editing) return portfolioForm(view, editing, categories);
+  const thumb = (p) => (p.mainImage ? `<img src="/portfolio-img/${esc(p.id)}/main?v=${p.mainImage}" alt="" style="width:96px;height:60px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line)">` : '<div class="tiny muted" style="width:96px;height:60px;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:8px">No image</div>');
+  view.innerHTML = `${head('Website', 'Portfolio', `${projects.length} project${projects.length === 1 ? '' : 's'} on <a href="/portfolio" target="_blank">/portfolio</a>. Order here = order on the page.`, '<a class="btn ghost sm" href="/portfolio" target="_blank">View page ↗</a><button class="btn sm accent" data-new>+ Add project</button>')}
+    <div class="card table-wrap"><table class="t"><thead><tr><th>Order</th><th>Screenshot</th><th>Project</th><th>Categories</th><th></th></tr></thead><tbody>
+      ${projects.map((p, i) => `<tr data-id="${esc(p.id)}">
+        <td class="nowrap"><button class="btn sm quiet" data-up ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button class="btn sm quiet" data-down ${i < projects.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button></td>
+        <td>${thumb(p)}</td>
+        <td><b>${esc(p.name)}</b>${p.featured ? ' <span class="pill info">Featured</span>' : ''}<div class="tiny muted">${esc(p.industry)}</div></td>
+        <td class="small">${esc(p.categories.join(', '))}</td>
+        <td class="nowrap"><button class="btn sm ghost" data-edit>Edit</button>${delBtn}</td>
+      </tr>`).join('')}
+    </tbody></table></div>
+    <form class="card card-pad" id="pfStats" style="margin-top:18px">
+      <h3>Stat counters</h3><p class="small muted" style="margin-top:4px">Shown as animated counters on the page, e.g. <code>25+</code> · Projects Delivered. Keep them true.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px">
+        ${[0, 1, 2, 3].map((i) => `<div class="row" style="gap:8px"><input class="input" style="width:80px" name="v${i}" placeholder="25+" value="${esc(stats[i]?.value || '')}"><input class="input" name="l${i}" placeholder="Label" value="${esc(stats[i]?.label || '')}"></div>`).join('')}
+      </div>
+      <div class="row" style="margin-top:14px"><button class="btn accent" type="submit">Save counters</button></div>
+    </form>`;
+  const order = projects.map((p) => p.id);
+  view.onclick = async (e) => {
+    if (e.target.closest('[data-new]')) { state.pfEdit = 'new'; return portfolio(view); }
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const id = tr.dataset.id;
+    if (e.target.closest('[data-edit]')) { state.pfEdit = id; return portfolio(view); }
+    if (e.target.closest('[data-del]')) {
+      if (!confirm(`Delete "${tr.querySelector('b').textContent}" from the portfolio? Its images are removed too.`)) return;
+      try { await api(`/admin/portfolio/${encodeURIComponent(id)}`, { method: 'DELETE' }); toast('Project deleted'); portfolio(view); } catch (ex) { toast(ex.message); }
+    }
+    const dir = e.target.closest('[data-up]') ? -1 : e.target.closest('[data-down]') ? 1 : 0;
+    if (dir) {
+      const i = order.indexOf(id);
+      [order[i], order[i + dir]] = [order[i + dir], order[i]];
+      try { await api('/admin/portfolio/order', { method: 'PUT', body: { ids: order } }); portfolio(view); } catch (ex) { toast(ex.message); }
+    }
+  };
+  document.getElementById('pfStats').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const s = [0, 1, 2, 3].map((i) => ({ value: f.get(`v${i}`), label: f.get(`l${i}`) }));
+    try { await api('/admin/portfolio/stats', { method: 'PUT', body: { stats: s } }); toast('Counters saved'); } catch (ex) { toast(ex.message); }
+  };
+}
+
+function portfolioForm(view, p, categories) {
+  const isNew = !p.id;
+  const F = (k, l, hint = '', ph = '') => `<div class="field"><label for="p-${k}">${l}</label><input class="input" id="p-${k}" name="${k}" placeholder="${esc(ph)}" value="${esc(Array.isArray(p[k]) ? p[k].join(', ') : p[k] || '')}">${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const T = (k, l, hint = '') => `<div class="field"><label for="p-${k}">${l}</label><textarea class="input" id="p-${k}" name="${k}" rows="3">${esc(p[k] || '')}</textarea>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const img = (kind, label, hint) => `<div class="card card-pad"><h3>${label}</h3><p class="small muted" style="margin-top:4px">${hint}</p>
+    ${isNew ? '<p class="small" style="margin-top:12px">Save the project first, then upload images.</p>' : `<div style="margin-top:12px">${p[kind + 'Image'] ? `<img src="/portfolio-img/${esc(p.id)}/${kind}?v=${p[kind + 'Image']}" alt="" style="width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-radius:10px;border:1px solid var(--line)">` : '<div class="small muted" style="aspect-ratio:16/10;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:10px">No image yet</div>'}</div>
+    <div class="row wrap-row" style="margin-top:12px"><label class="btn sm accent" style="cursor:pointer">${p[kind + 'Image'] ? 'Replace' : 'Upload'} image<input type="file" data-img="${kind}" accept="image/png,image/jpeg,image/webp" hidden></label>${p[kind + 'Image'] ? `<button class="btn sm ghost" type="button" data-img-del="${kind}">Remove</button>` : ''}</div>`}</div>`;
+  view.innerHTML = `${head('Portfolio', isNew ? 'Add project' : `Edit · ${esc(p.name)}`, '', '<button class="btn ghost sm" data-back>← All projects</button>')}
+    <div class="two" style="align-items:start">
+      <form class="card card-pad" id="pf">
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
+          ${F('name', 'Project name *', '', 'Carvello Cars')}${F('industry', 'Industry', '', 'Automotive')}
+        </div>
+        <div class="field" style="margin-top:14px"><label>Categories (for the filter)</label><div class="row wrap-row" style="gap:14px;margin-top:6px">${categories.map((c) => `<label class="small" style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" name="categories" value="${esc(c)}" ${(p.categories || []).includes(c) ? 'checked' : ''}>${esc(c)}</label>`).join('')}</div></div>
+        <div class="stack" style="margin-top:14px;gap:14px">
+          ${F('services', 'Services', 'Comma separated', 'Website, SEO, Meta Ads')}
+          ${F('highlight', 'Highlight (one line on the card)')}
+          ${F('url', 'Live website link (optional)', 'https://… — shows a “Visit site” link')}
+          <label class="small" style="display:inline-flex;gap:8px;align-items:center"><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}> <b>Featured project</b> — shown in the big section below the gallery (only one at a time)</label>
+          ${F('tagline', 'Tagline (featured section)')}
+          ${F('journey', 'Journey steps', 'Comma separated, e.g. Website, UI/UX, Admin Panel, Lead Generation')}
+          ${T('challenge', 'Challenge')}${T('solution', 'Solution')}${T('result', 'Result', 'Only real, measurable outcomes. Leave empty if you don’t have numbers yet.')}
+        </div>
+        <div class="row" style="margin-top:18px"><button class="btn accent" type="submit">${isNew ? 'Create project' : 'Save changes'}</button></div>
+      </form>
+      <div class="stack">
+        ${img('main', 'Screenshot', 'Shown on the card, in the case study and featured section. A desktop screenshot of the homepage works best. Resized automatically.')}
+        ${img('before', 'Old website (“before”)', 'Optional. On the featured project, adding both images shows the Before → After slider.')}
+      </div>
+    </div>`;
+  const back = () => { state.pfEdit = null; portfolio(view); };
+  document.getElementById('pf').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const body = { ...Object.fromEntries(f), categories: f.getAll('categories'), featured: f.has('featured') };
+    try {
+      const r = await api(isNew ? '/admin/portfolio' : `/admin/portfolio/${encodeURIComponent(p.id)}`, { method: isNew ? 'POST' : 'PUT', body });
+      toast(isNew ? 'Project created — now add a screenshot' : 'Saved');
+      state.pfEdit = r.id;
+      portfolio(view);
+    } catch (ex) { toast(ex.message); }
+  };
+  view.onclick = async (e) => {
+    if (e.target.closest('[data-back]')) return back();
+    const del = e.target.closest('[data-img-del]');
+    if (del && confirm('Remove this image?')) {
+      try { await api(`/admin/portfolio/${encodeURIComponent(p.id)}/image/${del.dataset.imgDel}`, { method: 'DELETE' }); toast('Image removed'); portfolio(view); } catch (ex) { toast(ex.message); }
+    }
+  };
+  view.onchange = async (e) => {
+    const kind = e.target.dataset?.img;
+    const file = kind && e.target.files[0];
+    if (!file) return;
+    try {
+      toast('Uploading…');
+      await api(`/admin/portfolio/${encodeURIComponent(p.id)}/image/${kind}`, { method: 'PUT', body: { dataUrl: await shrinkImage(file) } });
+      toast('Image uploaded');
+      portfolio(view);
+    } catch (ex) { toast(ex.message || 'Could not read that image.'); }
+  };
 }
 
 boot();
