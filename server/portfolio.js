@@ -1,193 +1,380 @@
-// Portfolio: projects + stats, stored in the settings table (metadata under
-// "portfolio", each image under "pimg:<id>:<kind>"). Edited from the admin
-// portal, rendered server-side on /portfolio so search engines see it.
+// Portfolio CMS: projects, gallery images and categories in Postgres; image
+// files in Supabase Storage (only their URLs are stored here). Managed from
+// Admin → Portfolio; public pages are rendered on the server for SEO.
 
 import * as store from './store/db.js';
+import { formatBody } from './blog.js';
 
-export const CATEGORIES = ['Websites', 'SEO', 'Branding', 'Social Media', 'Ads', 'UI/UX'];
-const KINDS = ['main', 'before'];
+const { query: q, queryOne: one, tx } = store;
 
-// Starting content from the brief. No screenshots or results are invented —
-// cards show a branded placeholder until a real screenshot is uploaded.
-const SEED = {
-  stats: [
-    { value: '25+', label: 'Projects Delivered' },
-    { value: '15+', label: 'Web Experiences Built' },
-    { value: '10+', label: 'Industries Served' },
-    { value: '30+', label: 'Digital Campaigns' },
-  ],
-  projects: [
-    { id: 'carvello', name: 'Carvello Cars', industry: 'Automotive', categories: ['Websites', 'UI/UX'], services: ['Website Development', 'UI/UX', 'Admin Dashboard'], highlight: 'A modern digital car-buying experience with an inventory admin dashboard.', url: '', featured: true,
-      tagline: 'From a traditional car dealership website to a modern digital car-buying experience.', journey: ['Website', 'UI/UX', 'Admin Panel', 'Lead Generation'],
-      challenge: 'A traditional dealership website that didn’t match how customers research and shortlist cars online.', solution: 'A new website and UI/UX built around browsing inventory, plus an admin panel to manage listings and enquiries.', result: '' },
-    { id: 'kinderbee', name: 'KinderBee', industry: 'Education / Preschool', categories: ['Websites', 'SEO', 'Social Media', 'Ads'], services: ['Website', 'SEO', 'Digital Marketing'], highlight: 'A friendly preschool website built to be found by local parents.', url: '' },
-    { id: 'dc-creations', name: 'DC Creations', industry: 'Photography', categories: ['Websites', 'Social Media', 'Ads'], services: ['Website', 'Social Media Marketing', 'Meta Ads'], highlight: 'A portfolio-first website with social and Meta Ads campaigns.', url: '' },
-    { id: 'codelytix', name: 'CODELYTIX Technologies', industry: 'Technology', categories: ['Websites', 'SEO', 'Ads'], services: ['Website', 'SEO', 'Digital Marketing'], highlight: 'A technology company website with SEO and digital marketing.', url: '' },
-    { id: 'click2client', name: 'Click2Client Media', industry: 'Agency', categories: ['Branding', 'Websites'], services: ['Branding', 'Website', 'Lead Generation System'], highlight: 'Our own brand, website and built-in SEO audit lead-generation system.', url: '/' },
-  ],
-};
+// ── Starting content ─────────────────────────────────────────────────────
+// Only facts we know. No screenshots, metrics or results are invented: covers
+// are picked from Supabase in the admin, results stay empty until added.
+const SEED_CATEGORIES = [
+  { slug: 'websites', name: 'Websites', short_name: 'Websites', empty_text: 'No projects here yet.' },
+  { slug: 'seo', name: 'SEO', short_name: 'SEO', empty_text: 'No projects here yet.' },
+  { slug: 'social-media', name: 'Social Media Marketing', short_name: 'Social Media', empty_text: 'No projects here yet.' },
+  { slug: 'ads-campaigns', name: 'Ads & Campaigns', short_name: 'Ads & Campaigns', empty_text: 'Campaign projects coming soon.' },
+  { slug: 'ui-ux', name: 'UI/UX', short_name: 'UI/UX', empty_text: 'UI/UX projects coming soon.' },
+  { slug: 'featured-projects', name: 'Featured Projects', short_name: 'Featured Projects', empty_text: 'No projects here yet.' },
+];
 
-const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
-const list = (v, n, each = 60) => (Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => clean(x, each)).filter(Boolean).slice(0, n);
-const slug = (s) => clean(s, 60).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project';
+const SEED_PROJECTS = [
+  {
+    slug: 'carvello-cars', title: 'Carvello Cars', category: 'websites', subcategory: 'Website Development', client: 'Carvello Cars',
+    industry: 'Automotive', location: 'Dubai, UAE',
+    short_description: 'A modern digital car-buying experience with a dynamic inventory and administration system.',
+    description: 'Carvello Cars is a pre-owned car dealer in Dubai selling inspected, accident-free cars with warranty and flexible finance. We designed and built their website and the admin system behind it, so the team can run their online showroom and enquiries themselves.',
+    services: ['Website Development', 'UI/UX', 'Admin Dashboard', 'Lead Generation'],
+    project_url: 'https://www.carvellocars.com/', admin_url: 'https://carvellocars.com/admin/',
+    challenge: 'Buying a used car starts online. Carvello needed a website that shows real, current stock with prices and offers, explains why their cars can be trusted — non-accident policy, warranty, finance — and turns interest into a call, WhatsApp message or enquiry. The team also needed to keep that stock up to date every day without a developer.',
+    solution: 'A premium, mobile-first dealership website built around the inventory, with a page for every car, clear trust messaging, and enquiry and WhatsApp routes on every page — all managed from a purpose-built admin panel.',
+    case_sections: [
+      { heading: 'Website Experience', body: 'The home page leads with what matters to a Dubai used-car buyer: hand-picked, inspected and accident-free cars, a one-year engine and gearbox warranty, and 0% down payment options. Separate journeys for buying and selling a car keep both audiences moving.' },
+      { heading: 'Inventory Experience', body: 'Every car has its own page with photos, make, model, year, mileage, the regular and offer price, and the saving. Buyers can filter the full inventory by make and sort by price or most recent, and each listing links straight to an enquiry or the dealer’s phone.' },
+      { heading: 'Admin Dashboard', body: 'A custom admin panel lets the Carvello team add cars, change prices and offer prices inline, set each car’s status (available, reserved, sold or hidden), choose which cars appear on the home page and set their order. They can also edit text, phone numbers, images and reviews across the site, and download a full backup.' },
+      { heading: 'Lead Generation', body: 'Enquiry forms on the home page and on every car page collect the buyer’s name, phone, email and preferred car, and arrive in an enquiries inbox in the admin panel. Call and WhatsApp links are always one tap away.' },
+      { heading: 'Responsive Design', body: 'The site is designed mobile-first, because most buyers browse cars on their phone — from the inventory grid to the enquiry form.' },
+    ],
+    results: 'Carvello runs its own website day to day: the team updates stock, prices and statuses, edits page content and answers enquiries from one admin panel, without needing a developer.',
+  },
+  { slug: 'kinderbee', title: 'KinderBee', category: 'websites', subcategory: 'Website Development', client: 'KinderBee', industry: 'Education / Preschool',
+    short_description: 'A website for KinderBee preschool, built to give parents a clear picture of the school and an easy way to get in touch.', services: ['Website Development'] },
+  { slug: 'click2client-media', title: 'Click2Client Media', category: 'websites', subcategory: 'Website Development', client: 'Click2Client Media', industry: 'Digital Agency', location: 'Madurai, India',
+    short_description: 'Our own agency website — with a built-in SEO audit tool, blog and the admin system that runs it.',
+    services: ['Website Development', 'Branding', 'SEO Audit Tool', 'Admin Dashboard'], technologies: ['Node.js', 'PostgreSQL', 'Supabase'], project_url: '/' },
+  { slug: 'kinderbee-seo', title: 'KinderBee', category: 'seo', subcategory: 'SEO', client: 'KinderBee', industry: 'Education / Preschool',
+    short_description: 'SEO for KinderBee preschool, helping local parents find the school on Google.', services: ['SEO'] },
+  { slug: 'codelytix', title: 'CODELYTIX', category: 'seo', subcategory: 'SEO', client: 'CODELYTIX Technologies', industry: 'Technology',
+    short_description: 'SEO for CODELYTIX Technologies, improving how the company is found on Google.', services: ['SEO'] },
+  { slug: 'globex-union', title: 'Globex Union', category: 'seo', subcategory: 'SEO', client: 'Globex Union',
+    short_description: 'SEO for Globex Union, improving the site’s visibility on Google.', services: ['SEO'] },
+  { slug: 'kinderbee-social-media', title: 'KinderBee', category: 'social-media', subcategory: 'Social Media Marketing', client: 'KinderBee', industry: 'Education / Preschool',
+    short_description: 'Social media marketing for KinderBee preschool.', services: ['Social Media Marketing'] },
+  { slug: 'codelytix-social-media', title: 'CODELYTIX', category: 'social-media', subcategory: 'Social Media Marketing', client: 'CODELYTIX Technologies', industry: 'Technology',
+    short_description: 'Social media marketing for CODELYTIX Technologies.', services: ['Social Media Marketing'] },
+  { slug: 'nimzliot', title: 'NimzLiot', category: 'social-media', subcategory: 'Social Media Marketing', client: 'NimzLiot',
+    short_description: 'Social media marketing for NimzLiot.', services: ['Social Media Marketing'] },
+  { slug: 'terranext-global-ventures', title: 'TerraNext Global Ventures', category: 'social-media', subcategory: 'Social Media Marketing', client: 'TerraNext Global Ventures',
+    short_description: 'Social media marketing for TerraNext Global Ventures.', services: ['Social Media Marketing'] },
+  { slug: 'hi-light-media', title: 'Hi-Light Media', category: 'social-media', subcategory: 'Social Media Marketing', client: 'Hi-Light Media',
+    short_description: 'Social media marketing for Hi-Light Media.', services: ['Social Media Marketing'] },
+  { slug: 'to-do-list-website', title: 'To-Do List Website', category: 'featured-projects', subcategory: 'Web Application', featured: true,
+    short_description: 'A focused web app for planning the day — add, organise and tick off tasks.', services: ['Web Application', 'UI/UX'] },
+  { slug: 'ats-system', title: 'ATS System', category: 'featured-projects', subcategory: 'AI / Recruitment System', featured: true,
+    short_description: 'An applicant tracking system that uses AI to help screen and organise candidates.', services: ['AI', 'Web Application'] },
+  { slug: 'ai-quiz-for-college-students', title: 'AI Quiz for College Students', category: 'featured-projects', subcategory: 'AI / EdTech', featured: true,
+    short_description: 'An AI-powered quiz app that helps college students practise and test what they’ve learned.', services: ['AI', 'EdTech'] },
+];
 
-export async function getPortfolio() {
-  const p = await store.getSetting('portfolio', null);
-  return p || structuredClone(SEED);
+let seeded = null;
+function ensureSeed() {
+  seeded ||= (async () => {
+    for (const [i, c] of SEED_CATEGORIES.entries()) {
+      await q('INSERT INTO portfolio_categories (slug, name, short_name, empty_text, display_order) VALUES (?, ?, ?, ?, ?) ON CONFLICT (slug) DO NOTHING', [c.slug, c.name, c.short_name, c.empty_text, i + 1]);
+    }
+    if (await store.getSetting('portfolio_cms_seeded', null)) return;
+    for (const [i, p] of SEED_PROJECTS.entries()) {
+      const r = clean(p);
+      await q(`INSERT INTO portfolio_projects (id, title, slug, category, subcategory, client, industry, location, year, short_description, description,
+        services, technologies, project_url, admin_url, challenge, solution, results, case_sections, featured, published, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?, ?, ?::jsonb, ?, TRUE, ?) ON CONFLICT (slug) DO NOTHING`,
+      [store.newId(), r.title, r.slug, r.category, r.subcategory, r.client, r.industry, r.location, r.year, r.short_description, r.description,
+        JSON.stringify(r.services), JSON.stringify(r.technologies), r.project_url, r.admin_url, r.challenge, r.solution, r.results, JSON.stringify(r.case_sections), r.featured, i + 1]);
+    }
+    await store.setSetting('portfolio_cms_seeded', new Date().toISOString());
+  })().catch((e) => { seeded = null; throw e; });
+  return seeded;
 }
-const save = (p) => store.setSetting('portfolio', p);
 
-/** Validates admin input into a project record (never trusts the browser). */
-export function sanitizeProject(b, existing = {}) {
-  const url = clean(b.url, 300);
-  if (url && !/^(https?:\/\/|\/)/i.test(url)) throw new Error('Website link must start with https:// (or / for a page on this site).');
+// ── Validation ───────────────────────────────────────────────────────────
+const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, n);
+export const slugify = (s) => txt(s, 100).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+const bad = (message, status = 400) => Object.assign(new Error(message), { status });
+const url = (v, label) => {
+  const u = txt(v, 600);
+  if (u && !/^(https?:\/\/[^\s<>"]+|\/[^\s<>"]*)$/i.test(u)) throw bad(`${label} must be a full link starting with https:// (or / for a page on this site).`);
+  return u;
+};
+const tags = (v, max = 12) => [...new Set((Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => txt(x, 40)).filter(Boolean))].slice(0, max);
+const RESERVED = new Set(['featured']);
+
+function clean(b) {
+  const title = txt(b.title, 120);
+  if (!title) throw bad('Project name is required.');
+  const slug = slugify(b.slug || title);
+  if (!slug) throw bad('Slug is required.');
+  if (RESERVED.has(slug)) throw bad(`“${slug}” is reserved — please choose another slug.`);
+  const short = txt(b.short_description, 300);
+  if (!short) throw bad('Short description is required.');
   return {
-    ...existing,
-    name: clean(b.name, 80) || (() => { throw new Error('Project name is required.'); })(),
-    industry: clean(b.industry, 60),
-    categories: list(b.categories, 6).filter((c) => CATEGORIES.includes(c)),
-    services: list(b.services, 8),
-    highlight: clean(b.highlight, 220),
-    url,
-    featured: Boolean(b.featured),
-    tagline: clean(b.tagline, 220),
-    journey: list(b.journey, 6, 40),
-    challenge: clean(b.challenge, 600),
-    solution: clean(b.solution, 600),
-    result: clean(b.result, 600),
+    title, slug, short_description: short,
+    category: txt(b.category, 60),
+    subcategory: txt(b.subcategory, 80), client: txt(b.client, 120), industry: txt(b.industry, 80), location: txt(b.location, 80), year: txt(b.year, 10),
+    description: txt(b.description, 8000), challenge: txt(b.challenge, 4000), solution: txt(b.solution, 4000), results: txt(b.results, 4000), testimonial: txt(b.testimonial, 1500),
+    services: tags(b.services), technologies: tags(b.technologies),
+    cover_image: url(b.cover_image, 'Cover image'), logo: url(b.logo, 'Logo'),
+    project_url: url(b.project_url, 'Project URL'), admin_url: url(b.admin_url, 'Admin URL'),
+    case_sections: (Array.isArray(b.case_sections) ? b.case_sections : []).slice(0, 15)
+      .map((s) => ({ heading: txt(s?.heading, 120), body: txt(s?.body, 4000), image: url(s?.image, 'Section image') }))
+      .filter((s) => s.heading || s.body || s.image),
+    gallery: (Array.isArray(b.gallery) ? b.gallery : []).slice(0, 40)
+      .map((g) => ({ url: url(typeof g === 'string' ? g : g?.url, 'Gallery image'), alt: txt(g?.alt, 200) }))
+      .filter((g) => g.url),
+    featured: Boolean(b.featured), published: b.published === undefined ? true : Boolean(b.published),
+    display_order: Number.isFinite(+b.display_order) && b.display_order !== '' && b.display_order != null ? Math.max(0, Math.min(100000, Math.round(+b.display_order))) : null,
   };
 }
 
-export async function upsertProject(id, body) {
-  const p = await getPortfolio();
-  const i = id ? p.projects.findIndex((x) => x.id === id) : -1;
-  if (id && i < 0) throw Object.assign(new Error('Project not found.'), { status: 404 });
-  const rec = sanitizeProject(body, i >= 0 ? p.projects[i] : {});
-  if (i >= 0) p.projects[i] = rec;
-  else {
-    let newId = slug(rec.name);
-    while (p.projects.some((x) => x.id === newId)) newId += '-2';
-    rec.id = newId;
-    p.projects.push(rec);
-  }
-  if (rec.featured) for (const x of p.projects) if (x !== rec) x.featured = false; // one featured project
-  await save(p);
-  return rec;
+// ── Reads ────────────────────────────────────────────────────────────────
+const iso = (d) => (d instanceof Date ? d.toISOString() : d ? String(d) : null);
+const row = (r) => r && ({
+  ...r, services: r.services || [], technologies: r.technologies || [], case_sections: r.case_sections || [],
+  featured: Boolean(r.featured), published: Boolean(r.published), display_order: Number(r.display_order), created_at: iso(r.created_at), updated_at: iso(r.updated_at),
+});
+
+export async function listCategories() {
+  await ensureSeed();
+  return (await q(`SELECT c.*, COUNT(p.id)::int AS total, COUNT(p.id) FILTER (WHERE p.published)::int AS published
+    FROM portfolio_categories c LEFT JOIN portfolio_projects p ON p.category = c.slug GROUP BY c.slug ORDER BY c.display_order, c.name`))
+    .map((c) => ({ ...c, display_order: Number(c.display_order), total: Number(c.total), published: Number(c.published) }));
 }
 
+export async function listProjects({ publishedOnly = true } = {}) {
+  await ensureSeed();
+  return (await q(`SELECT * FROM portfolio_projects ${publishedOnly ? 'WHERE published' : ''} ORDER BY display_order, created_at`)).map(row);
+}
+
+async function withGallery(p) {
+  if (!p) return null;
+  p.gallery = (await q('SELECT image_url AS url, alt_text AS alt FROM portfolio_project_images WHERE project_id = ? ORDER BY display_order, created_at', [p.id]))
+    .map((g) => ({ url: g.url, alt: g.alt || '' }));
+  return p;
+}
+export async function getProject(id) { await ensureSeed(); return withGallery(row(await one('SELECT * FROM portfolio_projects WHERE id = ?', [id]))); }
+export async function getBySlug(slug) { await ensureSeed(); return withGallery(row(await one('SELECT * FROM portfolio_projects WHERE slug = ?', [slug]))); }
+
+// ── Writes (admin only — routes check the session first) ─────────────────
+const COLS = ['title', 'slug', 'category', 'subcategory', 'client', 'industry', 'location', 'year', 'short_description', 'description',
+  'services', 'technologies', 'cover_image', 'logo', 'project_url', 'admin_url', 'challenge', 'solution', 'results', 'testimonial',
+  'case_sections', 'featured', 'published'];
+const JSONCOLS = new Set(['services', 'technologies', 'case_sections']);
+const val = (r, c) => (JSONCOLS.has(c) ? JSON.stringify(r[c]) : r[c] === '' ? null : r[c]);
+const ph = (c, i) => `$${i}${JSONCOLS.has(c) ? '::jsonb' : ''}`;
+
+export async function saveProject(id, body) {
+  await ensureSeed();
+  const r = clean(body);
+  if (!(await one('SELECT slug FROM portfolio_categories WHERE slug = ?', [r.category]))) throw bad('Please choose a category.');
+  const clash = await one('SELECT id FROM portfolio_projects WHERE slug = ?', [r.slug]);
+  if (clash && clash.id !== id) throw bad(`Another project already uses the URL /portfolio/${r.slug}. Change the slug.`, 409);
+  return tx(async (c) => {
+    if (id) {
+      const exists = await c.query('SELECT id FROM portfolio_projects WHERE id = $1', [id]);
+      if (!exists.rows.length) throw bad('Project not found.', 404);
+      const sets = COLS.map((col, i) => `${col} = ${ph(col, i + 1)}`).join(', ');
+      const params = COLS.map((col) => val(r, col));
+      let extra = '';
+      if (r.display_order != null) { params.push(r.display_order); extra = `, display_order = $${params.length}`; }
+      params.push(id);
+      await c.query(`UPDATE portfolio_projects SET ${sets}${extra}, updated_at = NOW() WHERE id = $${params.length}`, params);
+    } else {
+      id = store.newId();
+      const order = r.display_order ?? (await c.query('SELECT COALESCE(MAX(display_order), 0) + 1 AS n FROM portfolio_projects')).rows[0].n;
+      const cols = ['id', ...COLS, 'display_order'];
+      await c.query(`INSERT INTO portfolio_projects (${cols.join(', ')}) VALUES (${cols.map((col, i) => ph(col, i + 1)).join(', ')})`,
+        [id, ...COLS.map((col) => val(r, col)), order]);
+    }
+    await c.query('DELETE FROM portfolio_project_images WHERE project_id = $1', [id]);
+    for (const [i, g] of r.gallery.entries()) {
+      await c.query('INSERT INTO portfolio_project_images (id, project_id, image_url, alt_text, display_order) VALUES ($1, $2, $3, $4, $5)', [store.newId(), id, g.url, g.alt || null, i + 1]);
+    }
+    return id;
+  }).then(getProject);
+}
+
+export async function setFlags(id, { featured, published }) {
+  await ensureSeed();
+  const sets = []; const params = [];
+  if (featured !== undefined) { params.push(Boolean(featured)); sets.push(`featured = ?`); }
+  if (published !== undefined) { params.push(Boolean(published)); sets.push(`published = ?`); }
+  if (!sets.length) return getProject(id);
+  params.push(id);
+  const r = await q(`UPDATE portfolio_projects SET ${sets.join(', ')}, updated_at = NOW() WHERE id = ? RETURNING id`, params);
+  if (!r.length) throw bad('Project not found.', 404);
+  return getProject(id);
+}
+
+export async function duplicateProject(id) {
+  const p = await getProject(id);
+  if (!p) throw bad('Project not found.', 404);
+  let slug = `${p.slug}-copy`;
+  for (let n = 2; await one('SELECT 1 FROM portfolio_projects WHERE slug = ?', [slug]); n++) slug = `${p.slug}-copy-${n}`;
+  return saveProject(null, { ...p, title: `${p.title} (copy)`, slug, published: false, featured: false, display_order: null });
+}
+
+/** Removes the project and its gallery references. The image files stay in
+ *  Supabase Storage (they may be used elsewhere) — delete them there if needed. */
 export async function deleteProject(id) {
-  const p = await getPortfolio();
-  p.projects = p.projects.filter((x) => x.id !== id);
-  await save(p);
-  for (const k of KINDS) await store.setSetting(`pimg:${id}:${k}`, null);
+  await ensureSeed();
+  const r = await q('DELETE FROM portfolio_projects WHERE id = ? RETURNING id', [id]);
+  if (!r.length) throw bad('Project not found.', 404);
 }
 
 export async function reorder(ids) {
-  const p = await getPortfolio();
-  const pos = new Map(ids.map((id, i) => [id, i]));
-  p.projects.sort((a, b) => (pos.get(a.id) ?? 999) - (pos.get(b.id) ?? 999));
-  await save(p);
+  await ensureSeed();
+  const list = [...new Set((Array.isArray(ids) ? ids : []).filter((x) => typeof x === 'string'))].slice(0, 1000);
+  await tx(async (c) => { for (const [i, pid] of list.entries()) await c.query('UPDATE portfolio_projects SET display_order = $1 WHERE id = $2', [i + 1, pid]); });
 }
 
-export async function saveStats(stats) {
-  const p = await getPortfolio();
-  p.stats = (Array.isArray(stats) ? stats : []).slice(0, 4).map((s) => ({ value: clean(s.value, 12), label: clean(s.label, 40) })).filter((s) => s.value && s.label);
-  await save(p);
-}
-
-export async function setImage(id, kind, dataUrl) {
-  if (!KINDS.includes(kind)) throw new Error('Unknown image type.');
-  const p = await getPortfolio();
-  const proj = p.projects.find((x) => x.id === id);
-  if (!proj) throw Object.assign(new Error('Project not found.'), { status: 404 });
-  if (dataUrl === null) {
-    await store.setSetting(`pimg:${id}:${kind}`, null);
-    delete proj[`${kind}Image`];
-  } else {
-    const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
-    if (!m) throw new Error('Upload a PNG, JPG or WebP image.');
-    if (m[3].length > 1_400_000) throw new Error('Image is too large — please use one under 1 MB.');
-    await store.setSetting(`pimg:${id}:${kind}`, { mime: m[1], data: m[3] });
-    proj[`${kind}Image`] = Date.now(); // version → cache-busting URL
+// Categories
+export async function saveCategory(slug, b) {
+  await ensureSeed();
+  const name = txt(b.name, 60);
+  if (!name) throw bad('Category name is required.');
+  const fields = [name, txt(b.short_name, 40) || null, txt(b.empty_text, 160) || null];
+  if (slug) {
+    const r = await q('UPDATE portfolio_categories SET name = ?, short_name = ?, empty_text = ? WHERE slug = ? RETURNING slug', [...fields, slug]);
+    if (!r.length) throw bad('Category not found.', 404);
+    return slug;
   }
-  await save(p);
+  const newSlug = slugify(b.slug || name);
+  if (!newSlug) throw bad('Category name must contain letters or numbers.');
+  if (await one('SELECT 1 FROM portfolio_categories WHERE slug = ?', [newSlug])) throw bad('That category already exists.', 409);
+  const n = (await one('SELECT COALESCE(MAX(display_order), 0) + 1 AS n FROM portfolio_categories')).n;
+  await q('INSERT INTO portfolio_categories (slug, name, short_name, empty_text, display_order) VALUES (?, ?, ?, ?, ?)', [newSlug, ...fields, n]);
+  return newSlug;
+}
+export async function deleteCategory(slug) {
+  await ensureSeed();
+  const n = Number((await one('SELECT COUNT(*) AS n FROM portfolio_projects WHERE category = ?', [slug])).n);
+  if (n) throw bad(`Move or delete the ${n} project${n > 1 ? 's' : ''} in this category first.`, 409);
+  await q('DELETE FROM portfolio_categories WHERE slug = ?', [slug]);
+}
+export async function reorderCategories(slugs) {
+  await ensureSeed();
+  await tx(async (c) => { for (const [i, s] of (Array.isArray(slugs) ? slugs : []).entries()) await c.query('UPDATE portfolio_categories SET display_order = $1 WHERE slug = $2', [i + 1, String(s)]); });
 }
 
-export const getImage = (id, kind) => (KINDS.includes(kind) ? store.getSetting(`pimg:${id}:${kind}`, null) : null);
+// ── Matching uploaded images to projects by file name ────────────────────
+const FOLDER_FOR = { websites: 'websites', seo: 'seo', 'social-media': 'smm', 'ads-campaigns': 'paid ads', 'ui-ux': 'ui', 'featured-projects': 'featured' };
+const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+const tokens = (s) => norm(s).split(' ').filter((t) => t.length >= 3 && !['the', 'and', 'for', 'website', 'media', 'system', 'list'].includes(t));
+/** Best file for a project: name contains the project/client words; same-category folder wins ties. */
+export function matchScore(project, file) {
+  const name = norm(file.name.replace(/\.[a-z0-9]+$/i, ''));
+  const words = [...new Set([...tokens(project.title), ...tokens(project.client)])];
+  const hits = words.filter((w) => name.includes(w)).length;
+  if (!hits) return 0;
+  const folderHit = norm(file.folder).includes(FOLDER_FOR[project.category] || '\u0000') ? 1 : 0;
+  return hits * 10 + folderHit * 5;
+}
+/** Sets a cover for every project that has none, from the best-matching file. */
+export async function autoMatchCovers(files) {
+  const projects = await listProjects({ publishedOnly: false });
+  const done = [];
+  for (const p of projects.filter((x) => !x.cover_image)) {
+    const best = files.map((f) => [matchScore(p, f), f]).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0])[0];
+    if (!best) continue;
+    await q('UPDATE portfolio_projects SET cover_image = ?, updated_at = NOW() WHERE id = ?', [best[1].url, p.id]);
+    done.push({ project: p.title, slug: p.slug, file: best[1].path });
+  }
+  return done;
+}
 
-// ── Server-side HTML for /portfolio ──────────────────────────────────────
+// ── Public HTML ──────────────────────────────────────────────────────────
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const imgUrl = (p, kind = 'main') => (p[`${kind}Image`] ? `/portfolio-img/${encodeURIComponent(p.id)}/${kind}?v=${p[`${kind}Image`]}` : null);
-const hue = (s) => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const initials = (s) => String(s).replace(/[^A-Za-z0-9 ]/g, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'C2';
+const catName = (cats, slug) => cats.find((c) => c.slug === slug)?.name || '';
 
-function shot(p, cls = '') {
-  const src = imgUrl(p);
-  if (src) return `<img class="pf-img ${cls}" src="${src}" alt="${esc(p.name)} — ${esc(p.industry)} project by Click2Client Media" loading="lazy" decoding="async">`;
-  const h = hue(p.name);
-  // Branded placeholder mockup (shown until a real screenshot is uploaded).
-  return `<div class="pf-img pf-ph ${cls}" style="--h:${h}" role="img" aria-label="${esc(p.name)} project">
-    <div class="ph-bar"><i></i><i></i><i></i></div>
-    <div class="ph-body"><span class="ph-mark">${esc(p.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase())}</span><b>${esc(p.name)}</b><small>${esc(p.industry)}</small>
-    <div class="ph-lines"><span></span><span></span><span></span></div></div></div>`;
+function media(p, { eager = false, cls = '' } = {}) {
+  if (p.cover_image) return `<img class="wk-img ${cls}" src="${esc(p.cover_image)}" alt="${esc(p.title)}${p.industry ? ` — ${esc(p.industry)}` : ''} project by Click2Client Media" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
+  return `<div class="wk-img wk-ph ${cls}" style="--h:${hue(p.client || p.title)}" role="img" aria-label="${esc(p.title)}"><span>${esc(initials(p.client || p.title))}</span></div>`;
+}
+
+export function cardHtml(p, cats, { big = false } = {}) {
+  const feature = big || p.category === 'featured-projects';
+  return `<article class="wk-card${feature ? ' wk-card--feature' : ''}" data-cat="${esc(p.category)}">
+    <div class="wk-media">${media(p)}</div>
+    <div class="wk-body">
+      <p class="wk-kicker"><span>${esc(p.category === 'featured-projects' && p.subcategory ? p.subcategory : catName(cats, p.category))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
+      <h3><a href="/portfolio/${esc(p.slug)}">${esc(p.title)}</a></h3>
+      <p class="wk-desc">${esc(p.short_description)}</p>
+      ${p.services.length ? `<ul class="wk-tags">${p.services.slice(0, 4).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+      <span class="wk-more" aria-hidden="true">View Project <i>→</i></span>
+    </div>
+  </article>`;
 }
 
 export async function portfolioVars() {
-  const { projects, stats } = await getPortfolio().catch(() => structuredClone(SEED));
-  const featured = projects.find((p) => p.featured) || null;
-  const cards = projects.map((p, i) => `
-    <article class="pf-card reveal" data-cats="${esc(p.categories.join('|'))}" data-id="${esc(p.id)}" style="--d:${(i % 4) * 70}ms">
-      <button class="pf-media" type="button" data-open="${esc(p.id)}" aria-label="View case study: ${esc(p.name)}">
-        ${shot(p)}
-        <span class="pf-overlay"><span class="pf-ov-ind">${esc(p.industry)}</span><span class="pf-ov-cta">View Case Study →</span></span>
-      </button>
-      <div class="pf-info">
-        <div class="pf-row"><h3>${esc(p.name)}</h3><span class="pf-industry">${esc(p.industry)}</span></div>
-        ${p.highlight ? `<p>${esc(p.highlight)}</p>` : ''}
-        <ul class="pf-tags">${p.services.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>
-        <div class="pf-actions"><button class="btn outline sm" type="button" data-open="${esc(p.id)}">View Project →</button>${p.url ? `<a class="pf-visit" href="${esc(p.url)}" ${p.url.startsWith('/') ? '' : 'target="_blank" rel="noopener"'}>Visit site ↗</a>` : ''}</div>
-      </div>
-    </article>`).join('');
-
-  const feat = featured ? `
-  <section class="section pf-featured" aria-labelledby="feat-h">
-    <div class="wrap">
-      <div class="sec-head reveal"><span class="eyebrow">Featured project</span><h2 id="feat-h">${esc(featured.name)}</h2>${featured.tagline ? `<p class="pf-tagline">“${esc(featured.tagline)}”</p>` : ''}</div>
-      <div class="pf-feat-grid">
-        <div class="pf-device reveal"><div class="pf-device-bar"><i></i><i></i><i></i><span>${esc(featured.url && !featured.url.startsWith('/') ? featured.url.replace(/^https?:\/\//, '') : featured.name.toLowerCase().replace(/\s+/g, '') + '.com')}</span></div>${shot(featured, 'pf-device-img')}</div>
-        <div class="pf-feat-copy reveal">
-          ${featured.journey.length ? `<ol class="pf-journey">${featured.journey.map((j) => `<li>${esc(j)}</li>`).join('')}</ol>` : ''}
-          ${featured.challenge ? `<div class="pf-csr"><h3>Challenge</h3><p>${esc(featured.challenge)}</p></div>` : ''}
-          ${featured.solution ? `<div class="pf-csr"><h3>Solution</h3><p>${esc(featured.solution)}</p></div>` : ''}
-          ${featured.result ? `<div class="pf-csr"><h3>Result</h3><p>${esc(featured.result)}</p></div>` : ''}
-          <button class="btn primary lg magnetic" type="button" data-open="${esc(featured.id)}">Explore Case Study →</button>
-        </div>
-      </div>
-    </div>
-  </section>` : '';
-
-  const before = featured && featured.beforeImage && featured.mainImage ? `
-  <section class="section tint" aria-labelledby="ba-h">
-    <div class="wrap">
-      <div class="sec-head center reveal"><span class="eyebrow">Before → After</span><h2 id="ba-h">We don't just redesign websites.</h2><p>We redesign the way businesses are experienced online.</p></div>
-      <div class="ba reveal" style="--pos:50%">
-        <img src="${imgUrl(featured, 'main')}" alt="${esc(featured.name)} — after: the new website" loading="lazy">
-        <div class="ba-before"><img src="${imgUrl(featured, 'before')}" alt="${esc(featured.name)} — before: the old website" loading="lazy"></div>
-        <span class="ba-tag ba-tag-b">Before</span><span class="ba-tag ba-tag-a">After</span>
-        <span class="ba-handle" aria-hidden="true"></span>
-        <input class="ba-range" type="range" min="0" max="100" value="50" aria-label="Drag to compare before and after">
-      </div>
-    </div>
-  </section>` : '';
-
-  const statsHtml = stats.length ? `
-  <section class="section pf-stats-sec" aria-label="Results">
-    <div class="wrap"><ul class="pf-stats">${stats.map((s) => {
-      const m = /^(\D*)(\d+)(.*)$/.exec(s.value);
-      return `<li class="reveal"><b${m ? ` data-count="${m[2]}" data-pre="${esc(m[1])}" data-suf="${esc(m[3])}"` : ''}>${esc(s.value)}</b><span>${esc(s.label)}</span></li>`;
-    }).join('')}</ul></div>
-  </section>` : '';
-
-  const filters = ['All', ...CATEGORIES].map((c, i) => `<button type="button" class="pf-chip${i ? '' : ' on'}" data-filter="${esc(c)}" aria-pressed="${i ? 'false' : 'true'}">${esc(c)}</button>`).join('');
-  const data = JSON.stringify(projects.map((p) => ({ ...p, img: imgUrl(p) }))).replace(/</g, '\\u003c');
-  return { 'pf.cards': cards, 'pf.featured': feat, 'pf.before': before, 'pf.stats': statsHtml, 'pf.filters': filters, 'pf.data': data, 'pf.count': String(projects.length) };
+  const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
+  const filters = [`<button type="button" class="wk-chip on" data-filter="all" aria-pressed="true">All <span>${projects.length}</span></button>`,
+    ...cats.map((c) => `<button type="button" class="wk-chip" data-filter="${esc(c.slug)}" data-empty="${esc(c.empty_text || 'No projects here yet.')}" aria-pressed="false">${esc(c.short_name || c.name)} <span>${c.published}</span></button>`)].join('');
+  const featured = projects.filter((p) => p.featured);
+  return {
+    'wk.filters': filters,
+    'wk.cards': projects.map((p) => cardHtml(p, cats)).join('') || '',
+    'wk.count': String(projects.length),
+    'wk.featured': featured.length ? `<section class="section wk-feature-band" aria-labelledby="wkf-h"><div class="wrap">
+      <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Beyond client work</span><h2 id="wkf-h">Featured Projects</h2></div><p>Selected experiments, products and digital systems built beyond traditional client work. <a href="/portfolio/featured">See all →</a></p></div>
+      <div class="wk-grid">${featured.slice(0, 3).map((p) => cardHtml(p, cats, { big: true })).join('')}</div></div></section>` : '',
+  };
 }
+
+export async function featuredVars() {
+  const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
+  const featured = projects.filter((p) => p.featured);
+  return { 'wk.cards': featured.map((p) => cardHtml(p, cats, { big: true })).join('') || '<p class="wk-empty">No projects here yet.</p>' };
+}
+
+/** Compact "Selected Work" block for the home page: featured first, 3–6 projects. */
+export async function homeWorkHtml() {
+  try {
+    const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
+    const pick = [...projects.filter((p) => p.featured), ...projects.filter((p) => !p.featured)].slice(0, 6);
+    if (pick.length < 3) return '';
+    return `<section class="section" aria-labelledby="sw-h"><div class="wrap">
+      <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Portfolio</span><h2 id="sw-h">Selected Work</h2></div><p>A look at the digital experiences, marketing systems and products we've built.</p></div>
+      <div class="wk-grid">${pick.map((p) => cardHtml(p, cats)).join('')}</div>
+      <p class="wk-all"><a class="btn outline lg" href="/portfolio">View all projects →</a></p></div></section>`;
+  } catch (e) {
+    console.error('[portfolio] home section skipped —', e.message);
+    return '';
+  }
+}
+
+export async function projectVars(p, base) {
+  const [cats, all] = await Promise.all([listCategories(), listProjects()]);
+  const cat = catName(cats, p.category);
+  const facts = [['Client', p.client], ['Industry', p.industry], ['Location', p.location], ['Year', p.year], ['Type', p.subcategory && p.subcategory !== cat ? p.subcategory : '']].filter(([, v]) => v);
+  const block = (h, body) => (body ? `<section class="wk-block reveal"><h2>${esc(h)}</h2><div class="bl-prose">${formatBody(body)}</div></section>` : '');
+  const ext = (u) => !u.startsWith('/');
+  const related = all.filter((x) => x.id !== p.id && (x.category === p.category || x.featured)).slice(0, 3);
+  const img = p.cover_image ? (p.cover_image.startsWith('/') ? base + p.cover_image : p.cover_image) : `${base}/img/click2client-media-logo.webp`;
+  return {
+    'wk.title': esc(p.title),
+    'wk.cat': esc(p.category === 'featured-projects' && p.subcategory ? p.subcategory : cat),
+    'wk.catSlug': esc(p.category),
+    'wk.short': esc(p.short_description),
+    'wk.logo': p.logo ? `<img class="wk-logo" src="${esc(p.logo)}" alt="${esc(p.client || p.title)} logo" loading="lazy">` : '',
+    'wk.links': [p.project_url && `<a class="btn primary" href="${esc(p.project_url)}"${ext(p.project_url) ? ' target="_blank" rel="noopener"' : ''}>Visit website ↗</a>`,
+      p.admin_url && `<a class="btn outline" href="${esc(p.admin_url)}" target="_blank" rel="noopener nofollow">View admin panel ↗</a>`].filter(Boolean).join(''),
+    'wk.facts': facts.length || p.services.length || p.technologies.length ? `<dl class="wk-facts">${facts.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}
+      ${p.services.length ? `<div class="wide"><dt>Services</dt><dd><ul class="wk-tags">${p.services.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></dd></div>` : ''}
+      ${p.technologies.length ? `<div class="wide"><dt>Technologies</dt><dd><ul class="wk-tags">${p.technologies.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></dd></div>` : ''}</dl>` : '',
+    'wk.cover': p.cover_image ? `<figure class="wk-cover reveal"><img src="${esc(p.cover_image)}" alt="${esc(p.title)} — ${esc(cat)} project" fetchpriority="high"></figure>` : '',
+    'wk.body': [
+      block('Overview', p.description), block('The challenge', p.challenge), block('The solution', p.solution),
+      ...p.case_sections.map((s) => `<section class="wk-block reveal">${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}${s.body ? `<div class="bl-prose">${formatBody(s.body)}</div>` : ''}${s.image ? `<figure class="wk-shot"><img src="${esc(s.image)}" alt="${esc(s.heading || p.title)}" loading="lazy"></figure>` : ''}</section>`),
+      block('Project outcome', p.results),
+      p.testimonial ? `<blockquote class="wk-quote reveal">“${esc(p.testimonial)}”${p.client ? `<cite>— ${esc(p.client)}</cite>` : ''}</blockquote>` : '',
+    ].join(''),
+    'wk.gallery': p.gallery.length ? `<section class="wk-gallery reveal" aria-label="Project gallery"><h2>Gallery</h2><div class="wk-gal">${p.gallery.map((g) => `<a href="${esc(g.url)}" target="_blank" rel="noopener"><img src="${esc(g.url)}" alt="${esc(g.alt || p.title)}" loading="lazy"></a>`).join('')}</div></section>` : '',
+    'wk.related': related.length ? `<section class="section tint" aria-labelledby="rel-h"><div class="wrap"><div class="split-head reveal"><div class="sec-head"><span class="eyebrow">More work</span><h2 id="rel-h">Related projects</h2></div><p><a href="/portfolio">View all projects →</a></p></div><div class="wk-grid">${related.map((x) => cardHtml(x, cats)).join('')}</div></div></section>` : '',
+    'ogImage': esc(img),
+    'ogType': 'article',
+    'wk.seoTitle': `${p.title} | ${p.subcategory || cat} Case Study | Click2Client Media`,
+  };
+}
+

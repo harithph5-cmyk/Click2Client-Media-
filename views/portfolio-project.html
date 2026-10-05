@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<!--#include head-->
+</head>
+<body>
+<!--#include header-->
+<main id="main">
+
+<article class="wk-case">
+  <header class="wrap wk-case-head">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/portfolio">Portfolio</a> / {{wk.title}}</nav>
+    <div class="wk-case-title">
+      {{wk.logo}}
+      <div>
+        <a class="eyebrow wk-cat-link" href="/portfolio#{{wk.catSlug}}">{{wk.cat}}</a>
+        <h1>{{wk.title}}</h1>
+      </div>
+    </div>
+    <p class="lede">{{wk.short}}</p>
+    <div class="row wrap-row wk-case-links">{{wk.links}}</div>
+  </header>
+
+  <div class="wrap">{{wk.cover}}</div>
+
+  <div class="wrap wk-case-grid">
+    <aside class="wk-case-side">{{wk.facts}}</aside>
+    <div class="wk-case-main">{{wk.body}}{{wk.gallery}}</div>
+  </div>
+</article>
+
+{{wk.related}}
+
+<section class="section tight">
+  <div class="wrap">
+    <div class="cta-final reveal">
+      <div><span class="eyebrow">Let's build yours</span><h2>Your business could be our next case study.</h2></div>
+      <div class="row wrap-row" style="justify-content:flex-end"><a class="btn white lg" href="/enquire">Start a Project →</a><a class="btn glass lg" href="{{whatsappHref}}" target="_blank" rel="noopener">Talk on WhatsApp →</a></div>
+    </div>
+  </div>
+</section>
+</main>
+<!--#include footer-->
+</body>
+</html>

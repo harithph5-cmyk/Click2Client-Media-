@@ -69,6 +69,36 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip, at)`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // Portfolio CMS. Images live in Supabase Storage; these tables only hold URLs.
+  `CREATE TABLE IF NOT EXISTS portfolio_categories (
+    slug TEXT PRIMARY KEY, name TEXT NOT NULL, short_name TEXT, empty_text TEXT, display_order INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS portfolio_projects (
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, category TEXT NOT NULL, subcategory TEXT,
+    client TEXT, industry TEXT, location TEXT, year TEXT, short_description TEXT NOT NULL, description TEXT,
+    services JSONB NOT NULL DEFAULT '[]', technologies JSONB NOT NULL DEFAULT '[]', cover_image TEXT, logo TEXT,
+    project_url TEXT, admin_url TEXT, challenge TEXT, solution TEXT, results TEXT, testimonial TEXT,
+    case_sections JSONB NOT NULL DEFAULT '[]', featured BOOLEAN NOT NULL DEFAULT FALSE, published BOOLEAN NOT NULL DEFAULT TRUE,
+    display_order INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE INDEX IF NOT EXISTS idx_pp_public ON portfolio_projects(published, display_order)`,
+  `CREATE TABLE IF NOT EXISTS portfolio_project_images (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES portfolio_projects(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL, alt_text TEXT, display_order INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE INDEX IF NOT EXISTS idx_ppi_project ON portfolio_project_images(project_id, display_order)`,
+  // Row Level Security: the site's server connects as the table owner (which
+  // bypasses RLS) and does every write itself after checking the admin
+  // session. If this database is ever exposed through Supabase's public API,
+  // anonymous visitors may only read published projects and can write nothing.
+  `ALTER TABLE portfolio_projects ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE portfolio_project_images ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE portfolio_categories ENABLE ROW LEVEL SECURITY`,
+  `DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'pp_public_read') THEN
+      CREATE POLICY pp_public_read ON portfolio_projects FOR SELECT TO anon, authenticated USING (published);
+      CREATE POLICY ppi_public_read ON portfolio_project_images FOR SELECT TO anon, authenticated
+        USING (EXISTS (SELECT 1 FROM portfolio_projects p WHERE p.id = project_id AND p.published));
+      CREATE POLICY pc_public_read ON portfolio_categories FOR SELECT TO anon, authenticated USING (TRUE);
+    END IF;
+  END $$`,
 ];
 
 // ── Connection pool (one per serverless instance) ────────────────────────
@@ -124,6 +154,15 @@ const q = async (sql, params = []) => {
   return (await getPool().query(text, values)).rows;
 };
 const one = async (sql, params) => (await q(sql, params))[0] || null;
+export { q as query, one as queryOne };
+/** Runs fn(client) in a transaction; client.query uses $1-style placeholders. */
+export async function tx(fn) {
+  await ensureReady();
+  const c = await getPool().connect();
+  try { await c.query('BEGIN'); const r = await fn(c); await c.query('COMMIT'); return r; }
+  catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
+  finally { c.release(); }
+}
 const num = (v) => (v == null ? null : Number(v));
 
 export const newId = (bytes = 12) => crypto.randomBytes(bytes).toString('base64url');

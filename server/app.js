@@ -18,9 +18,10 @@ import * as store from './store/db.js';
 import { TIERS, publicTiers, shapeAudit, rateLimited } from './commerce/plans.js';
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
-import { renderPage, renderPost, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
+import { renderPage, renderPost, renderProject, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
 import * as portfolio from './portfolio.js';
+import * as media from './media.js';
 import * as blog from './blog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -318,16 +319,24 @@ admin.put('/settings/qr', h(async (req, res) => {
 }));
 admin.delete('/settings/qr', h(async (req, res) => { await store.setSetting('payment_qr', null); res.json({ ok: true }); }));
 
-// Portfolio management
+// Portfolio CMS (admin only — every route sits behind requireAdmin + CSRF)
 const pfErr = (res, e) => bad(res, 'invalid', e.message, e.status || 400);
-admin.get('/portfolio', h(async (req, res) => res.json({ ...(await portfolio.getPortfolio()), categories: portfolio.CATEGORIES })));
-admin.post('/portfolio', h(async (req, res) => { try { res.status(201).json(await portfolio.upsertProject(null, req.body || {})); } catch (e) { pfErr(res, e); } }));
-admin.put('/portfolio/stats', h(async (req, res) => { await portfolio.saveStats(req.body?.stats); res.json({ ok: true }); }));
-admin.put('/portfolio/order', h(async (req, res) => { await portfolio.reorder(Array.isArray(req.body?.ids) ? req.body.ids : []); res.json({ ok: true }); }));
-admin.put('/portfolio/:id', h(async (req, res) => { try { res.json(await portfolio.upsertProject(req.params.id, req.body || {})); } catch (e) { pfErr(res, e); } }));
-admin.delete('/portfolio/:id', h(async (req, res) => { await portfolio.deleteProject(req.params.id); res.json({ ok: true }); }));
-admin.put('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
-admin.delete('/portfolio/:id/image/:kind', h(async (req, res) => { try { await portfolio.setImage(req.params.id, req.params.kind, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
+const pf = (fn) => h(async (req, res) => { try { await fn(req, res); } catch (e) { if (!e.status) throw e; pfErr(res, e); } });
+admin.get('/portfolio', pf(async (req, res) => res.json({ projects: await portfolio.listProjects({ publishedOnly: false }), categories: await portfolio.listCategories(), media: media.mediaStatus() })));
+admin.get('/portfolio/projects/:id', pf(async (req, res) => { const p = await portfolio.getProject(req.params.id); if (!p) return bad(res, 'not_found', 'Project not found.', 404); res.json(p); }));
+admin.post('/portfolio/projects', pf(async (req, res) => res.status(201).json(await portfolio.saveProject(null, req.body || {}))));
+admin.put('/portfolio/projects/:id', pf(async (req, res) => res.json(await portfolio.saveProject(req.params.id, req.body || {}))));
+admin.patch('/portfolio/projects/:id', pf(async (req, res) => res.json(await portfolio.setFlags(req.params.id, req.body || {}))));
+admin.post('/portfolio/projects/:id/duplicate', pf(async (req, res) => res.status(201).json(await portfolio.duplicateProject(req.params.id))));
+admin.delete('/portfolio/projects/:id', pf(async (req, res) => { await portfolio.deleteProject(req.params.id); res.json({ ok: true }); }));
+admin.put('/portfolio/order', pf(async (req, res) => { await portfolio.reorder(req.body?.ids); res.json({ ok: true }); }));
+admin.post('/portfolio/categories', pf(async (req, res) => res.status(201).json({ slug: await portfolio.saveCategory(null, req.body || {}) })));
+admin.put('/portfolio/categories/order', pf(async (req, res) => { await portfolio.reorderCategories(req.body?.slugs); res.json({ ok: true }); }));
+admin.put('/portfolio/categories/:slug', pf(async (req, res) => res.json({ slug: await portfolio.saveCategory(req.params.slug, req.body || {}) })));
+admin.delete('/portfolio/categories/:slug', pf(async (req, res) => { await portfolio.deleteCategory(req.params.slug); res.json({ ok: true }); }));
+admin.get('/portfolio/media', pf(async (req, res) => res.json({ ...media.mediaStatus(), files: await media.listMedia({ fresh: req.query.fresh === '1' }) })));
+admin.post('/portfolio/media', pf(async (req, res) => res.status(201).json(await media.uploadMedia(req.body?.folder, req.body?.filename, req.body?.dataUrl))));
+admin.post('/portfolio/media/auto-match', pf(async (req, res) => res.json({ matched: await portfolio.autoMatchCovers(await media.listMedia({ fresh: true })) })));
 
 // Blog management
 admin.get('/blog', h(async (req, res) => res.json(await blog.getBlog())));
@@ -405,11 +414,15 @@ w.c2cTrack=function(n,p){p=p||{};try{w.dataLayer.push(Object.assign({event:n},p)
 d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target:null;if(!t)return;if(t.closest('a[href*="wa.me/"]'))w.c2cTrack('whatsapp_click',{link_location:location.pathname});else if(t.closest('a[href^="tel:"]'))w.c2cTrack('phone_click',{link_location:location.pathname});},true);})();`);
 }));
 
-// Portfolio images live in the database; URLs carry a version, so cache them hard.
-app.get('/portfolio-img/:id/:kind', h(async (req, res) => {
-  const img = await portfolio.getImage(req.params.id, req.params.kind);
-  if (!img) return res.status(404).end();
-  res.set({ 'content-type': img.mime, 'cache-control': 'public, max-age=31536000, immutable' }).send(Buffer.from(img.data, 'base64'));
+// Portfolio project pages (published; admins can preview drafts)
+app.get('/portfolio/:slug', h(async (req, res, next) => {
+  const p = await portfolio.getBySlug(req.params.slug);
+  if (!p) return next();
+  if (!p.published) {
+    if (!(await currentSession(req).catch(() => null))) return next();
+    res.set('x-robots-tag', 'noindex, nofollow');
+  }
+  res.type('html').send(await renderProject(req, p));
 }));
 
 app.get('/blog/:slug', h(async (req, res, next) => {

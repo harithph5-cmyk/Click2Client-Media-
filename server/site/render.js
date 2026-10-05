@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
-import { portfolioVars } from '../portfolio.js';
+import { portfolioVars, featuredVars, homeWorkHtml, projectVars, listProjects } from '../portfolio.js';
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,8 @@ export const siteUrl = (req) => config.publicUrl || `${req.protocol}://${req.get
 export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
-  portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO & Digital Campaigns | Click2Client Media', description: 'Explore websites, digital campaigns, SEO projects and creative work built by Click2Client Media for businesses in automotive, education, photography, technology and more.', priority: '0.8', crumb: 'Portfolio' },
+  portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO, Social Media & Products | Click2Client Media', description: 'A collection of websites, SEO campaigns, social media marketing, interfaces and technology products designed and built by Click2Client Media.', priority: '0.8', crumb: 'Portfolio' },
+  portfolioFeatured: { path: '/portfolio/featured', file: 'portfolio-featured', nav: 'portfolio', title: 'Featured Projects — Products & Experiments | Click2Client Media', description: 'Selected experiments, products and digital systems built by Click2Client Media beyond traditional client work.', priority: '0.6', crumb: 'Featured Projects' },
   blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
   services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
   enquire: { path: '/enquire', file: 'enquire', title: 'Book a Consultation | Click2Client Media', description: 'Tell us about your business and goals. Click2Client Media will get back to you about SEO, digital marketing or website development.', priority: '0.7', crumb: 'Enquire Now' },
@@ -72,6 +73,9 @@ function schemaFor(id, s, base, p = PAGES[id]) {
   if (p.post) {
     graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: 'Blog', item: `${base}/blog` }, { '@type': 'ListItem', position: 3, name: p.post.title, item: `${base}${p.path}` }] });
     graph.push({ '@type': 'BlogPosting', headline: p.post.title, description: p.description, datePublished: p.post.date, dateModified: p.post.updated || p.post.date, author: { '@type': 'Person', name: p.post.author || 'Hari' }, publisher: { '@id': `${base}/#organization` }, mainEntityOfPage: `${base}${p.path}`, ...(p.image ? { image: p.image } : {}) });
+  } else if (p.trail) {
+    graph.push({ '@type': 'BreadcrumbList', itemListElement: p.trail.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, item: `${base}${t.path}` })) });
+    if (p.extraSchema) graph.push(p.extraSchema);
   } else if (p.crumb) graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: p.crumb, item: `${base}${p.path}` }] });
   if (id === 'audit') {
     graph.push({
@@ -123,6 +127,8 @@ export async function renderPage(id, req, override = {}) {
   };
   if (id === 'portfolio') Object.assign(vars, await portfolioVars());
   if (id === 'blog') Object.assign(vars, await blogListVars());
+  if (id === 'portfolioFeatured') Object.assign(vars, await featuredVars());
+  if (id === 'home') vars['home.work'] = await homeWorkHtml();
   Object.assign(vars, override.vars);
   let html = read(p.file);
   html = html.replace(/<!--#include (\w+)-->/g, (_, n) => read('_' + n));
@@ -138,13 +144,28 @@ export async function renderPost(req, post) {
   return renderPage('blogPost', req, { page, vars: v });
 }
 
+/** A portfolio project page (also used for an admin preview of a draft). */
+export async function renderProject(req, project) {
+  const base = siteUrl(req);
+  const v = await projectVars(project, base);
+  const path = `/portfolio/${project.slug}`;
+  const page = {
+    path, file: 'portfolio-project', nav: 'portfolio', title: v['wk.seoTitle'], description: project.short_description,
+    trail: [{ name: 'Home', path: '/' }, { name: 'Portfolio', path: '/portfolio' }, { name: project.title, path }],
+    extraSchema: { '@type': 'CreativeWork', name: project.title, description: project.short_description, url: `${base}${path}`, creator: { '@id': `${base}/#organization` }, ...(project.cover_image ? { image: v.ogImage } : {}), ...(project.year ? { dateCreated: project.year } : {}) },
+  };
+  return renderPage('portfolioProject', req, { page, vars: v });
+}
+
 export async function sitemap(req) {
   const base = siteUrl(req);
   const today = new Date().toISOString().slice(0, 10);
   const posts = await publishedPosts().catch(() => []);
+  const works = await listProjects().catch(() => []);
   const urls = [
     ...Object.values(PAGES).map((p) => `  <url><loc>${base}${p.path}</loc><lastmod>${today}</lastmod><priority>${p.priority}</priority></url>`),
     ...posts.map((p) => `  <url><loc>${base}/blog/${p.id}</loc><lastmod>${(p.updated || p.date).slice(0, 10)}</lastmod><priority>0.7</priority></url>`),
+    ...works.map((p) => `  <url><loc>${base}/portfolio/${p.slug}</loc><lastmod>${String(p.updated_at).slice(0, 10)}</lastmod><priority>0.6</priority></url>`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
 }
