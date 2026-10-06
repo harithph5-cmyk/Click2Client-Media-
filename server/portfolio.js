@@ -14,9 +14,8 @@ const SEED_CATEGORIES = [
   { slug: 'websites', name: 'Websites', short_name: 'Websites', empty_text: 'No projects here yet.' },
   { slug: 'seo', name: 'SEO', short_name: 'SEO', empty_text: 'No projects here yet.' },
   { slug: 'social-media', name: 'Social Media Marketing', short_name: 'Social Media', empty_text: 'No projects here yet.' },
-  { slug: 'ads-campaigns', name: 'Ads & Campaigns', short_name: 'Ads & Campaigns', empty_text: 'Campaign projects coming soon.' },
-  { slug: 'ui-ux', name: 'UI/UX', short_name: 'UI/UX', empty_text: 'UI/UX projects coming soon.' },
-  { slug: 'featured-projects', name: 'Featured Projects', short_name: 'Featured Projects', empty_text: 'No projects here yet.' },
+  { slug: 'ads-campaigns', name: 'Ads Report', short_name: 'Ads Report', empty_text: 'Ads reports coming soon.' },
+  { slug: 'ui-ux', name: 'UI/UX Design', short_name: 'UI/UX Design', empty_text: 'UI/UX design projects coming soon.' },
 ];
 
 const SEED_PROJECTS = [
@@ -59,11 +58,11 @@ const SEED_PROJECTS = [
     short_description: 'Social media marketing for TerraNext Global Ventures.', services: ['Social Media Marketing'] },
   { slug: 'hi-light-media', title: 'Hi-Light Media', category: 'social-media', subcategory: 'Social Media Marketing', client: 'Hi-Light Media',
     short_description: 'Social media marketing for Hi-Light Media.', services: ['Social Media Marketing'] },
-  { slug: 'to-do-list-website', title: 'To-Do List Website', category: 'featured-projects', subcategory: 'Web Application', featured: true,
+  { slug: 'to-do-list-website', title: 'To-Do List Website', category: 'websites', subcategory: 'Web Application', featured: true,
     short_description: 'A focused web app for planning the day — add, organise and tick off tasks.', services: ['Web Application', 'UI/UX'] },
-  { slug: 'ats-system', title: 'ATS System', category: 'featured-projects', subcategory: 'AI / Recruitment System', featured: true,
+  { slug: 'ats-system', title: 'ATS System', category: 'websites', subcategory: 'AI / Recruitment System', featured: true,
     short_description: 'An applicant tracking system that uses AI to help screen and organise candidates.', services: ['AI', 'Web Application'] },
-  { slug: 'ai-quiz-for-college-students', title: 'AI Quiz for College Students', category: 'featured-projects', subcategory: 'AI / EdTech', featured: true,
+  { slug: 'ai-quiz-for-college-students', title: 'AI Quiz for College Students', category: 'websites', subcategory: 'AI / EdTech', featured: true,
     short_description: 'An AI-powered quiz app that helps college students practise and test what they’ve learned.', services: ['AI', 'EdTech'] },
 ];
 
@@ -73,7 +72,7 @@ function ensureSeed() {
     for (const [i, c] of SEED_CATEGORIES.entries()) {
       await q('INSERT INTO portfolio_categories (slug, name, short_name, empty_text, display_order) VALUES (?, ?, ?, ?, ?) ON CONFLICT (slug) DO NOTHING', [c.slug, c.name, c.short_name, c.empty_text, i + 1]);
     }
-    if (await store.getSetting('portfolio_cms_seeded', null)) return;
+    if (await store.getSetting('portfolio_cms_seeded', null)) return migrateCategoriesV2();
     for (const [i, p] of SEED_PROJECTS.entries()) {
       const r = clean(p);
       await q(`INSERT INTO portfolio_projects (id, title, slug, category, subcategory, client, industry, location, year, short_description, description,
@@ -83,8 +82,26 @@ function ensureSeed() {
         JSON.stringify(r.services), JSON.stringify(r.technologies), r.project_url, r.admin_url, r.challenge, r.solution, r.results, JSON.stringify(r.case_sections), r.featured, i + 1]);
     }
     await store.setSetting('portfolio_cms_seeded', new Date().toISOString());
+    await migrateCategoriesV2();
   })().catch((e) => { seeded = null; throw e; });
   return seeded;
+}
+
+// One-time (Oct 2026): five categories — Websites, SEO, Social Media, Ads Report,
+// UI/UX Design. The old "Featured Projects" category is retired: its projects
+// move to Websites and keep featured = true (the Featured section uses that flag).
+export async function migrateCategoriesV2() {
+  if (await store.getSetting('portfolio_categories_v2', null)) return;
+  await tx(async (c) => {
+    await c.query(`UPDATE portfolio_categories SET name = 'Ads Report', short_name = 'Ads Report', empty_text = 'Ads reports coming soon.' WHERE slug = 'ads-campaigns'`);
+    await c.query(`UPDATE portfolio_categories SET name = 'UI/UX Design', short_name = 'UI/UX Design', empty_text = 'UI/UX design projects coming soon.' WHERE slug = 'ui-ux'`);
+    await c.query(`UPDATE portfolio_categories SET short_name = 'Social Media' WHERE slug = 'social-media'`);
+    if ((await c.query(`SELECT 1 FROM portfolio_categories WHERE slug = 'websites'`)).rows.length) {
+      await c.query(`UPDATE portfolio_projects SET category = 'websites', featured = TRUE, updated_at = NOW() WHERE category = 'featured-projects'`);
+      await c.query(`DELETE FROM portfolio_categories WHERE slug = 'featured-projects'`);
+    }
+  });
+  await store.setSetting('portfolio_categories_v2', new Date().toISOString());
 }
 
 // ── Validation ───────────────────────────────────────────────────────────
@@ -258,12 +275,13 @@ export async function reorderCategories(slugs) {
 
 // ── Matching uploaded images to projects by file name ────────────────────
 const FOLDER_FOR = { websites: 'websites', seo: 'seo', 'social-media': 'smm', 'ads-campaigns': 'paid ads', 'ui-ux': 'ui', 'featured-projects': 'featured' };
+const ownFolder = (project, file) => [FOLDER_FOR[project.category], project.featured && 'featured'].some((k) => k && norm(file.folder).includes(k));
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
 const tokens = (s) => norm(s).split(' ').filter((t) => t.length >= 3 && !['the', 'and', 'for', 'website', 'media', 'system', 'list'].includes(t));
 /** Best file for a project: name contains the project/client words; same-category folder wins ties. */
 /** Only files in the project's own category folder count (an SMM project never takes an SEO image). */
 export function matchScore(project, file) {
-  if (!norm(file.folder).includes(FOLDER_FOR[project.category] || '\u0000')) return 0;
+  if (!ownFolder(project, file)) return 0;
   const name = norm(file.name.replace(/\.[a-z0-9]+$/i, ''));
   const words = [...new Set([...tokens(project.title), ...tokens(project.client)])];
   let hits = words.filter((w) => name.includes(w)).length;
@@ -329,11 +347,11 @@ function media(p, { eager = false, cls = '' } = {}) {
 }
 
 export function cardHtml(p, cats, { big = false } = {}) {
-  const feature = big || p.category === 'featured-projects';
+  const feature = big || p.featured;
   return `<article class="wk-card${feature ? ' wk-card--feature' : ''}" data-cat="${esc(p.category)}">
     <div class="wk-media">${media(p)}</div>
     <div class="wk-body">
-      <p class="wk-kicker"><span>${esc(p.category === 'featured-projects' && p.subcategory ? p.subcategory : catName(cats, p.category))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
+      <p class="wk-kicker"><span>${esc(p.featured && p.subcategory ? p.subcategory : catName(cats, p.category))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
       <h3><a href="/portfolio/${esc(p.slug)}">${esc(p.title)}</a></h3>
       <p class="wk-desc">${esc(p.short_description)}</p>
       ${p.services.length ? `<ul class="wk-tags">${p.services.slice(0, 4).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
@@ -344,12 +362,15 @@ export function cardHtml(p, cats, { big = false } = {}) {
 
 export async function portfolioVars() {
   const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
-  const filters = [`<button type="button" class="wk-chip on" data-filter="all" aria-pressed="true">All <span>${projects.length}</span></button>`,
-    ...cats.map((c) => `<button type="button" class="wk-chip" data-filter="${esc(c.slug)}" data-empty="${esc(c.empty_text || 'No projects here yet.')}" aria-pressed="false">${esc(c.short_name || c.name)} <span>${c.published}</span></button>`)].join('');
+  const filters = cats.map((c, i) => `<button type="button" class="wk-chip${i ? '' : ' on'}" data-filter="${esc(c.slug)}" data-empty="${esc(c.empty_text || 'No projects here yet.')}" aria-pressed="${i ? 'false' : 'true'}">${esc(c.short_name || c.name)} <span>${c.published}</span></button>`).join('');
+  const first = cats[0]?.slug;
   const featured = projects.filter((p) => p.featured);
   return {
     'wk.filters': filters,
-    'wk.cards': projects.map((p) => cardHtml(p, cats)).join('') || '',
+    // Server renders the first category's view so it's correct before JS runs.
+    'wk.cards': projects.map((p) => cardHtml(p, cats).replace('<article ', p.category === first ? '<article ' : '<article hidden ')).join(''),
+    'wk.emptyHidden': projects.some((p) => p.category === first) ? 'hidden' : '',
+    'wk.emptyText': esc(cats[0]?.empty_text || 'No projects here yet.'),
     'wk.count': String(projects.length),
     'wk.featured': featured.length ? `<section class="section wk-feature-band" aria-labelledby="wkf-h"><div class="wrap">
       <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Beyond client work</span><h2 id="wkf-h">Featured Projects</h2></div><p>Selected experiments, products and digital systems built beyond traditional client work. <a href="/portfolio/featured">See all →</a></p></div>
@@ -389,7 +410,7 @@ export async function projectVars(p, base) {
   const img = p.cover_image ? (p.cover_image.startsWith('/') ? base + p.cover_image : p.cover_image) : `${base}/img/click2client-media-logo.webp`;
   return {
     'wk.title': esc(p.title),
-    'wk.cat': esc(p.category === 'featured-projects' && p.subcategory ? p.subcategory : cat),
+    'wk.cat': esc(p.featured && p.subcategory ? p.subcategory : cat),
     'wk.catSlug': esc(p.category),
     'wk.short': esc(p.short_description),
     'wk.logo': p.logo ? `<img class="wk-logo" src="${esc(p.logo)}" alt="${esc(p.client || p.title)} logo" loading="lazy">` : '',

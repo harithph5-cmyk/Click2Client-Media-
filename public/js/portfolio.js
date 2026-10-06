@@ -11,7 +11,7 @@ function apply(filter, { animate = true } = {}) {
   filter = chip.dataset.filter;
   chips.forEach((c) => { c.classList.toggle('on', c === chip); c.setAttribute('aria-pressed', c === chip); });
   chip.scrollIntoView({ block: 'nearest', inline: 'center', behavior: animate && !calm ? 'smooth' : 'auto' });
-  const show = (c) => filter === 'all' || c.dataset.cat === filter;
+  const show = (c) => c.dataset.cat === filter;
   const swap = () => {
     cards.forEach((c) => { c.hidden = !show(c); });
     const none = !cards.some(show);
@@ -28,7 +28,7 @@ document.querySelector('.wk-filters')?.addEventListener('click', (e) => {
   const chip = e.target.closest('.wk-chip');
   if (!chip) return;
   apply(chip.dataset.filter);
-  history.replaceState(null, '', chip.dataset.filter === 'all' ? location.pathname : `#${chip.dataset.filter}`);
+  history.replaceState(null, '', chip === chips[0] ? location.pathname : `#${chip.dataset.filter}`);
 });
 
 if (location.hash.length > 1) apply(decodeURIComponent(location.hash.slice(1)), { animate: false });

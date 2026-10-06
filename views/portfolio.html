@@ -20,7 +20,7 @@
   <div class="wrap">
     <div class="wk-filters" role="toolbar" aria-label="Filter projects by category">{{wk.filters}}</div>
     <div class="wk-grid" id="wkGrid">{{wk.cards}}</div>
-    <p class="wk-empty" id="wkEmpty" hidden>No projects here yet.</p>
+    <p class="wk-empty" id="wkEmpty" {{wk.emptyHidden}}>{{wk.emptyText}}</p>
   </div>
 </section>
 

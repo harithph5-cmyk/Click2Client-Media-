@@ -482,7 +482,7 @@ function bindTags(root, onChange) {
 }
 
 // ── Media picker (Supabase Storage) ──────────────────────────────────────
-const FOLDER_GUESS = { websites: 'Websites', seo: 'SEO', 'social-media': 'SMM', 'ads-campaigns': 'Paid Ads', 'featured-projects': 'Featured Projects' };
+const FOLDER_GUESS = { websites: 'Websites', seo: 'SEO', 'social-media': 'SMM', 'ads-campaigns': 'Paid Ads' };
 function pickMedia({ multiple = false, title = 'Choose an image', project = {} } = {}) {
   return new Promise((resolve) => {
     const words = pfNorm(`${project.title || ''} ${project.client || ''}`).split(' ').filter((w) => w.length >= 3 && !['the', 'and', 'website', 'media', 'system', 'list'].includes(w));
@@ -629,9 +629,9 @@ async function pfEditor(view, { projects, categories }) {
   const preview = () => {
     const d = collect();
     const c = categories.find((x) => x.slug === d.category);
-    view.querySelector('#pv').innerHTML = `<div class="pv-card${d.category === 'featured-projects' ? ' dark' : ''}">
+    view.querySelector('#pv').innerHTML = `<div class="pv-card${d.featured ? ' dark' : ''}">
       <div class="pv-media">${d.cover_image ? `<img src="${esc(d.cover_image)}" alt="">` : `<span>${esc((d.client || d.title || 'C2').slice(0, 2).toUpperCase())}</span>`}</div>
-      <div class="pv-body"><p class="pv-kicker">${esc(d.category === 'featured-projects' && d.subcategory ? d.subcategory : c?.name || '')}${d.industry ? ` · <span>${esc(d.industry)}</span>` : ''}</p>
+      <div class="pv-body"><p class="pv-kicker">${esc(d.featured && d.subcategory ? d.subcategory : c?.name || '')}${d.industry ? ` · <span>${esc(d.industry)}</span>` : ''}</p>
       <h4>${esc(d.title || 'Project name')}</h4><p class="pv-desc">${esc(d.short_description || 'Short description')}</p>
       <div class="pv-tags">${d.services.slice(0, 4).map((s) => `<span>${esc(s)}</span>`).join('')}</div><p class="pv-more">View Project →</p></div></div>
       <p class="tiny muted" style="margin-top:8px">${d.published ? 'Published' : 'Draft — not visible on the website'}${d.featured ? ' · ★ Featured' : ''}</p>`;
