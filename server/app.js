@@ -416,6 +416,9 @@ w.c2cTrack=function(n,p){p=p||{};try{w.dataLayer.push(Object.assign({event:n},p)
 d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target:null;if(!t)return;if(t.closest('a[href*="wa.me/"]'))w.c2cTrack('whatsapp_click',{link_location:location.pathname});else if(t.closest('a[href^="tel:"]'))w.c2cTrack('phone_click',{link_location:location.pathname});},true);})();`);
 }));
 
+// Products moved out of the portfolio
+app.get('/portfolio/featured', (req, res) => res.redirect(301, '/products'));
+
 // Portfolio project pages (published; admins can preview drafts)
 app.get('/portfolio/:slug', h(async (req, res, next) => {
   const p = await portfolio.getBySlug(req.params.slug);

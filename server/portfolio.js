@@ -14,8 +14,8 @@ const SEED_CATEGORIES = [
   { slug: 'websites', name: 'Websites', short_name: 'Websites', empty_text: 'No projects here yet.' },
   { slug: 'seo', name: 'SEO', short_name: 'SEO', empty_text: 'No projects here yet.' },
   { slug: 'social-media', name: 'Social Media Marketing', short_name: 'Social Media', empty_text: 'No projects here yet.' },
-  { slug: 'ads-campaigns', name: 'Ads Report', short_name: 'Ads Report', empty_text: 'Ads reports coming soon.' },
-  { slug: 'ui-ux', name: 'UI/UX Design', short_name: 'UI/UX Design', empty_text: 'UI/UX design projects coming soon.' },
+  { slug: 'ads-campaigns', name: 'Ads Campaigns', short_name: 'Ads Campaigns', empty_text: 'Campaign case studies coming soon.' },
+  { slug: 'ui-ux', name: 'UI/UX', short_name: 'UI/UX', empty_text: 'UI/UX case studies coming soon.' },
 ];
 
 const SEED_PROJECTS = [
@@ -58,12 +58,6 @@ const SEED_PROJECTS = [
     short_description: 'Social media marketing for TerraNext Global Ventures.', services: ['Social Media Marketing'] },
   { slug: 'hi-light-media', title: 'Hi-Light Media', category: 'social-media', subcategory: 'Social Media Marketing', client: 'Hi-Light Media',
     short_description: 'Social media marketing for Hi-Light Media.', services: ['Social Media Marketing'] },
-  { slug: 'to-do-list-website', title: 'To-Do List Website', category: 'websites', subcategory: 'Web Application', featured: true,
-    short_description: 'A focused web app for planning the day — add, organise and tick off tasks.', services: ['Web Application', 'UI/UX'] },
-  { slug: 'ats-system', title: 'ATS System', category: 'websites', subcategory: 'AI / Recruitment System', featured: true,
-    short_description: 'An applicant tracking system that uses AI to help screen and organise candidates.', services: ['AI', 'Web Application'] },
-  { slug: 'ai-quiz-for-college-students', title: 'AI Quiz for College Students', category: 'websites', subcategory: 'AI / EdTech', featured: true,
-    short_description: 'An AI-powered quiz app that helps college students practise and test what they’ve learned.', services: ['AI', 'EdTech'] },
 ];
 
 let seeded = null;
@@ -83,7 +77,7 @@ function ensureSeed() {
     }
     await store.setSetting('portfolio_cms_seeded', new Date().toISOString());
     await migrateCategoriesV2();
-  })().catch((e) => { seeded = null; throw e; });
+  })().then(migrateRestructureV3).catch((e) => { seeded = null; throw e; });
   return seeded;
 }
 
@@ -104,6 +98,50 @@ export async function migrateCategoriesV2() {
   await store.setSetting('portfolio_categories_v2', new Date().toISOString());
 }
 
+// One-time (Oct 2026): Portfolio = client work only. Products (ATS, AI Quiz,
+// To-Do) move to /products; service lists follow the agreed brief; three
+// campaign examples are added as unpublished drafts to confirm in the admin.
+const PRODUCT_SLUGS = ['to-do-list-website', 'ats-system', 'ai-quiz-for-college-students'];
+const V3_SERVICES = {
+  'carvello-cars': ['Website Design', 'UI/UX', 'WordPress / Web Development', 'Responsive Design'],
+  kinderbee: ['Website Design', 'UI/UX', 'SEO-ready structure', 'Responsive Development'],
+  'click2client-media': ['UI/UX', 'Website Development', 'Conversion-focused design', 'SEO structure'],
+  'kinderbee-seo': ['Technical SEO', 'On-Page SEO', 'Local SEO', 'Keyword Optimization', 'Website SEO Structure'],
+  codelytix: ['Technical SEO', 'On-Page SEO', 'Schema', 'Search Console', 'SEO Strategy'],
+  'globex-union': ['SEO Strategy', 'Keyword Research', 'On-Page Optimization', 'Content Optimization'],
+};
+const ADS_DRAFTS = [
+  { slug: 'meta-advertising-campaign', title: 'Meta Advertising Campaign', objective: 'Lead Generation', platform: 'Meta (Facebook & Instagram)' },
+  { slug: 'website-development-campaign', title: 'Website Development Campaign', objective: 'Lead Generation', platform: 'Meta / Google' },
+  { slug: 'photography-wedding-campaign', title: 'Photography / Wedding Campaign', objective: 'Local Lead Generation', platform: 'Meta (Facebook & Instagram)' },
+];
+export async function migrateRestructureV3() {
+  if (await store.getSetting('portfolio_restructure_v3', null)) return;
+  await tx(async (c) => {
+    await c.query(`UPDATE portfolio_categories SET name = 'Ads Campaigns', short_name = 'Ads Campaigns', empty_text = 'Campaign case studies coming soon.' WHERE slug = 'ads-campaigns'`);
+    await c.query(`UPDATE portfolio_categories SET name = 'UI/UX', short_name = 'UI/UX', empty_text = 'UI/UX case studies coming soon.' WHERE slug = 'ui-ux'`);
+    // Products leave the portfolio: removed if untouched, otherwise kept as hidden drafts.
+    await c.query(`DELETE FROM portfolio_projects p WHERE p.slug = ANY($1) AND p.cover_image IS NULL
+      AND NOT EXISTS (SELECT 1 FROM portfolio_project_images i WHERE i.project_id = p.id)`, [PRODUCT_SLUGS]);
+    await c.query('UPDATE portfolio_projects SET published = FALSE, featured = FALSE, updated_at = NOW() WHERE slug = ANY($1)', [PRODUCT_SLUGS]);
+    for (const [slug, services] of Object.entries(V3_SERVICES)) {
+      await c.query('UPDATE portfolio_projects SET services = $1::jsonb, updated_at = NOW() WHERE slug = $2', [JSON.stringify(services), slug]);
+    }
+    await c.query(`UPDATE portfolio_projects SET subcategory = 'Agency Website' WHERE slug = 'click2client-media'`);
+    // "Featured" now means "shown first in Selected Work on the home page".
+    await c.query(`UPDATE portfolio_projects SET featured = (slug = 'carvello-cars')`);
+    const n = (await c.query('SELECT COALESCE(MAX(display_order), 0) AS n FROM portfolio_projects')).rows[0].n;
+    for (const [i, a] of ADS_DRAFTS.entries()) {
+      await c.query(`INSERT INTO portfolio_projects (id, title, slug, category, subcategory, short_description, services, details, featured, published, display_order)
+        VALUES ($1, $2, $3, 'ads-campaigns', 'Performance Marketing', $4, $5::jsonb, $6::jsonb, FALSE, FALSE, $7) ON CONFLICT (slug) DO NOTHING`,
+      [store.newId(), a.title, a.slug, `A ${a.objective.toLowerCase()} campaign — strategy, creatives, audience targeting and setup.`,
+        JSON.stringify(['Campaign Strategy', 'Creative Development', 'Audience Targeting', 'Campaign Setup']),
+        JSON.stringify([{ label: 'Platform', value: a.platform }, { label: 'Objective', value: a.objective }]), Number(n) + i + 1]);
+    }
+  });
+  await store.setSetting('portfolio_restructure_v3', new Date().toISOString());
+}
+
 // ── Validation ───────────────────────────────────────────────────────────
 const txt = (v, n) => String(v ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, n);
 export const slugify = (s) => txt(s, 100).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
@@ -114,6 +152,8 @@ const url = (v, label) => {
   return u;
 };
 const tags = (v, max = 12) => [...new Set((Array.isArray(v) ? v : String(v ?? '').split(',')).map((x) => txt(x, 40)).filter(Boolean))].slice(0, max);
+const pairs = (v) => (Array.isArray(v) ? v : []).slice(0, 12)
+  .map((x) => ({ label: txt(x?.label, 40), value: txt(x?.value, 120) })).filter((x) => x.label && x.value);
 const RESERVED = new Set(['featured']);
 
 function clean(b) {
@@ -135,6 +175,7 @@ function clean(b) {
     case_sections: (Array.isArray(b.case_sections) ? b.case_sections : []).slice(0, 15)
       .map((s) => ({ heading: txt(s?.heading, 120), body: txt(s?.body, 4000), image: url(s?.image, 'Section image') }))
       .filter((s) => s.heading || s.body || s.image),
+    details: pairs(b.details), metrics: pairs(b.metrics),
     gallery: (Array.isArray(b.gallery) ? b.gallery : []).slice(0, 40)
       .map((g) => ({ url: url(typeof g === 'string' ? g : g?.url, 'Gallery image'), alt: txt(g?.alt, 200) }))
       .filter((g) => g.url),
@@ -146,7 +187,7 @@ function clean(b) {
 // ── Reads ────────────────────────────────────────────────────────────────
 const iso = (d) => (d instanceof Date ? d.toISOString() : d ? String(d) : null);
 const row = (r) => r && ({
-  ...r, services: r.services || [], technologies: r.technologies || [], case_sections: r.case_sections || [],
+  ...r, services: r.services || [], technologies: r.technologies || [], case_sections: r.case_sections || [], details: r.details || [], metrics: r.metrics || [],
   featured: Boolean(r.featured), published: Boolean(r.published), display_order: Number(r.display_order), created_at: iso(r.created_at), updated_at: iso(r.updated_at),
 });
 
@@ -174,8 +215,8 @@ export async function getBySlug(slug) { await ensureSeed(); return withGallery(r
 // ── Writes (admin only — routes check the session first) ─────────────────
 const COLS = ['title', 'slug', 'category', 'subcategory', 'client', 'industry', 'location', 'year', 'short_description', 'description',
   'services', 'technologies', 'cover_image', 'logo', 'project_url', 'admin_url', 'challenge', 'solution', 'results', 'testimonial',
-  'case_sections', 'featured', 'published'];
-const JSONCOLS = new Set(['services', 'technologies', 'case_sections']);
+  'case_sections', 'details', 'metrics', 'featured', 'published'];
+const JSONCOLS = new Set(['services', 'technologies', 'case_sections', 'details', 'metrics']);
 const val = (r, c) => (JSONCOLS.has(c) ? JSON.stringify(r[c]) : r[c] === '' ? null : r[c]);
 const ph = (c, i) => `$${i}${JSONCOLS.has(c) ? '::jsonb' : ''}`;
 
@@ -349,53 +390,131 @@ function media(p, { eager = false, cls = '' } = {}) {
   if (p.cover_image) return `<img class="wk-img ${cls}" src="${esc(p.cover_image)}" alt="${esc(p.title)}${p.industry ? ` — ${esc(p.industry)}` : ''} project by Click2Client Media" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
   return `<div class="wk-img wk-ph ${cls}" style="--h:${hue(p.client || p.title)}" role="img" aria-label="${esc(p.title)}"><span>${esc(initials(p.client || p.title))}</span></div>`;
 }
+const kicker = (p, cats) => p.subcategory || catName(cats, p.category);
+const detail = (p, label) => p.details.find((d) => d.label.toLowerCase() === label.toLowerCase())?.value || '';
+const host = (u) => (u && /^https?:\/\//.test(u) ? u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/.*$/, '') : '');
+const tagList = (items, n = 5) => (items.length ? `<ul class="wk-tags">${items.slice(0, n).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '');
+const more = (label = 'View Case Study') => `<span class="wk-more" aria-hidden="true">${label} <i>→</i></span>`;
+const titleLink = (p, tag = 'h3') => `<${tag}><a href="/portfolio/${esc(p.slug)}">${esc(p.title)}</a></${tag}>`;
 
-export function cardHtml(p, cats, { big = false } = {}) {
-  const feature = big || p.featured;
-  return `<article class="wk-card${feature ? ' wk-card--feature' : ''}" data-cat="${esc(p.category)}">
+/** Simple card — used on the home page, related projects and custom categories. */
+export function cardHtml(p, cats) {
+  return `<article class="wk-card" data-cat="${esc(p.category)}">
     <div class="wk-media">${media(p)}</div>
     <div class="wk-body">
-      <p class="wk-kicker"><span>${esc(p.featured && p.subcategory ? p.subcategory : catName(cats, p.category))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
-      <h3><a href="/portfolio/${esc(p.slug)}">${esc(p.title)}</a></h3>
-      <p class="wk-desc">${esc(p.short_description)}</p>
-      ${p.services.length ? `<ul class="wk-tags">${p.services.slice(0, 4).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
-      <span class="wk-more" aria-hidden="true">View Project <i>→</i></span>
+      <p class="wk-kicker"><span>${esc(kicker(p, cats))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
+      ${titleLink(p)}<p class="wk-desc">${esc(p.short_description)}</p>${tagList(p.services, 4)}${more()}
     </div>
   </article>`;
 }
 
-export async function portfolioVars() {
-  const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
-  const filters = cats.map((c, i) => `<button type="button" class="wk-chip${i ? '' : ' on'}" data-filter="${esc(c.slug)}" data-empty="${esc(c.empty_text || 'No projects here yet.')}" aria-pressed="${i ? 'false' : 'true'}">${esc(c.short_name || c.name)} <span>${c.published}</span></button>`).join('');
-  const first = cats[0]?.slug;
-  const featured = projects.filter((p) => p.featured);
-  return {
-    'wk.filters': filters,
-    // Server renders the first category's view so it's correct before JS runs.
-    'wk.cards': projects.map((p) => cardHtml(p, cats).replace('<article ', p.category === first ? '<article ' : '<article hidden ')).join(''),
-    'wk.emptyHidden': projects.some((p) => p.category === first) ? 'hidden' : '',
-    'wk.emptyText': esc(cats[0]?.empty_text || 'No projects here yet.'),
-    'wk.count': String(projects.length),
-    'wk.featured': featured.length ? `<section class="section wk-feature-band" aria-labelledby="wkf-h"><div class="wrap">
-      <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Beyond client work</span><h2 id="wkf-h">Featured Projects</h2></div><p>Selected experiments, products and digital systems built beyond traditional client work. <a href="/portfolio/featured">See all →</a></p></div>
-      <div class="wk-grid">${featured.slice(0, 3).map((p) => cardHtml(p, cats, { big: true })).join('')}</div></div></section>` : '',
-  };
+// ── One layout per category ──────────────────────────────────────────────
+const browser = (p, eager) => `<div class="wk-browser"><div class="wk-bar"><i></i><i></i><i></i><span>${esc(host(p.project_url) || `${p.slug}.com`)}</span></div><div class="wk-screen">${media(p, { eager })}</div></div>`;
+
+function websitesHtml(list, cats) {
+  const [lead, ...rest] = list;
+  const card = (p, big) => `<article class="wkw-card${big ? ' wkw-lead' : ''} reveal">
+      ${browser(p, big)}
+      <div class="wkw-info">
+        <p class="wk-kicker"><span>${esc(kicker(p, cats))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
+        ${titleLink(p)}
+        <p class="wk-desc">${esc(p.short_description)}</p>${tagList(p.services)}${more(p.project_url ? 'View Project' : 'View Case Study')}
+      </div>
+    </article>`;
+  return `${card(lead, true)}${rest.length ? `<div class="wkw-grid">${rest.map((p) => card(p, false)).join('')}</div>` : ''}`;
 }
 
-export async function featuredVars() {
-  const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
-  const featured = projects.filter((p) => p.featured);
-  return { 'wk.cards': featured.map((p) => cardHtml(p, cats, { big: true })).join('') || '<p class="wk-empty">No projects here yet.</p>' };
+function seoHtml(list, cats) {
+  return `<div class="wks-grid">${list.map((p) => `<article class="wks-card reveal">
+      <div class="wks-dash">
+        <div class="wks-dash-top"><span class="dot"></span><b>${esc(p.client || p.title)}</b><span class="wks-chip">${p.metrics.length ? 'Project results' : 'SEO workspace'}</span></div>
+        <div class="wks-shot">${media(p)}</div>
+        ${p.metrics.length ? `<div class="wks-metrics">${p.metrics.slice(0, 4).map((m) => `<div><span>${esc(m.label)}</span><b>${esc(m.value)}</b></div>`).join('')}</div>` : ''}
+      </div>
+      <div class="wk-body">
+        <p class="wk-kicker"><span>${esc(kicker(p, cats))}</span>${p.industry ? `<span>${esc(p.industry)}</span>` : ''}</p>
+        ${titleLink(p)}<p class="wk-desc">${esc(p.short_description)}</p>
+        ${p.services.length ? `<ul class="wks-checks">${p.services.slice(0, 5).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}${more()}
+      </div>
+    </article>`).join('')}</div>`;
+}
+
+function socialHtml(list) {
+  const tiles = (p) => {
+    const imgs = [p.cover_image, ...p.gallery.map((g) => g.url)].filter(Boolean).filter((u, i, a) => a.indexOf(u) === i);
+    if (imgs.length < 3) return `<div class="wkm-feed one">${media(p)}</div>`;
+    return `<div class="wkm-feed">${imgs.slice(0, 9).map((u) => `<img src="${esc(u)}" alt="${esc(p.title)} creative" loading="lazy" decoding="async">`).join('')}</div>`;
+  };
+  return `<div class="wkm-grid">${list.map((p) => `<article class="wkm-card reveal">
+      <header class="wkm-head"><span class="wkm-avatar" style="--h:${hue(p.client || p.title)}">${esc(initials(p.client || p.title))}</span><div><b>${esc(p.client || p.title)}</b><span>${esc(p.industry || 'Social Media Marketing')}</span></div></header>
+      <div class="wkm-media">${tiles(p)}<div class="wkm-flow" aria-hidden="true"><span>Strategy</span><i>→</i><span>Content</span><i>→</i><span>Design</span><i>→</i><span>Execution</span></div></div>
+      <div class="wk-body">${titleLink(p)}<p class="wk-desc">${esc(p.short_description)}</p>${tagList(p.services, 4)}${more()}</div>
+    </article>`).join('')}</div>`;
+}
+
+function adsHtml(list) {
+  const row = (k, v) => (v ? `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>` : '');
+  return `<div class="wka-grid">${list.map((p) => `<article class="wka-card reveal">
+      <header class="wka-head"><span class="wka-platform">${esc(detail(p, 'Platform') || 'Paid social & search')}</span><span class="wka-status">${p.metrics.length ? 'Results' : 'Campaign'}</span></header>
+      ${titleLink(p)}
+      <dl class="wka-rows">${row('Campaign', p.subcategory || 'Performance Marketing')}${row('Objective', detail(p, 'Objective'))}${row('Creative', detail(p, 'Creative'))}${row('Audience', detail(p, 'Audience'))}${row('Budget', detail(p, 'Budget'))}</dl>
+      ${p.cover_image ? `<div class="wka-creative">${media(p)}</div>` : ''}
+      ${p.metrics.length ? `<div class="wka-results">${p.metrics.slice(0, 4).map((m) => `<div><b>${esc(m.value)}</b><span>${esc(m.label)}</span></div>`).join('')}</div>`
+        : `<div class="wka-scope"><span>What we delivered</span>${tagList(p.services.length ? p.services : ['Campaign Strategy', 'Creative Development', 'Audience Targeting', 'Campaign Setup'], 6)}</div>`}
+      ${more()}
+    </article>`).join('')}</div>`;
+}
+
+function uiuxHtml(list) {
+  return `<div class="wku-grid">${list.map((p) => `<article class="wku-card reveal">
+      <div class="wku-canvas"><span class="wku-frame-label">▢ ${esc(p.title)}</span><div class="wku-frame">${media(p)}</div></div>
+      <div class="wk-body">
+        ${titleLink(p)}<p class="wk-desc">${esc(p.short_description)}</p>
+        <dl class="wku-meta"><div><dt>Discipline</dt><dd>UI/UX Design</dd></div>${detail(p, 'Platform') ? `<div><dt>Platform</dt><dd>${esc(detail(p, 'Platform'))}</dd></div>` : ''}${detail(p, 'Design Approach') ? `<div><dt>Approach</dt><dd>${esc(detail(p, 'Design Approach'))}</dd></div>` : ''}</dl>${more()}
+      </div>
+    </article>`).join('')}</div>`;
+}
+
+const LAYOUT = { websites: websitesHtml, seo: seoHtml, 'social-media': socialHtml, 'ads-campaigns': adsHtml, 'ui-ux': uiuxHtml };
+const INTRO = {
+  websites: 'Websites and web platforms designed and built to turn visitors into enquiries.',
+  seo: 'Search work that makes businesses easier to find — from technical fixes to on-page content.',
+  'social-media': 'Content, creatives and campaigns that give brands a consistent voice on social.',
+  'ads-campaigns': 'Performance campaigns planned around one goal: the right leads at the right cost.',
+  'ui-ux': 'Interfaces, flows and design systems shaped around how people actually use them.',
+};
+
+export async function portfolioVars() {
+  const [cats, projects, imgs] = await Promise.all([listCategories(), listProjects(),
+    q('SELECT project_id, image_url AS url, alt_text AS alt FROM portfolio_project_images ORDER BY project_id, display_order, created_at')]);
+  for (const p of projects) p.gallery = imgs.filter((g) => g.project_id === p.id).map((g) => ({ url: g.url, alt: g.alt || '' }));
+  const nav = cats.map((c) => `<button type="button" class="wk-chip" data-filter="${esc(c.slug)}" aria-pressed="false">${esc(c.short_name || c.name)} <span>${c.published}</span></button>`).join('');
+  const sections = cats.map((c, i) => {
+    const list = projects.filter((p) => p.category === c.slug);
+    const body = list.length ? (LAYOUT[c.slug] || ((l) => `<div class="wk-grid">${l.map((p) => cardHtml(p, cats)).join('')}</div>`))(list, cats)
+      : `<p class="wk-empty">${esc(c.empty_text || 'No projects here yet.')}</p>`;
+    return `<section class="wk-cat wk-cat--${esc(c.slug)}" id="${esc(c.slug)}" data-cat="${esc(c.slug)}" aria-labelledby="h-${esc(c.slug)}">
+      <header class="wk-cat-head reveal"><span class="wk-cat-n">${String(i + 1).padStart(2, '0')}</span><div><h2 id="h-${esc(c.slug)}">${esc(c.name)}</h2>${INTRO[c.slug] ? `<p>${esc(INTRO[c.slug])}</p>` : ''}</div><span class="wk-cat-count">${list.length} ${list.length === 1 ? 'project' : 'projects'}</span></header>
+      ${body}
+    </section>`;
+  }).join('');
+  const covers = projects.filter((p) => p.cover_image).slice(0, 3);
+  return {
+    'wk.nav': nav,
+    'wk.sections': sections,
+    'wk.count': String(projects.length),
+    'wk.heroArt': covers.length >= 2 ? `<div class="wk-hero-art" aria-hidden="true">${covers.map((p, i) => `<div class="wk-hero-shot s${i + 1}"><div class="wk-bar"><i></i><i></i><i></i></div><img src="${esc(p.cover_image)}" alt="" ${i ? 'loading="lazy"' : 'fetchpriority="high"'}></div>`).join('')}</div>` : '',
+  };
 }
 
 /** Compact "Selected Work" block for the home page: featured first, 3–6 projects. */
 export async function homeWorkHtml() {
   try {
     const [cats, projects] = await Promise.all([listCategories(), listProjects()]);
-    const pick = [...projects.filter((p) => p.featured), ...projects.filter((p) => !p.featured)].slice(0, 6);
+    const pick = [...projects.filter((p) => p.featured), ...projects.filter((p) => !p.featured && p.cover_image), ...projects.filter((p) => !p.featured && !p.cover_image)].slice(0, 6);
     if (pick.length < 3) return '';
     return `<section class="section" aria-labelledby="sw-h"><div class="wrap">
-      <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Portfolio</span><h2 id="sw-h">Selected Work</h2></div><p>A look at the digital experiences, marketing systems and products we've built.</p></div>
+      <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">Portfolio</span><h2 id="sw-h">Selected Work</h2></div><p>A look at the websites, search and marketing work we've delivered for our clients.</p></div>
       <div class="wk-grid">${pick.map((p) => cardHtml(p, cats)).join('')}</div>
       <p class="wk-all"><a class="btn outline lg" href="/portfolio">View all projects →</a></p></div></section>`;
   } catch (e) {
@@ -407,14 +526,14 @@ export async function homeWorkHtml() {
 export async function projectVars(p, base) {
   const [cats, all] = await Promise.all([listCategories(), listProjects()]);
   const cat = catName(cats, p.category);
-  const facts = [['Client', p.client], ['Industry', p.industry], ['Location', p.location], ['Year', p.year], ['Type', p.subcategory && p.subcategory !== cat ? p.subcategory : '']].filter(([, v]) => v);
+  const facts = [['Client', p.client], ['Industry', p.industry], ['Location', p.location], ['Year', p.year], ['Type', p.subcategory && p.subcategory !== cat ? p.subcategory : ''], ...p.details.map((d) => [d.label, d.value])].filter(([, v]) => v);
   const block = (h, body) => (body ? `<section class="wk-block reveal"><h2>${esc(h)}</h2><div class="bl-prose">${formatBody(body)}</div></section>` : '');
   const ext = (u) => !u.startsWith('/');
-  const related = all.filter((x) => x.id !== p.id && (x.category === p.category || x.featured)).slice(0, 3);
+  const related = [...all.filter((x) => x.id !== p.id && x.category === p.category), ...all.filter((x) => x.id !== p.id && x.category !== p.category && x.cover_image)].slice(0, 3);
   const img = p.cover_image ? (p.cover_image.startsWith('/') ? base + p.cover_image : p.cover_image) : `${base}/img/click2client-media-logo.webp`;
   return {
     'wk.title': esc(p.title),
-    'wk.cat': esc(p.featured && p.subcategory ? p.subcategory : cat),
+    'wk.cat': esc(p.subcategory || cat),
     'wk.catSlug': esc(p.category),
     'wk.short': esc(p.short_description),
     'wk.logo': p.logo ? `<img class="wk-logo" src="${esc(p.logo)}" alt="${esc(p.client || p.title)} logo" loading="lazy">` : '',
@@ -427,6 +546,7 @@ export async function projectVars(p, base) {
     'wk.body': [
       block('Overview', p.description), block('The challenge', p.challenge), block('The solution', p.solution),
       ...p.case_sections.map((s) => `<section class="wk-block reveal">${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}${s.body ? `<div class="bl-prose">${formatBody(s.body)}</div>` : ''}${s.image ? `<figure class="wk-shot"><img src="${esc(s.image)}" alt="${esc(s.heading || p.title)}" loading="lazy"></figure>` : ''}</section>`),
+      p.metrics.length ? `<section class="wk-block reveal"><h2>Project results</h2><div class="wk-results">${p.metrics.map((m) => `<div><b>${esc(m.value)}</b><span>${esc(m.label)}</span></div>`).join('')}</div></section>` : '',
       block('Project outcome', p.results),
       p.testimonial ? `<blockquote class="wk-quote reveal">“${esc(p.testimonial)}”${p.client ? `<cite>— ${esc(p.client)}</cite>` : ''}</blockquote>` : '',
     ].join(''),

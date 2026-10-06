@@ -80,6 +80,9 @@ const SCHEMA = [
     case_sections JSONB NOT NULL DEFAULT '[]', featured BOOLEAN NOT NULL DEFAULT FALSE, published BOOLEAN NOT NULL DEFAULT TRUE,
     display_order INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
   `CREATE INDEX IF NOT EXISTS idx_pp_public ON portfolio_projects(published, display_order)`,
+  // details: label/value facts (Platform, Objective, Audience…); metrics: real results only
+  `ALTER TABLE portfolio_projects ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE portfolio_projects ADD COLUMN IF NOT EXISTS metrics JSONB NOT NULL DEFAULT '[]'`,
   `CREATE TABLE IF NOT EXISTS portfolio_project_images (
     id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES portfolio_projects(id) ON DELETE CASCADE,
     image_url TEXT NOT NULL, alt_text TEXT, display_order INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,

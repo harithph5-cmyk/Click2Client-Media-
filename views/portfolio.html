@@ -7,30 +7,35 @@
 <!--#include header-->
 <main id="main">
 
-<section class="page-hero wk-hero">
-  <div class="wrap">
-    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Portfolio</nav>
-    <span class="eyebrow">Selected work</span>
-    <h1 style="margin-top:14px">Ideas built into <span class="grad-text">digital experiences.</span></h1>
-    <p class="lede">A collection of websites, SEO campaigns, digital marketing projects, interfaces and technology products we've designed and built.</p>
+<section class="wk-hero">
+  <div class="wrap wk-hero-grid">
+    <div class="wk-hero-copy">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Portfolio</nav>
+      <span class="eyebrow">Our work</span>
+      <h1>Ideas Into <span class="grad-text">Digital Results.</span></h1>
+      <p class="lede">A curated showcase of websites, SEO campaigns, social media strategies, advertising campaigns and UI/UX experiences created for brands and businesses.</p>
+      <div class="ctas"><a class="btn primary lg" href="#work">View Our Work</a><a class="btn outline lg" href="/enquire">Start a Project</a></div>
+    </div>
+    {{wk.heroArt}}
   </div>
 </section>
 
-<section class="section wk-work" aria-label="Projects">
-  <div class="wrap">
-    <div class="wk-filters" role="toolbar" aria-label="Filter projects by category">{{wk.filters}}</div>
-    <div class="wk-grid" id="wkGrid">{{wk.cards}}</div>
-    <p class="wk-empty" id="wkEmpty" {{wk.emptyHidden}}>{{wk.emptyText}}</p>
+<div class="wk-nav" id="work">
+  <div class="wrap wk-nav-in">
+    <div class="wk-filters" role="toolbar" aria-label="Show work by category">{{wk.nav}}</div>
+    <button type="button" class="wk-reset" id="wkReset" hidden>Show all work</button>
   </div>
-</section>
+</div>
 
-{{wk.featured}}
+<div class="wrap wk-library" id="wkLibrary">
+{{wk.sections}}
+</div>
 
 <section class="section tight">
   <div class="wrap">
     <div class="cta-final reveal">
-      <div><span class="eyebrow">Let's build yours</span><h2>Your business could be our next case study.</h2><p style="margin-top:14px;font-size:17px">Tell us what you're building. We'll show you what's possible.</p></div>
-      <div class="row wrap-row" style="justify-content:flex-end"><a class="btn white lg" href="/enquire">Start a Project →</a><a class="btn glass lg" href="{{whatsappHref}}" target="_blank" rel="noopener">Talk on WhatsApp →</a></div>
+      <div><span class="eyebrow">Start a project</span><h2>Have a project that deserves better digital execution?</h2><p style="margin-top:14px;font-size:17px">From strategy and design to development, SEO and growth, we build digital experiences designed to move businesses forward.</p></div>
+      <div class="row wrap-row" style="justify-content:flex-end"><a class="btn white lg" href="/enquire">Start Your Project</a><a class="btn glass lg" href="{{whatsappHref}}" target="_blank" rel="noopener">Talk to Us</a></div>
     </div>
   </div>
 </section>

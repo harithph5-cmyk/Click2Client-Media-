@@ -379,18 +379,18 @@ function pfList(view, { projects, categories, media }) {
     '<a class="btn ghost sm" href="/portfolio" target="_blank">View portfolio ↗</a><button class="btn sm" data-cats>Manage categories</button><button class="btn sm accent" data-new>+ Add Project</button>')}
     ${media.configured ? `<div class="pf-note ok"><span>Images: Supabase bucket <b>${esc(media.bucket)}</b> connected.</span><button class="btn sm ghost" data-automatch title="Sets a cover for every project without one, using image file names">Auto-match covers from Supabase</button></div>`
       : `<div class="pf-note"><span><b>Connect Supabase images.</b> Add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in Hostinger → your Node.js app → Environment variables, then redeploy. Until then you can paste image links by hand.</span></div>`}
-    <div class="kpis pf-kpis">${stat(projects.length, 'Total projects', true)}${stat(projects.filter((p) => p.featured).length, 'Featured')}${categories.map((c) => stat(c.total, esc(c.short_name || c.name))).join('')}</div>
+    <div class="kpis pf-kpis">${stat(projects.length, 'Total projects', true)}${stat(projects.filter((p) => p.featured).length, 'On home page')}${categories.map((c) => stat(c.total, esc(c.short_name || c.name))).join('')}</div>
     <div class="pf-toolbar">
-      <div class="filters" style="margin:0">${[['all', 'All', projects.length], ['featured', '★ Featured', projects.filter((p) => p.featured).length], ...categories.map((c) => [c.slug, c.short_name || c.name, c.total])].map(([k, l, n]) => `<button class="chip ${pfState.filter === k ? 'on' : ''}" data-pff="${esc(k)}">${esc(l)}<span class="n">${n}</span></button>`).join('')}</div>
+      <div class="filters" style="margin:0">${[['all', 'All', projects.length], ['featured', '★ Home page', projects.filter((p) => p.featured).length], ...categories.map((c) => [c.slug, c.short_name || c.name, c.total])].map(([k, l, n]) => `<button class="chip ${pfState.filter === k ? 'on' : ''}" data-pff="${esc(k)}">${esc(l)}<span class="n">${n}</span></button>`).join('')}</div>
       <input class="input" id="pfSearch" type="search" placeholder="Search projects…" value="${esc(pfState.search)}" style="max-width:240px;height:38px">
     </div>
-    ${list.length ? `<div class="card table-wrap"><table class="t pf-table"><thead><tr><th style="width:34px"></th><th>#</th><th>Project</th><th>Category</th><th>Featured</th><th>Status</th><th class="num">Order</th><th>Last updated</th><th>Actions</th></tr></thead><tbody id="pfRows">
+    ${list.length ? `<div class="card table-wrap"><table class="t pf-table"><thead><tr><th style="width:34px"></th><th>#</th><th>Project</th><th>Category</th><th title="Shown first in Selected Work on the home page">Home ★</th><th>Status</th><th class="num">Order</th><th>Last updated</th><th>Actions</th></tr></thead><tbody id="pfRows">
       ${list.map((p) => `<tr data-id="${esc(p.id)}" ${canDrag ? 'draggable="true"' : ''}>
         <td class="pf-grip" title="${canDrag ? 'Drag to reorder' : 'Show All (no search) to reorder'}">${canDrag ? '⋮⋮' : ''}</td>
         <td class="mono small">${String(projects.indexOf(p) + 1).padStart(2, '0')}</td>
         <td><div class="row" style="gap:12px;align-items:center;flex-wrap:nowrap">${pfThumb(p)}<div style="min-width:0"><b>${esc(p.title)}</b><div class="tiny muted break">/portfolio/${esc(p.slug)}</div></div></div></td>
         <td class="small">${esc(cat(p.category)?.name || p.category)}${p.subcategory && p.subcategory !== cat(p.category)?.name ? `<div class="tiny muted">${esc(p.subcategory)}</div>` : ''}</td>
-        <td><label class="sw" title="Featured"><input type="checkbox" data-flag="featured" ${p.featured ? 'checked' : ''}><span></span></label></td>
+        <td><label class="sw" title="Show first on the home page"><input type="checkbox" data-flag="featured" ${p.featured ? 'checked' : ''}><span></span></label></td>
         <td><label class="sw" title="Published"><input type="checkbox" data-flag="published" ${p.published ? 'checked' : ''}><span></span></label> <span class="tiny ${p.published ? '' : 'muted'}">${p.published ? 'Published' : 'Draft'}</span></td>
         <td class="num mono small">${p.display_order}</td>
         <td class="small nowrap">${pfWhen(p.updated_at)}</td>
@@ -435,7 +435,7 @@ function pfList(view, { projects, categories, media }) {
     const flag = e.target.dataset?.flag;
     if (!flag) return;
     const id = e.target.closest('tr').dataset.id;
-    try { await api(`/admin/portfolio/projects/${id}`, { method: 'PATCH', body: { [flag]: e.target.checked } }); toast(flag === 'featured' ? (e.target.checked ? 'Added to Featured' : 'Removed from Featured') : (e.target.checked ? 'Published' : 'Moved to drafts')); reload(); } catch (ex) { toast(ex.message); e.target.checked = !e.target.checked; }
+    try { await api(`/admin/portfolio/projects/${id}`, { method: 'PATCH', body: { [flag]: e.target.checked } }); toast(flag === 'featured' ? (e.target.checked ? 'Shown first on the home page' : 'Removed from home page highlights') : (e.target.checked ? 'Published' : 'Moved to drafts')); reload(); } catch (ex) { toast(ex.message); e.target.checked = !e.target.checked; }
   };
   const s = view.querySelector('#pfSearch');
   s.oninput = () => { pfState.search = s.value; const pos = s.selectionStart; pfList(view, pfState.data); const n = view.querySelector('#pfSearch'); n.focus(); n.setSelectionRange(pos, pos); };
@@ -561,6 +561,11 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {} }
   });
 }
 
+// Label / value rows (project details, results)
+const pairRow = (x = {}, ph = '') => `<div class="row pf-pair" style="gap:8px;flex-wrap:nowrap"><input class="input" data-pk="label" placeholder="${esc(ph || 'Label')}" value="${esc(x.label || '')}" style="flex:1;min-width:0"><input class="input" data-pk="value" placeholder="Value" value="${esc(x.value || '')}" style="flex:1.4;min-width:0"><button type="button" class="btn sm quiet del" data-pair-del aria-label="Remove">×</button></div>`;
+const pairRows = (items = [], hints = []) => (items.length ? items.map((x) => pairRow(x)).join('') : hints.slice(0, 2).map((h) => pairRow({}, h)).join(''));
+const readPairs = (root, name) => [...root.querySelectorAll(`[data-pairs="${name}"] .pf-pair`)].map((r) => ({ label: r.querySelector('[data-pk=label]').value.trim(), value: r.querySelector('[data-pk=value]').value.trim() })).filter((x) => x.label && x.value);
+
 // ── Project editor ───────────────────────────────────────────────────────
 async function pfEditor(view, { projects, categories }) {
   const isNew = !pfState.id;
@@ -593,11 +598,19 @@ async function pfEditor(view, { projects, categories }) {
         <div class="card card-pad stack" style="gap:14px"><h3>Case study</h3><p class="small muted" style="margin-top:-8px">Only filled-in sections appear on the project page. Don't add numbers you can't prove.</p>
           ${T('challenge', 'Challenge', 4)}${T('solution', 'Solution', 4)}
           <div class="field"><label>More sections</label><div id="secs" class="stack" style="gap:12px">${(p.case_sections || []).map(section).join('')}</div><button type="button" class="btn sm ghost" data-sec-add style="margin-top:10px;align-self:flex-start">+ Add section</button><span class="hint">e.g. Website Experience, Inventory Experience, Admin Dashboard, Lead Generation, Responsive Design.</span></div>
+        </div>
+        <div class="card card-pad stack" style="gap:14px"><h3>Card details &amp; results</h3>
+          <div class="field"><label>Project details</label><div class="stack" style="gap:8px" data-pairs="details">${pairRows(p.details, ['Platform', 'Objective', 'Audience', 'Budget', 'Creative', 'Design Approach'])}</div>
+            <button type="button" class="btn sm ghost" data-pair-add="details" style="margin-top:8px;align-self:flex-start">+ Add detail</button>
+            <span class="hint">Shown on the card and project page. Ads cards use Platform, Objective, Creative, Audience, Budget. UI/UX cards use Platform and Design Approach.</span></div>
+          <div class="field"><label>Results (real numbers only)</label><div class="stack" style="gap:8px" data-pairs="metrics">${pairRows(p.metrics, ['SEO Score', 'Technical Health', 'Keyword Growth', 'Organic Visibility'])}</div>
+            <button type="button" class="btn sm ghost" data-pair-add="metrics" style="margin-top:8px;align-self:flex-start">+ Add result</button>
+            <span class="hint">Shown as “Project results” — only add numbers from real reports (e.g. Search Console, Ads Manager). Leave empty otherwise; the card then shows the work delivered.</span></div>
           ${T('results', 'Results / Project outcome', 3, 'Only real outcomes. Leave empty if you don’t have them.')}${T('testimonial', 'Testimonial', 2, 'A real quote from the client, with their permission.')}
         </div>
         <div class="card card-pad"><h3>Visibility</h3>
           <div class="pf-g3" style="margin-top:12px">
-            <label class="sw-row"><span class="sw"><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}><span></span></span> Featured project</label>
+            <label class="sw-row"><span class="sw"><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}><span></span></span> Show first on the home page</label>
             <label class="sw-row"><span class="sw"><input type="checkbox" name="published" ${p.published ? 'checked' : ''}><span></span></span> Published</label>
             ${F('display_order', 'Display order', 'type="number" min="0" step="1"', 'Lower shows first. Or drag in the list.')}
           </div>
@@ -623,6 +636,7 @@ async function pfEditor(view, { projects, categories }) {
     location: val('location'), year: val('year'), short_description: val('short_description'), description: val('description'),
     services: readTags(form, 'services'), technologies: readTags(form, 'technologies'), project_url: val('project_url'), admin_url: val('admin_url'),
     challenge: val('challenge'), solution: val('solution'), results: val('results'), testimonial: val('testimonial'), case_sections: sections(),
+    details: readPairs(form, 'details'), metrics: readPairs(form, 'metrics'),
     featured: form.elements.featured.checked, published: form.elements.published.checked, display_order: val('display_order'),
     cover_image: imgs.cover_image, logo: imgs.logo, gallery,
   });
@@ -634,7 +648,7 @@ async function pfEditor(view, { projects, categories }) {
       <div class="pv-body"><p class="pv-kicker">${esc(d.featured && d.subcategory ? d.subcategory : c?.name || '')}${d.industry ? ` · <span>${esc(d.industry)}</span>` : ''}</p>
       <h4>${esc(d.title || 'Project name')}</h4><p class="pv-desc">${esc(d.short_description || 'Short description')}</p>
       <div class="pv-tags">${d.services.slice(0, 4).map((s) => `<span>${esc(s)}</span>`).join('')}</div><p class="pv-more">View Project →</p></div></div>
-      <p class="tiny muted" style="margin-top:8px">${d.published ? 'Published' : 'Draft — not visible on the website'}${d.featured ? ' · ★ Featured' : ''}</p>`;
+      <p class="tiny muted" style="margin-top:8px">${d.published ? 'Published' : 'Draft — not visible on the website'}${d.featured ? ' · ★ Home page' : ''}</p>`;
     view.querySelector('#slugOut').textContent = d.slug || pfSlug(d.title) || '…';
     const n = d.short_description.length;
     view.querySelector('#sdCount').textContent = `${n}/300`;
@@ -679,6 +693,9 @@ async function pfEditor(view, { projects, categories }) {
     }
     if (t.dataset.galCover) { imgs.cover_image = gallery[+t.dataset.galCover].url; toast('Cover image set'); return pfEditor.redraw(); }
     if (t.dataset.galDel) { gallery.splice(+t.dataset.galDel, 1); return pfEditor.redraw(); }
+    const pa = t.closest('[data-pair-add]');
+    if (pa) { view.querySelector(`[data-pairs="${pa.dataset.pairAdd}"]`).insertAdjacentHTML('beforeend', pairRow({})); return; }
+    if (t.closest('[data-pair-del]')) { t.closest('.pf-pair').remove(); preview(); return; }
     if (t.closest('[data-sec-add]')) { view.querySelector('#secs').insertAdjacentHTML('beforeend', section({})); return; }
     const sec = t.closest('[data-sec]');
     if (sec && t.closest('[data-sec-del]')) { sec.remove(); return; }
