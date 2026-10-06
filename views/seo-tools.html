@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<!--#include head-->
+</head>
+<body>
+<!--#include header-->
+<main id="main">
+
+<section class="tl-hero">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / SEO Tools</nav>
+    <span class="eyebrow">Free SEO tools</span>
+    <h1>Free SEO Tools for <span class="grad-text">Better Websites</span></h1>
+    <p class="lede">Analyze, optimize and improve your website with practical SEO tools built for marketers, businesses and creators.</p>
+    <form class="tl-url tl-hero-form" action="/seo-tools/website-seo-checker" method="get">
+      <input class="input" name="url" placeholder="Enter your website — e.g. yourbusiness.in" inputmode="url" autocomplete="url" required aria-label="Your website">
+      <button class="btn primary lg" type="submit">Check My Website →</button>
+    </form>
+    <p class="tl-meta"><b>{{tools.live}}</b> tools live now · <b>{{tools.count}}</b> planned across 7 categories · No sign-up</p>
+    <nav class="tl-jump" aria-label="Tool categories"><a href="#on-page">On-Page</a><a href="#keyword">Keywords</a><a href="#technical">Technical</a><a href="#local">Local SEO</a><a href="#backlink">Backlinks</a><a href="#ai">AI SEO</a><a href="#geo">GEO &amp; AI Search</a></nav>
+  </div>
+</section>
+
+<div class="wrap tl-cats">{{tools.cats}}</div>
+
+<section class="section tight">
+  <div class="wrap">
+    <div class="cta-final reveal">
+      <div><span class="eyebrow">Want the full picture?</span><h2>Free tools check one page. An audit checks your whole site.</h2><p style="margin-top:14px;font-size:17px">Run a 10-page SEO audit free — or go deeper with the 25-page (₹{{price.p25}}) and 50-page (₹{{price.p50}}) audits with fixes and a roadmap.</p></div>
+      <div class="row wrap-row" style="justify-content:flex-end"><a class="btn white lg" href="/seo-audit#free-audit">Run Full SEO Audit →</a><a class="btn glass lg" href="/services#seo">SEO Services</a></div>
+    </div>
+  </div>
+</section>
+</main>
+<!--#include footer-->
+</body>
+</html>

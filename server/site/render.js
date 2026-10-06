@@ -11,6 +11,8 @@ import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
 import { portfolioVars, homeWorkHtml, projectVars, listProjects } from '../portfolio.js';
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
+import { productsVars, homeContentVars } from '../content.js';
+import { hubVars, toolVars, TOOLS } from '../tools.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIEWS = path.join(here, '..', '..', 'views');
@@ -42,6 +44,7 @@ export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
   portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO, Social Media, Ads & UI/UX Work | Click2Client Media', description: 'A curated showcase of websites, SEO campaigns, social media strategies, advertising campaigns and UI/UX experiences created by Click2Client Media for brands and businesses.', priority: '0.8', crumb: 'Portfolio' },
+  seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: 'Free SEO Tools — Website SEO Checker, Meta Tags, Robots.txt & More | Click2Client Media', description: 'Free SEO tools to analyze, optimize and improve your website: SEO checker, SEO score, meta tags, headings, image ALT, canonical, robots.txt, sitemap, schema, Open Graph, links and redirects.', priority: '0.9', crumb: 'SEO Tools' },
   products: { path: '/products', file: 'products', title: 'Products — ATS, AI Quiz, Productivity & CRM Systems | Click2Client Media', description: 'Ready-made digital systems from Click2Client Media: an ATS for recruitment, an AI quiz system, a productivity / to-do system and a CRM for managing leads and customers.', priority: '0.8', crumb: 'Products' },
   about: { path: '/about', file: 'about', title: 'About Click2Client Media — Digital Marketing, SEO & Web Development, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
   blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
@@ -127,6 +130,9 @@ export async function renderPage(id, req, override = {}) {
     [`nav.${p.nav || id}`]: 'aria-current="page"',
   };
   if (id === 'portfolio') Object.assign(vars, await portfolioVars());
+  if (id === 'products') Object.assign(vars, await productsVars());
+  if (id === 'seoTools') Object.assign(vars, hubVars());
+  if (id === 'home') Object.assign(vars, await homeContentVars());
   if (id === 'blog') Object.assign(vars, await blogListVars());
   if (id === 'home') vars['home.work'] = await homeWorkHtml();
   Object.assign(vars, override.vars);
@@ -157,6 +163,18 @@ export async function renderProject(req, project) {
   return renderPage('portfolioProject', req, { page, vars: v });
 }
 
+/** One free SEO tool page. */
+export async function renderTool(req, tool) {
+  const base = siteUrl(req);
+  const path = `/seo-tools/${tool.slug}`;
+  const page = {
+    path, file: 'seo-tool', nav: 'audit', title: `${tool.name} — Free SEO Tool | Click2Client Media`, description: tool.desc,
+    trail: [{ name: 'Home', path: '/' }, { name: 'SEO Tools', path: '/seo-tools' }, { name: tool.name, path }],
+    extraSchema: { '@type': 'WebApplication', name: tool.name, description: tool.desc, url: `${base}${path}`, applicationCategory: 'BusinessApplication', operatingSystem: 'Any', offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' }, provider: { '@id': `${base}/#organization` } },
+  };
+  return renderPage('seoTool', req, { page, vars: toolVars(tool) });
+}
+
 export async function sitemap(req) {
   const base = siteUrl(req);
   const today = new Date().toISOString().slice(0, 10);
@@ -165,6 +183,7 @@ export async function sitemap(req) {
   const urls = [
     ...Object.values(PAGES).map((p) => `  <url><loc>${base}${p.path}</loc><lastmod>${today}</lastmod><priority>${p.priority}</priority></url>`),
     ...posts.map((p) => `  <url><loc>${base}/blog/${p.id}</loc><lastmod>${(p.updated || p.date).slice(0, 10)}</lastmod><priority>0.7</priority></url>`),
+    ...TOOLS.filter((t) => t.live).map((t) => `  <url><loc>${base}/seo-tools/${t.slug}</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`),
     ...works.map((p) => `  <url><loc>${base}/portfolio/${p.slug}</loc><lastmod>${String(p.updated_at).slice(0, 10)}</lastmod><priority>0.6</priority></url>`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;

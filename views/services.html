@@ -20,25 +20,32 @@
   <div class="wrap">
     <div class="explorer" role="tablist" aria-label="Service areas">
       <button class="area on" role="tab" aria-selected="true" aria-controls="digital-marketing" data-area="digital-marketing">
-        <span class="big-k">MARKETING</span><span class="area-title">Digital Marketing</span><p>Ads, social media and lead generation that reach buyers — measured to the enquiry.</p>
+        <span class="big-k">MARKETING</span><span class="area-title">Digital Marketing</span><p>Meta &amp; Google Ads, social media and branding — measured to the enquiry.</p>
       </button>
       <button class="area" role="tab" aria-selected="false" aria-controls="seo" data-area="seo">
-        <span class="big-k">SEO</span><span class="area-title">SEO Services</span><p>Technical, on-page, local and content SEO that earns lasting Google visibility.</p>
+        <span class="big-k">SEO</span><span class="area-title">SEO</span><p>Technical, on-page, local and content SEO that earns lasting Google visibility.</p>
       </button>
       <button class="area" role="tab" aria-selected="false" aria-controls="website-development" data-area="website-development">
-        <span class="big-k">TECHNOLOGY</span><span class="area-title">Website Development</span><p>Websites, web applications and UI/UX built to load fast and convert.</p>
+        <span class="big-k">WEB</span><span class="area-title">Web Development</span><p>Fast WordPress and custom websites built to convert.</p>
+      </button>
+      <button class="area" role="tab" aria-selected="false" aria-controls="ui-ux" data-area="ui-ux">
+        <span class="big-k">DESIGN</span><span class="area-title">UI/UX Design</span><p>Interfaces, flows and design systems people find easy to use.</p>
+      </button>
+      <button class="area" role="tab" aria-selected="false" aria-controls="crm-app-development" data-area="crm-app-development">
+        <span class="big-k">SYSTEMS</span><span class="area-title">CRM &amp; App Development</span><p>CRMs, dashboards and web apps that run your operations.</p>
       </button>
     </div>
 
     <!-- All service content is in the HTML for search engines; JavaScript only toggles which area is shown. -->
     <div class="area-detail svc-section" id="digital-marketing" role="tabpanel" data-panel="digital-marketing">
       <div>
-        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">Digital Marketing &amp; Performance Marketing</h2>
+        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">Digital Marketing, Performance Marketing &amp; Branding</h2>
         <p style="margin-bottom:22px">We plan, run and optimise campaigns across Google and Meta, and set up the tracking that tells you exactly which campaigns bring calls, WhatsApp messages and sales.</p>
         <div class="sub-groups">
           <div><h3>Paid advertising</h3><ul><li>Google Ads</li><li>Meta Ads</li><li>Performance Marketing</li><li>Remarketing</li><li>Campaign Strategy</li></ul></div>
           <div><h3>Social &amp; content</h3><ul><li>Social Media Handling</li><li>Social Media Marketing</li><li>Content Marketing</li><li>Email Marketing</li></ul></div>
           <div><h3>Leads &amp; conversion</h3><ul><li>Lead Generation</li><li>Conversion Optimization</li></ul></div>
+          <div><h3>Branding</h3><ul><li>Brand identity</li><li>Creative design</li><li>Brand guidelines</li></ul></div>
           <div><h3>Measurement</h3><ul><li>Marketing Analytics</li><li>Google Analytics</li><li>Google Tag Manager</li></ul></div>
         </div>
       </div>
@@ -72,20 +79,52 @@
 
     <div class="area-detail svc-section" id="website-development" role="tabpanel" data-panel="website-development">
       <div>
-        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">Website Development, Web Applications &amp; UI/UX</h2>
-        <p style="margin-bottom:22px">From a fast business website to a custom CRM, we design and build for speed, search and conversion — on WordPress, custom code, or modern AI-assisted workflows where they genuinely speed delivery.</p>
+        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">Web Development</h2>
+        <p style="margin-bottom:22px">From a fast business website to a full e-commerce store, we design and build for speed, search and conversion — on WordPress, custom code, or modern AI-assisted workflows where they genuinely speed delivery.</p>
         <div class="sub-groups">
           <div><h3>WordPress websites</h3><ul><li>Business websites</li><li>Corporate websites</li><li>Landing pages</li><li>E-commerce websites</li><li>Elementor</li><li>WooCommerce</li><li>CMS development</li></ul></div>
           <div><h3>Custom websites</h3><ul><li>HTML</li><li>CSS</li><li>JavaScript</li><li>Modern frameworks</li><li>Custom frontend/backend systems</li><li>AI-assisted (vibe-coded) builds</li></ul></div>
-          <div id="web-applications" class="svc-section"><h3>Web applications</h3><ul><li>CRM</li><li>Dashboards</li><li>Internal tools</li><li>SaaS platforms</li><li>Business automation systems</li></ul></div>
-          <div id="ui-ux" class="svc-section"><h3>UI/UX design</h3><ul><li>Wireframes</li><li>User flows</li><li>Interface design</li><li>Responsive design</li><li>Design systems</li><li>Conversion-focused landing pages</li></ul></div>
         </div>
       </div>
       <aside class="outcomes">
-        <figure class="media"><picture><source srcset="/img/illustrations/website-development.svg" type="image/svg+xml"><img src="/img/illustrations/website-development.webp" alt="Website development: responsive website and code editor" width="640" height="400" loading="lazy" decoding="async"></picture></figure>
+        <figure class="media"><picture><source srcset="/img/illustrations/website-development.svg" type="image/svg+xml"><img src="/img/illustrations/website-development.webp" alt="Website development: responsive website and code editor" width="640" height="400" loading="lazy"></picture></figure>
         <h3>What this is designed to do</h3>
         <ul><li>Load fast on mobile networks</li><li>Make it obvious how to enquire or buy</li><li>Be built search-friendly from day one</li></ul>
         <a class="btn primary" href="/enquire?service=Website%20Development" style="width:100%">Discuss My Website</a>
+      </aside>
+    </div>
+
+    <div class="area-detail svc-section" id="ui-ux" role="tabpanel" data-panel="ui-ux">
+      <div>
+        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">UI/UX Design</h2>
+        <p style="margin-bottom:22px">We design interfaces around how people actually use them — clear flows, readable layouts and consistent components — for websites, landing pages, dashboards and apps.</p>
+        <div class="sub-groups">
+          <div><h3>Research &amp; structure</h3><ul><li>Wireframes</li><li>User flows</li></ul></div>
+          <div><h3>Interface design</h3><ul><li>Interface design</li><li>Responsive design</li><li>Design systems</li><li>Conversion-focused landing pages</li></ul></div>
+        </div>
+      </div>
+      <aside class="outcomes">
+        <figure class="media"><picture><source srcset="/img/illustrations/digital-presence.svg" type="image/svg+xml"><img src="/img/illustrations/digital-presence.webp" alt="UI/UX design: interface layouts across devices" width="640" height="400" loading="lazy"></picture></figure>
+        <h3>What this is designed to do</h3>
+        <ul><li>Make the next step obvious</li><li>Feel consistent on every screen size</li><li>Be quick to build and easy to extend</li></ul>
+        <a class="btn primary" href="/enquire?service=UI%2FUX%20Design" style="width:100%">Discuss My Design</a>
+      </aside>
+    </div>
+
+    <div class="area-detail svc-section" id="crm-app-development" role="tabpanel" data-panel="crm-app-development">
+      <div>
+        <h2 style="font:700 24px var(--display);letter-spacing:-0.02em;margin-bottom:8px">CRM &amp; App Development</h2>
+        <p style="margin-bottom:22px">Custom systems that run the day-to-day of a business — from a CRM for your leads and customers to dashboards, internal tools and SaaS platforms.</p>
+        <div class="sub-groups">
+          <div id="web-applications"><h3>Web applications</h3><ul><li>CRM</li><li>Dashboards</li><li>Internal tools</li><li>SaaS platforms</li><li>Business automation systems</li></ul></div>
+        </div>
+        <p style="margin-top:22px">Prefer something ready-made? See our <a href="/products">products</a> — an ATS, AI quiz system, to-do system and CRM.</p>
+      </div>
+      <aside class="outcomes">
+        <figure class="media"><picture><source srcset="/img/illustrations/seo-audit-dashboard.svg" type="image/svg+xml"><img src="/img/illustrations/seo-audit-dashboard.webp" alt="CRM and dashboard application interface" width="640" height="400" loading="lazy"></picture></figure>
+        <h3>What this is designed to do</h3>
+        <ul><li>Keep every lead and customer in one place</li><li>Replace spreadsheets and manual follow-ups</li><li>Grow with your team</li></ul>
+        <a class="btn primary" href="/enquire?service=CRM%20%2F%20App%20Development" style="width:100%">Discuss My System</a>
       </aside>
     </div>
   </div>

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en-IN">
+<head>
+<!--#include head-->
+</head>
+<body>
+<!--#include header-->
+<main id="main">
+
+<section class="tl-hero small">
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / <a href="/seo-tools">SEO Tools</a> / {{tool.name}}</nav>
+    <a class="eyebrow" href="/seo-tools#{{tool.catId}}" style="text-decoration:none">{{tool.cat}} · Free</a>
+    <h1>{{tool.name}}</h1>
+    <p class="lede">{{tool.desc}}</p>
+    <form class="tl-form" id="toolForm" data-tool="{{tool.slug}}" novalidate>{{tool.form}}</form>
+    <p class="tl-err" id="toolErr" role="alert" hidden></p>
+  </div>
+</section>
+
+<section class="section tl-result-sec" id="toolResult" hidden aria-live="polite">
+  <div class="wrap"><div id="toolOut"></div>
+    <div class="tl-next">
+      <div><b>This checked one page.</b><span>Run a full SEO audit to check up to 50 pages, with evidence for every issue, how to fix it and a 30-day roadmap.</span></div>
+      <div class="row wrap-row"><a class="btn primary" id="auditLink" href="/seo-audit#free-audit">Run Full SEO Audit →</a><a class="btn outline" href="/services#seo">Get it fixed by our team</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="section tint">
+  <div class="wrap">
+    <div class="split-head reveal"><div class="sec-head"><span class="eyebrow">More free tools</span><h2>Keep improving your website</h2></div><p><a href="/seo-tools">See all SEO tools →</a></p></div>
+    <div class="tl-grid related">{{tool.related}}</div>
+  </div>
+</section>
+</main>
+<!--#include footer-->
+<script type="module" src="/js/tools.js"></script>
+</body>
+</html>

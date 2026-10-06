@@ -87,6 +87,18 @@ const SCHEMA = [
     id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES portfolio_projects(id) ON DELETE CASCADE,
     image_url TEXT NOT NULL, alt_text TEXT, display_order INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
   `CREATE INDEX IF NOT EXISTS idx_ppi_project ON portfolio_project_images(project_id, display_order)`,
+  // Editable site content (brands, products …): one row per item, fields in data.
+  `CREATE TABLE IF NOT EXISTS site_items (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, slug TEXT NOT NULL, title TEXT NOT NULL, data JSONB NOT NULL DEFAULT '{}',
+    image TEXT, display_order INTEGER NOT NULL DEFAULT 0, published BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_site_items_slug ON site_items(kind, slug)`,
+  `ALTER TABLE site_items ENABLE ROW LEVEL SECURITY`,
+  `DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') AND NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'si_public_read') THEN
+      CREATE POLICY si_public_read ON site_items FOR SELECT TO anon, authenticated USING (published);
+    END IF;
+  END $$`,
   // Row Level Security: the site's server connects as the table owner (which
   // bypasses RLS) and does every write itself after checking the admin
   // session. If this database is ever exposed through Supabase's public API,

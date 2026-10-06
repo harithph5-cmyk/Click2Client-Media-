@@ -4,12 +4,12 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['blog', 'Blog'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['products', 'Products'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
 const planLabel = (p, amount) => (PLAN[p] || p) + ((p === 'p25' || p === 'p50') && amount ? ` · ₹${amount}` : '');
-const SRC = { free_audit: 'Free audit', order_p25: '25-page audit order', order_p50: '50-page audit order', enquiry_page: 'Enquiry form', seo_implementation: 'Implementation request (report)', website: 'Website' };
+const SRC = { free_audit: 'Free audit', order_p25: '25-page audit order', order_p50: '50-page audit order', enquiry_page: 'Enquiry form', home_form: 'Home page form', seo_implementation: 'Implementation request (report)', website: 'Website' };
 const state = { tab: location.hash.slice(1) || 'overview', leadFilter: 'all', auditFilter: 'all', pending: 0 };
 
 // ── Auth ─────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ function shell() {
     </div></header>
     <main class="view" id="view"></main>`;
   document.getElementById('logout').onclick = async () => { await api('/admin/logout', { method: 'POST' }).catch(() => {}); setCsrf(''); loginView(); };
-  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; state.blogEdit = null; if (state.pf) Object.assign(state.pf, { view: 'list', id: null }); route(); }); state.bound = true; }
+  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; state.blogEdit = null; for (const k in (state.ct || {})) state.ct[k].edit = null; if (state.pf) Object.assign(state.pf, { view: 'list', id: null }); route(); }); state.bound = true; }
   route();
 }
 
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, portfolio, blog: blogTab, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, portfolio, products: (v) => contentTab(v, 'product'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -317,13 +317,23 @@ async function settings(view) {
             <div class="stack"><label class="btn sm accent" style="cursor:pointer">Upload QR image<input type="file" id="qrFile" accept="image/png,image/jpeg,image/webp" hidden></label>${qrConfigured ? '<button class="btn sm ghost" id="qrDel" type="button">Remove (use built-in QR)</button>' : ''}<span class="tiny muted">PNG, JPG or WebP, under 1 MB.</span></div>
           </div>
         </div>
-        <div class="card card-pad"><h3>Audit prices</h3><p class="small muted" style="margin-top:4px">25-page: <b style="color:var(--ink)">₹${pricing.p25}</b> · 50-page: <b style="color:var(--ink)">₹${pricing.p50}</b>. Prices are set on the server (<code>PRICE_25_PAGE_AUDIT</code>, <code>PRICE_50_PAGE_AUDIT</code>) so they can't be changed from a browser.</p></div>
+        <form class="card card-pad" id="priceForm"><h3>SEO audit prices</h3><p class="small muted" style="margin-top:4px">Shown on the home page, SEO Audit page, SEO Tools and menu, and charged on new orders. The free 10-page audit stays ₹0. Existing orders keep the price they were placed at.</p>
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+            <div class="field"><label for="pr25">25-page audit (₹)</label><input class="input" id="pr25" name="p25" type="number" min="1" max="100000" step="1" value="${pricing.p25}" required></div>
+            <div class="field"><label for="pr50">50-page growth audit (₹)</label><input class="input" id="pr50" name="p50" type="number" min="1" max="100000" step="1" value="${pricing.p50}" required></div>
+          </div><div class="row" style="margin-top:12px"><button class="btn accent sm" type="submit">Save prices</button></div></form>
         <div class="card"><div class="card-head"><h3>Integrations</h3></div><div class="table-wrap"><table class="t"><tbody>${integrations.map((i) => `<tr><td><b>${esc(i.name)}</b><div class="tiny muted" style="margin-top:3px">${esc(i.usedFor)}</div>${i.envVars.length ? `<div class="mono tiny" style="margin-top:4px">${i.envVars.map(esc).join(' · ')}</div>` : ''}</td><td class="nowrap">${i.configured ? '<span class="pill pass">Connected</span>' : i.partiallyAvailable ? '<span class="pill warning">Limited</span>' : '<span class="pill unavailable">Not set</span>'}</td></tr>`).join('')}</tbody></table></div></div>
       </div>
     </div>`;
   document.getElementById('sf').onsubmit = async (e) => {
     e.preventDefault();
     try { await api('/admin/settings', { method: 'PUT', body: Object.fromEntries(new FormData(e.target)) }); toast('Settings saved'); } catch (ex) { toast(ex.message); }
+  };
+  document.getElementById('priceForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const body = Object.fromEntries(new FormData(e.target));
+    if (!confirm(`Change prices to ₹${body.p25} (25-page) and ₹${body.p50} (50-page)? New orders will be charged these prices.`)) return;
+    try { await api('/admin/pricing', { method: 'PUT', body }); toast('Prices updated on the website'); settings(view); } catch (ex) { toast(ex.message); }
   };
   document.getElementById('qrFile').onchange = (e) => {
     const file = e.target.files[0];
@@ -483,7 +493,7 @@ function bindTags(root, onChange) {
 
 // ── Media picker (Supabase Storage) ──────────────────────────────────────
 const FOLDER_GUESS = { websites: 'Websites', seo: 'SEO', 'social-media': 'SMM', 'ads-campaigns': 'Paid Ads' };
-function pickMedia({ multiple = false, title = 'Choose an image', project = {} } = {}) {
+function pickMedia({ multiple = false, title = 'Choose an image', project = {}, folder: uploadFolder = '' } = {}) {
   return new Promise((resolve) => {
     const words = pfNorm(`${project.title || ''} ${project.client || ''}`).split(' ').filter((w) => w.length >= 3 && !['the', 'and', 'website', 'media', 'system', 'list'].includes(w));
     const score = (f) => words.filter((w) => pfNorm(f.name).includes(w)).length;
@@ -508,13 +518,13 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {} }
           body.innerHTML = `<div class="mp-bar"><div class="filters" style="margin:0">${['all', ...folders].map((fo) => `<button class="chip ${folder === fo ? 'on' : ''}" data-folder="${esc(fo)}">${fo === 'all' ? 'All' : esc(fo)}</button>`).join('')}</div>
               <input class="input" id="mpSearch" type="search" placeholder="Search file names…" value="${esc(search)}" style="height:36px;max-width:220px"></div>
             <div class="mp-grid">${shown.map((f) => `<button type="button" class="mp-item ${picked.includes(f.url) ? 'on' : ''}" data-url="${esc(f.url)}" title="${esc(f.path)}"><img src="${esc(f.url)}" alt="" loading="lazy"><span>${f._s ? '<b>Suggested</b> · ' : ''}${esc(f.name)}</span></button>`).join('') || '<p class="small muted">No images here.</p>'}</div>
-            <div class="mp-foot"><label class="btn sm" style="cursor:pointer">Upload to ${esc(folder === 'all' ? (FOLDER_GUESS[project.category] || 'bucket root') : folder)}<input type="file" id="mpUp" accept="image/png,image/jpeg,image/webp" multiple hidden></label>
+            <div class="mp-foot"><label class="btn sm" style="cursor:pointer">Upload to ${esc(folder === 'all' ? (uploadFolder || FOLDER_GUESS[project.category] || 'bucket root') : folder)}<input type="file" id="mpUp" accept="image/png,image/jpeg,image/webp" multiple hidden></label>
               <span class="spacer"></span>${multiple ? `<button class="btn sm accent" data-use ${picked.length ? '' : 'disabled'}>Add ${picked.length || ''} selected</button>` : ''}</div>
             <details style="margin-top:12px"><summary class="small muted" style="cursor:pointer">Or paste an image link</summary>${urlForm()}</details>`;
           const s = body.querySelector('#mpSearch');
           s.oninput = () => { search = s.value; const pos = s.selectionStart; render(); const n = m.querySelector('#mpSearch'); n.focus(); n.setSelectionRange(pos, pos); };
           body.querySelector('#mpUp').onchange = async (e) => {
-            const target = folder === 'all' ? (FOLDER_GUESS[project.category] || '') : folder;
+            const target = folder === 'all' ? (uploadFolder || FOLDER_GUESS[project.category] || '') : folder;
             try {
               for (const file of e.target.files) {
                 toast(`Uploading ${file.name}…`);
@@ -771,6 +781,111 @@ function pfCategories(view, { categories }) {
   view.querySelector('#catAdd').onsubmit = async (e) => {
     e.preventDefault();
     try { await api('/admin/portfolio/categories', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); toast('Category added'); reload(); } catch (ex) { toast(ex.message); }
+  };
+}
+
+// ── Editable content: Products & Brands ─────────────────────────────────
+// The fields come from the server (content.js KINDS), so both tabs share one editor.
+const ctState = state.ct ||= {};
+async function contentTab(view, kind) {
+  const { schema, items, media } = await api(`/admin/content/${kind}`);
+  const st = (ctState[kind] ||= { edit: null });
+  const editing = st.edit === 'new' ? { title: '', data: {}, published: true } : items.find((x) => x.id === st.edit);
+  if (editing) return contentForm(view, kind, schema, editing);
+  const publicUrl = kind === 'product' ? '/products' : '/#br-h';
+  const thumb = (x) => (x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy" style="width:72px;height:46px;object-fit:${kind === 'brand' ? 'contain' : 'cover'};border-radius:8px;border:1px solid var(--line);background:#fff;display:block">` : `<span class="pf-noimg" style="width:72px;height:46px">${kind === 'brand' ? 'No logo' : 'No image'}</span>`);
+  view.innerHTML = `${head('Website', schema.label, esc(schema.hint), `<a class="btn ghost sm" href="${publicUrl}" target="_blank">View on site ↗</a><button class="btn sm accent" data-new>+ Add ${esc(schema.singular)}</button>`)}
+    ${media.configured ? '' : '<div class="pf-note"><span><b>Supabase images not connected.</b> Add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in your hosting environment variables to upload images. You can paste image links meanwhile.</span></div>'}
+    ${items.length ? `<div class="card table-wrap"><table class="t pf-table"><thead><tr><th style="width:34px"></th><th>#</th><th>${esc(schema.image.replace(' (optional)', ''))}</th><th>Name</th><th>Status</th><th>Actions</th></tr></thead><tbody id="ctRows">
+      ${items.map((x, i) => `<tr data-id="${esc(x.id)}" draggable="true">
+        <td class="pf-grip" title="Drag to reorder">⋮⋮</td><td class="mono small">${String(i + 1).padStart(2, '0')}</td>
+        <td>${thumb(x)}</td>
+        <td><b>${esc(x.title)}</b>${x.data.tag ? `<div class="tiny muted">${esc(x.data.tag)}</div>` : x.data.website ? `<div class="tiny muted break">${esc(x.data.website)}</div>` : ''}</td>
+        <td><label class="sw" title="Shown on the website"><input type="checkbox" data-pub ${x.published ? 'checked' : ''}><span></span></label> <span class="tiny ${x.published ? '' : 'muted'}">${x.published ? 'Shown' : 'Hidden'}</span></td>
+        <td class="nowrap"><button class="btn sm ghost" data-edit>Edit</button><button class="btn sm quiet del" data-del>Delete</button><span class="pf-move"><button class="btn sm quiet" data-up aria-label="Move up">↑</button><button class="btn sm quiet" data-down aria-label="Move down">↓</button></span></td>
+      </tr>`).join('')}</tbody></table></div><p class="tiny muted" style="margin-top:8px">Drag rows (or use ↑ ↓) to change the order on the website.</p>`
+    : `<div class="card empty"><h3>No ${esc(schema.label.toLowerCase())} yet.</h3><p><button class="btn accent sm" data-new>+ Add ${esc(schema.singular)}</button></p></div>`}`;
+  const reload = () => contentTab(view, kind);
+  const saveOrder = async () => {
+    try { await api(`/admin/content/${kind}/order`, { method: 'PUT', body: { ids: [...view.querySelectorAll('#ctRows tr[data-id]')].map((r) => r.dataset.id) } }); toast('Order saved'); reload(); } catch (ex) { toast(ex.message); }
+  };
+  view.onclick = async (e) => {
+    const t = e.target;
+    if (t.closest('[data-new]')) { st.edit = 'new'; return reload(); }
+    const tr = t.closest('tr[data-id]');
+    if (!tr) return;
+    if (t.closest('[data-edit]')) { st.edit = tr.dataset.id; return reload(); }
+    if (t.closest('[data-del]')) {
+      if (!confirm(`Delete "${tr.querySelector('b').textContent}"? It is removed from the website. Its image stays in Supabase.`)) return;
+      try { await api(`/admin/content/${kind}/${tr.dataset.id}`, { method: 'DELETE' }); toast('Deleted'); reload(); } catch (ex) { toast(ex.message); }
+    }
+    const dir = t.closest('[data-up]') ? -1 : t.closest('[data-down]') ? 1 : 0;
+    if (dir) { const sib = dir < 0 ? tr.previousElementSibling : tr.nextElementSibling; if (sib) { dir < 0 ? sib.before(tr) : sib.after(tr); saveOrder(); } }
+  };
+  view.onchange = async (e) => {
+    if (!e.target.matches('[data-pub]')) return;
+    try { await api(`/admin/content/${kind}/${e.target.closest('tr').dataset.id}`, { method: 'PATCH', body: { published: e.target.checked } }); toast(e.target.checked ? 'Shown on the website' : 'Hidden from the website'); reload(); } catch (ex) { toast(ex.message); e.target.checked = !e.target.checked; }
+  };
+  const body = view.querySelector('#ctRows');
+  if (body) {
+    let dragging = null;
+    body.addEventListener('dragstart', (e) => { dragging = e.target.closest('tr'); dragging.classList.add('dragging'); });
+    body.addEventListener('dragover', (e) => { e.preventDefault(); const over = e.target.closest('tr'); if (!over || over === dragging) return; const r = over.getBoundingClientRect(); over[e.clientY > r.top + r.height / 2 ? 'after' : 'before'](dragging); });
+    body.addEventListener('dragend', () => { dragging?.classList.remove('dragging'); dragging = null; saveOrder(); });
+  }
+}
+
+function contentForm(view, kind, schema, x) {
+  const isNew = !x.id;
+  let image = x.image || '';
+  const field = (f) => {
+    const v = x.data?.[f.k];
+    const id = `cf-${f.k}`;
+    const input = f.type === 'textarea' ? `<textarea class="input" id="${id}" name="${f.k}" rows="3" maxlength="${f.max || 1000}">${esc(v || '')}</textarea>`
+      : f.type === 'list' ? `<textarea class="input" id="${id}" name="${f.k}" rows="4">${esc((v || []).join('\n'))}</textarea>`
+      : f.type === 'select' ? `<select class="input" id="${id}" name="${f.k}">${f.options.map((o) => `<option ${o === v ? 'selected' : ''}>${o}</option>`).join('')}</select>`
+      : `<input class="input" id="${id}" name="${f.k}" value="${esc(v || '')}" placeholder="${esc(f.placeholder || '')}" ${f.max ? `maxlength="${f.max}"` : ''}>`;
+    return `<div class="field"><label for="${id}">${esc(f.label)}${f.required ? ' *' : ''}</label>${input}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
+  };
+  view.innerHTML = `${head(schema.label, isNew ? `Add ${esc(schema.singular)}` : `Edit · ${esc(x.title)}`, '', '<button class="btn ghost sm" data-back>← Back</button>')}
+    <form id="cf" class="pf-editor">
+      <div class="card card-pad stack" style="gap:14px;min-width:0">
+        <div class="field"><label for="cf-title">Name *</label><input class="input" id="cf-title" name="title" value="${esc(x.title)}" required maxlength="120"></div>
+        ${schema.fields.map(field).join('')}
+        <label class="sw-row"><span class="sw"><input type="checkbox" name="published" ${x.published ? 'checked' : ''}><span></span></span> Show on the website</label>
+      </div>
+      <aside class="pf-side">
+        <div class="card card-pad"><div class="row" style="justify-content:space-between"><h3>${esc(schema.image)}</h3><button type="button" class="btn sm quiet" data-img-del ${image ? '' : 'hidden'}>Remove</button></div>
+          <div class="pf-imgslot ${kind === 'brand' ? 'small' : ''}" data-img>${image ? `<img src="${esc(image)}" alt="" style="object-fit:${kind === 'brand' ? 'contain' : 'cover'}">` : '<span>Choose from Supabase or upload</span>'}</div>
+          <p class="tiny muted" style="margin-top:8px">New uploads go to the “${esc(schema.folder)}” folder in Supabase.</p></div>
+      </aside>
+      <div class="pf-actions card"><button type="button" class="btn ghost" data-back>Cancel</button><span class="spacer"></span><button type="submit" class="btn accent">${isNew ? `Save ${esc(schema.singular)}` : 'Save Changes'}</button></div>
+    </form>`;
+  const st = ctState[kind];
+  const back = () => { st.edit = null; contentTab(view, kind); };
+  const drawImg = () => {
+    view.querySelector('[data-img]').innerHTML = image ? `<img src="${esc(image)}" alt="" style="object-fit:${kind === 'brand' ? 'contain' : 'cover'}">` : '<span>Choose from Supabase or upload</span>';
+    view.querySelector('[data-img-del]').hidden = !image;
+  };
+  view.onclick = async (e) => {
+    if (e.target.closest('[data-back]')) return back();
+    if (e.target.closest('[data-img-del]')) { image = ''; return drawImg(); }
+    if (e.target.closest('[data-img]')) {
+      const [u] = await pickMedia({ title: `Choose ${schema.image.replace(' (optional)', '').toLowerCase()}`, project: { title: view.querySelector('#cf-title').value }, folder: schema.folder });
+      if (u) { image = u; drawImg(); }
+    }
+  };
+  view.onchange = null;
+  view.querySelector('#cf').onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const data = Object.fromEntries(schema.fields.map((fd) => [fd.k, fd.type === 'list' ? String(f.get(fd.k) || '').split('\n') : f.get(fd.k)]));
+    try {
+      const saved = await api(isNew ? `/admin/content/${kind}` : `/admin/content/${kind}/${x.id}`, { method: isNew ? 'POST' : 'PUT', body: { title: f.get('title'), data, image, published: f.has('published') } });
+      toast(isNew ? 'Saved ✓' : 'Changes saved ✓');
+      st.edit = saved.id;
+      contentTab(view, kind);
+    } catch (ex) { toast(ex.message); }
   };
 }
 

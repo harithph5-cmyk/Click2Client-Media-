@@ -75,6 +75,10 @@ if (freeForm) {
   });
 }
 
+// Free audit form: pre-fill the website from ?url= (links from the SEO tools)
+const auditUrl = new URLSearchParams(location.search).get('url');
+if (auditUrl && $('#f-url')) $('#f-url').value = auditUrl.slice(0, 300);
+
 // Enquiry
 const enquiry = $('#enquiryForm');
 if (enquiry) {
@@ -89,8 +93,8 @@ if (enquiry) {
     submitting(enquiry, async () => {
       try {
         const data = Object.fromEntries(new FormData(enquiry));
-        await api('/public/leads', { method: 'POST', body: { ...data, source: 'enquiry_page' } });
-        track('generate_lead', { lead_source: 'enquiry_page', service: data.service || '' });
+        await api('/public/leads', { method: 'POST', body: { ...data, source: enquiry.dataset.source || 'enquiry_page' } });
+        track('generate_lead', { lead_source: enquiry.dataset.source || 'enquiry_page', service: data.service || '' });
         enquiry.reset();
         // Hand the enquiry straight to WhatsApp so it reaches the team instantly.
         const cfg = await api('/public/config').catch(() => null);
@@ -117,7 +121,7 @@ if (areas.length) {
   areas.forEach((a) => a.addEventListener('click', () => { select(a.dataset.area, false); history.replaceState(null, '', '#' + a.dataset.area); }));
   const fromHash = () => {
     const h = location.hash.slice(1);
-    const map = { 'ui-ux': 'website-development', 'web-applications': 'website-development' };
+    const map = { 'web-applications': 'crm-app-development', 'web-development': 'website-development', 'crm': 'crm-app-development' };
     const id = map[h] || h;
     if (panels.some((p) => p.dataset.panel === id)) { select(id, true); if (map[h]) setTimeout(() => document.getElementById(h)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200); }
     else select(areas[0].dataset.area, false);

@@ -15,13 +15,15 @@ import { runAudit, MODES, STAGES } from './engine/auditor.js';
 import { compareAudits } from './engine/compare.js';
 import { normalizeInputUrl, AuditInputError } from './lib/net.js';
 import * as store from './store/db.js';
-import { TIERS, publicTiers, shapeAudit, rateLimited } from './commerce/plans.js';
+import { TIERS, publicTiers, shapeAudit, rateLimited, refreshPricing, savePricing } from './commerce/plans.js';
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
-import { renderPage, renderPost, renderProject, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
+import { renderPage, renderPost, renderProject, renderTool, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
 import * as portfolio from './portfolio.js';
 import * as media from './media.js';
+import * as content from './content.js';
+import * as tools from './tools.js';
 import * as blog from './blog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -30,6 +32,8 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1.5mb' })); // allows a QR image upload in settings
+// Audit prices are editable in the admin; keep this instance's copy fresh (cached 30 s).
+app.use((req, res, next) => { refreshPricing().finally(next); });
 
 app.use((req, res, next) => {
   res.set({
@@ -221,6 +225,11 @@ const leadHandler = h(async (req, res) => {
 });
 pubApi.post('/leads', leadHandler);
 
+// Free SEO tools — public, rate limited per IP
+pubApi.post('/tools/:slug', h(async (req, res) => {
+  if (rateLimited('tool:' + req.ip, 60)) return bad(res, 'rate_limited', 'You have used the free tools a lot in the last hour. Please try again later.', 429);
+  try { res.json(await tools.runTool(req.params.slug, req.body || {})); } catch (e) { if (!e.status) throw e; bad(res, 'invalid', e.message, e.status); }
+}));
 app.use('/api/public', pubApi);
 app.post('/api/leads', leadHandler); // used by the shared lead modal
 
@@ -338,6 +347,17 @@ admin.get('/portfolio/media', pf(async (req, res) => res.json({ ...media.mediaSt
 admin.post('/portfolio/media', pf(async (req, res) => res.status(201).json(await media.uploadMedia(req.body?.folder, req.body?.filename, req.body?.dataUrl))));
 admin.post('/portfolio/media/auto-match', pf(async (req, res) => res.json({ matched: await portfolio.autoMatchCovers(await media.listMedia({ fresh: true })) })));
 
+// Audit prices
+admin.put('/pricing', pf(async (req, res) => res.json({ pricing: await savePricing(req.body || {}) })));
+
+// Editable content: brands, products (images in Supabase)
+admin.get('/content/:kind', pf(async (req, res) => { const def = content.KINDS[req.params.kind]; if (!def) return bad(res, 'not_found', 'Unknown content type.', 404); res.json({ kind: req.params.kind, schema: def, items: await content.listItems(req.params.kind, { publishedOnly: false }), media: media.mediaStatus() }); }));
+admin.post('/content/:kind', pf(async (req, res) => res.status(201).json(await content.saveItem(req.params.kind, null, req.body || {}))));
+admin.put('/content/:kind/order', pf(async (req, res) => { await content.reorderItems(req.params.kind, req.body?.ids); res.json({ ok: true }); }));
+admin.put('/content/:kind/:id', pf(async (req, res) => res.json(await content.saveItem(req.params.kind, req.params.id, req.body || {}))));
+admin.patch('/content/:kind/:id', pf(async (req, res) => res.json(await content.setPublished(req.params.kind, req.params.id, req.body?.published))));
+admin.delete('/content/:kind/:id', pf(async (req, res) => { await content.deleteItem(req.params.kind, req.params.id); res.json({ ok: true }); }));
+
 // Blog management
 admin.get('/blog', h(async (req, res) => res.json(await blog.getBlog())));
 admin.post('/blog', h(async (req, res) => { try { res.status(201).json(await blog.upsertPost(null, req.body || {})); } catch (e) { pfErr(res, e); } }));
@@ -414,6 +434,13 @@ if(c.gtm){w.dataLayer.push({'gtm.start':Date.now(),event:'gtm.js'});var g=d.crea
 if(c.ga4){var s=d.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id='+c.ga4;d.head.appendChild(s);w.gtag=function(){w.dataLayer.push(arguments);};w.gtag('js',new Date());w.gtag('config',c.ga4);}
 w.c2cTrack=function(n,p){p=p||{};try{w.dataLayer.push(Object.assign({event:n},p));if(c.ga4&&w.gtag)w.gtag('event',n,p);}catch(e){}};
 d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target:null;if(!t)return;if(t.closest('a[href*="wa.me/"]'))w.c2cTrack('whatsapp_click',{link_location:location.pathname});else if(t.closest('a[href^="tel:"]'))w.c2cTrack('phone_click',{link_location:location.pathname});},true);})();`);
+}));
+
+// Free SEO tool pages
+app.get('/seo-tools/:slug', h(async (req, res, next) => {
+  const tool = tools.liveTool(req.params.slug);
+  if (!tool) return next();
+  res.type('html').send(await renderTool(req, tool));
 }));
 
 // Products moved out of the portfolio

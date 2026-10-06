@@ -6,11 +6,18 @@
     </a>
     <nav class="primary-nav" aria-label="Main">
       <a href="/" {{nav.home}}>Home</a>
+      <div class="nav-dd">
+        <a href="/seo-audit" {{nav.audit}}>SEO Audit <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></a>
+        <div class="nav-dd-menu">
+          <a href="/seo-audit"><b>SEO Audit</b><span>Audit reports · ₹0 / ₹{{price.p25}} / ₹{{price.p50}}</span></a>
+          <a href="/seo-tools"><b>SEO Tools</b><span>Free tools for better websites</span></a>
+        </div>
+      </div>
       <a href="/services" {{nav.services}}>Services</a>
       <a href="/portfolio" {{nav.portfolio}}>Portfolio</a>
       <a href="/products" {{nav.products}}>Products</a>
-      <a href="/about" {{nav.about}}>About</a>
-      <a href="/enquire" {{nav.enquire}}>Contact</a>
+      <a href="/blog" {{nav.blog}}>Blogs</a>
+      <a href="/enquire" {{nav.enquire}}>Contact Us</a>
     </nav>
     <div class="nav-cta">
       <a class="btn primary sm" href="/seo-audit#free-audit">Get Free SEO Audit</a>
@@ -19,13 +26,13 @@
   </div>
   <div class="mobile-panel" id="mobileMenu" hidden>
     <a class="link" href="/" {{nav.home}}>Home</a>
+    <a class="link" href="/seo-audit" {{nav.audit}}>SEO Audit</a>
+    <a class="link sub" href="/seo-tools">SEO Tools</a>
     <a class="link" href="/services" {{nav.services}}>Services</a>
     <a class="link" href="/portfolio" {{nav.portfolio}}>Portfolio</a>
     <a class="link" href="/products" {{nav.products}}>Products</a>
-    <a class="link" href="/about" {{nav.about}}>About</a>
-    <a class="link" href="/enquire" {{nav.enquire}}>Contact</a>
-    <a class="link" href="/seo-audit" {{nav.audit}}>Free SEO Audit</a>
-    <a class="link" href="/blog" {{nav.blog}}>Blog</a>
+    <a class="link" href="/blog" {{nav.blog}}>Blogs</a>
+    <a class="link" href="/enquire" {{nav.enquire}}>Contact Us</a>
     <a class="btn primary" href="/seo-audit#free-audit">Get Free SEO Audit</a>
     <a class="btn outline" href="{{whatsappHref}}" target="_blank" rel="noopener">Book a Consultation on WhatsApp</a>
   </div>
