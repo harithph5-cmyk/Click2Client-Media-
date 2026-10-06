@@ -320,17 +320,21 @@ export function autoMatchOnce(listMedia, configured) {
   if (autoRan || !configured) return;
   autoRan = true;
   (async () => {
-    if (await store.getSetting('portfolio_auto_media_v2', null)) return;
+    if (await store.getSetting('portfolio_auto_media_v3', null)) return;
     const files = await listMedia({ fresh: true });
-    // v1 could match across folders: undo those, unless the admin has since changed the image.
-    const v1 = await store.getSetting('portfolio_auto_media_v1', null);
-    for (const m of v1?.matched || []) {
-      const p = await getBySlug(m.slug);
-      const f = files.find((x) => x.path === m.file);
-      if (p && f && p.cover_image === f.url && !matchScore(p, f)) await q('UPDATE portfolio_projects SET cover_image = NULL, updated_at = NOW() WHERE id = ?', [p.id]);
+    // The first automatic run could match across folders (e.g. an SEO image on a
+    // Social Media project). Clear any bucket cover that is in the wrong folder for
+    // its project's category, then match again within the right folders.
+    const cleared = [];
+    for (const p of await listProjects({ publishedOnly: false })) {
+      const f = files.find((x) => x.url === p.cover_image);
+      if (f && !ownFolder(p, f)) {
+        await q('UPDATE portfolio_projects SET cover_image = NULL, updated_at = NOW() WHERE id = ?', [p.id]);
+        cleared.push(p.slug);
+      }
     }
     const matched = await autoMatchCovers(files);
-    await store.setSetting('portfolio_auto_media_v2', { at: new Date().toISOString(), matched });
+    await store.setSetting('portfolio_auto_media_v3', { at: new Date().toISOString(), cleared, matched });
     console.log(`[portfolio] matched Supabase images to ${matched.length} project(s)`);
   })().catch((e) => { autoRan = false; console.error('[portfolio] auto image match skipped —', e.message); });
 }
