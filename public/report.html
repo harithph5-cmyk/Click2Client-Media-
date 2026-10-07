@@ -61,6 +61,53 @@
   .cta .btn.ghost { color: #fff; border-color: rgba(255,255,255,.5); background: transparent; }
   .foot { padding: 28px 72px 36px; font-size: 12px; color: var(--ink-4); display: flex; gap: 20px; flex-wrap: wrap; }
   @media (max-width: 720px) { .foot { padding: 24px 20px; } }
+  /* Plan-specific report parts */
+  .plan-badge { font: 700 12px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 6px 12px; border-radius: 99px; background: #EEF2F6; color: var(--ink-3); }
+  .plan-badge.t-p25 { background: #E8F1FF; color: #0052CC; }
+  .plan-badge.t-p50, .plan-badge.t-internal { background: #071A2B; color: #7FD4FF; }
+  .counts { display: grid; grid-template-columns: repeat(3, auto); gap: 28px; padding-bottom: 16px; }
+  .counts div { display: grid; gap: 4px; }
+  .counts b { font: 800 30px/1 var(--display); }
+  .counts span { font-size: 13px; color: var(--ink-4); }
+  .included { margin-top: 28px; padding: 16px 18px; border-radius: 14px; border: 1px solid var(--line); background: #F8FAFC; }
+  .included > span { display: block; font: 700 11px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 10px; }
+  .included ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 20px; font-size: 13.5px; }
+  .included li { display: flex; gap: 8px; align-items: center; }
+  .included li.yes { color: var(--ink); font-weight: 600; }
+  .included li.yes span { color: var(--pass); font-weight: 800; }
+  .included li.no { color: var(--ink-4); }
+  .included li.no span { font-size: 11px; }
+  .sec-sub { margin: -6px 0 16px; }
+  h3.grp { font: 700 15px var(--display); letter-spacing: .02em; color: var(--ink-3); margin: 22px 0 10px; text-transform: uppercase; }
+  .fix-h { font: 700 11px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--pass); margin-bottom: 4px; }
+  .fix-impact { margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(19, 138, 87, .3); }
+  .locked { display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; margin-top: 12px; border-radius: 14px; border: 1.5px dashed #BFD3EA; background: #F6F9FD; break-inside: avoid; }
+  .lock-ic { font-size: 20px; line-height: 1; }
+  .locked b { font: 700 16px var(--display); color: var(--ink); }
+  .locked p { margin: 4px 0 8px; font-size: 14px; color: var(--ink-3); }
+  .locked a { font: 700 14px var(--display); color: var(--accent); text-decoration: none; }
+  .note-box { margin-top: 18px; padding: 14px 16px; border-radius: 12px; background: #FFF8E8; border: 1px solid #F3D9A0; font-size: 14px; color: var(--ink-2); }
+  .impl { margin-top: 18px; break-inside: avoid; }
+  .impl-h { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+  .impl-h b { font: 700 17px var(--display); color: var(--ink); }
+  .impl-h span { font: 600 12.5px var(--display); color: var(--accent); }
+  .impl .ptable { margin-top: 8px; }
+  .consult { background: linear-gradient(180deg, #F2F7FF, #fff); }
+  .consult-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; margin-top: 18px; align-items: start; }
+  .checklist.plain li { grid-template-columns: 22px 1fr; }
+  .tick { color: var(--pass); font-weight: 800; }
+  .consult-card { padding: 20px; border-radius: 16px; background: #071A2B; color: #A9BACB; display: grid; gap: 4px; }
+  .consult-card > span { font: 700 11px var(--display); letter-spacing: .12em; text-transform: uppercase; color: #7FD4FF; }
+  .consult-card b { font: 800 26px var(--display); color: #fff; letter-spacing: -0.01em; }
+  .consult-card small { font-size: 12.5px; }
+  .consult-card .btn.ghost { color: #fff; border-color: rgba(255, 255, 255, .4); background: transparent; }
+  @media (max-width: 720px) { .included ul, .consult-grid { grid-template-columns: 1fr; } .counts { gap: 18px; } }
+  @media print {
+    .consult-card { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
+    .consult-card b { color: var(--ink); }
+    .consult-card > span { color: var(--accent); }
+    .included, .locked, .note-box { break-inside: avoid; }
+  }
   @media print {
     @page { size: A4; margin: 14mm 0; }
     body { background: #fff; }
