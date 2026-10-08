@@ -13,6 +13,7 @@ import { portfolioVars, homeWorkHtml, projectVars, listProjects } from '../portf
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
 import { productsVars, homeContentVars } from '../content.js';
 import { hubVars, toolVars, TOOLS } from '../tools.js';
+import { TOOL_CONTENT } from './tools-content.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIEWS = path.join(here, '..', '..', 'views');
@@ -44,7 +45,7 @@ export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
   portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO, Social Media, Ads & UI/UX Work | Click2Client Media', description: 'A curated showcase of websites, SEO campaigns, social media strategies, advertising campaigns and UI/UX experiences created by Click2Client Media for brands and businesses.', priority: '0.8', crumb: 'Portfolio' },
-  seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: 'Free SEO Tools — Website SEO Checker, Meta Tags, Robots.txt & More | Click2Client Media', description: 'Free SEO tools to analyze, optimize and improve your website: SEO checker, SEO score, meta tags, headings, image ALT, canonical, robots.txt, sitemap, schema, Open Graph, links and redirects.', priority: '0.9', crumb: 'SEO Tools' },
+  seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: '15 Free SEO Tools — Website Checker, Meta Tags, Broken Links & Schema | Click2Client Media', description: 'Free professional SEO tools to analyze, optimize and audit your website: SEO checker, meta tags, heading analyzer, robots.txt, XML sitemap, schema validator, broken links, redirects and keyword density.', priority: '0.9', crumb: 'SEO Tools' },
   products: { path: '/products', file: 'products', title: 'Products — ATS, AI Quiz, Productivity & CRM Systems | Click2Client Media', description: 'Ready-made digital systems from Click2Client Media: an ATS for recruitment, an AI quiz system, a productivity / to-do system and a CRM for managing leads and customers.', priority: '0.8', crumb: 'Products' },
   about: { path: '/about', file: 'about', title: 'About Click2Client Media — Digital Marketing, SEO & Web Development, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
   blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
@@ -79,7 +80,8 @@ function schemaFor(id, s, base, p = PAGES[id]) {
     graph.push({ '@type': 'BlogPosting', headline: p.post.title, description: p.description, datePublished: p.post.date, dateModified: p.post.updated || p.post.date, author: { '@type': 'Person', name: p.post.author || 'Hari' }, publisher: { '@id': `${base}/#organization` }, mainEntityOfPage: `${base}${p.path}`, ...(p.image ? { image: p.image } : {}) });
   } else if (p.trail) {
     graph.push({ '@type': 'BreadcrumbList', itemListElement: p.trail.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, item: `${base}${t.path}` })) });
-    if (p.extraSchema) graph.push(p.extraSchema);
+    if (Array.isArray(p.extraSchema)) graph.push(...p.extraSchema);
+    else if (p.extraSchema) graph.push(p.extraSchema);
   } else if (p.crumb) graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: p.crumb, item: `${base}${p.path}` }] });
   if (id === 'audit') {
     graph.push({
@@ -166,13 +168,45 @@ export async function renderProject(req, project) {
 /** One free SEO tool page. */
 export async function renderTool(req, tool) {
   const base = siteUrl(req);
+  const s = await siteSettings();
   const path = `/seo-tools/${tool.slug}`;
-  const page = {
-    path, file: 'seo-tool', nav: 'audit', title: `${tool.name} — Free SEO Tool | Click2Client Media`, description: tool.desc,
-    trail: [{ name: 'Home', path: '/' }, { name: 'SEO Tools', path: '/seo-tools' }, { name: tool.name, path }],
-    extraSchema: { '@type': 'WebApplication', name: tool.name, description: tool.desc, url: `${base}${path}`, applicationCategory: 'BusinessApplication', operatingSystem: 'Any', offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' }, provider: { '@id': `${base}/#organization` } },
+  const c = TOOL_CONTENT[tool.slug] || {};
+  const title = c.title || `${tool.name} — Free SEO Tool | Click2Client Media`;
+  const description = c.description || tool.desc;
+
+  const webAppSchema = {
+    '@type': 'WebApplication',
+    name: tool.name,
+    description,
+    url: `${base}${path}`,
+    applicationCategory: 'UtilitiesApplication',
+    operatingSystem: 'All',
+    browserRequirements: 'Requires JavaScript. Requires HTML5.',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
+    provider: { '@id': `${base}/#organization` },
   };
-  return renderPage('seoTool', req, { page, vars: toolVars(tool) });
+
+  const extraSchema = [webAppSchema];
+  if (c.faqs?.length) {
+    extraSchema.push({
+      '@type': 'FAQPage',
+      mainEntity: c.faqs.map((f) => ({
+        '@type': 'Question',
+        name: f.q,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: f.a,
+        },
+      })),
+    });
+  }
+
+  const page = {
+    path, file: 'seo-tool', nav: 'audit', title, description,
+    trail: [{ name: 'Home', path: '/' }, { name: 'SEO Tools', path: '/seo-tools' }, { name: tool.name, path }],
+    extraSchema,
+  };
+  return renderPage('seoTool', req, { page, vars: toolVars(tool, s) });
 }
 
 export async function sitemap(req) {

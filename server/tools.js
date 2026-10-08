@@ -5,8 +5,11 @@
 
 import { normalizeInputUrl, safeFetch, checkStatus, pool, AuditInputError } from './lib/net.js';
 import { parsePage } from './engine/parse.js';
-import { fetchRobots, isAllowed } from './engine/robots.js';
+import { fetchRobots, isAllowed, explainRule } from './engine/robots.js';
+import { analyzeKeywords } from './engine/keywords.js';
 import { analyzeSitemaps } from './engine/sitemap.js';
+import { KB } from './engine/knowledge.js';
+import { TOOL_CONTENT, renderToolContentHtml } from './site/tools-content.js';
 
 export const CATEGORIES = [
   { id: 'on-page', n: '01', name: 'On-Page SEO Tools', intro: 'Check and fix the parts of a page search engines read first.' },
@@ -23,7 +26,23 @@ const soon = (cat, names) => names.map((name) => T(cat, null, name, ''));
 
 // ── Shared helpers ───────────────────────────────────────────────────────
 const bad = (message) => Object.assign(new Error(message), { status: 400 });
-const check = (status, label, detail = '') => ({ status, label, detail });
+export const check = (status, label, detail = '', recommendation = null) => {
+  const c = { status, label, detail };
+  if (recommendation) c.recommendation = recommendation;
+  return c;
+};
+
+export function countChecks(checks = []) {
+  const counts = { critical: 0, warning: 0, pass: 0, info: 0 };
+  for (const c of checks) {
+    if (c.status === 'fail') counts.critical++;
+    else if (c.status === 'warn') counts.warning++;
+    else if (c.status === 'pass') counts.pass++;
+    else if (c.status === 'info') counts.info++;
+  }
+  return counts;
+}
+
 async function loadPage(input) {
   const url = normalizeInputUrl(input);
   const res = await safeFetch(url.toString());
@@ -41,81 +60,69 @@ const score = (checks) => {
 function titleChecks(p) {
   const t = p.title.text; const n = len(t);
   return [
-    !t ? check('fail', 'Title tag', 'Missing — every page needs a unique <title>.')
-      : n < 30 ? check('warn', 'Title tag', `${n} characters — short. Aim for 50–60.`)
-      : n > 60 ? check('warn', 'Title tag', `${n} characters — may be cut off in Google. Aim for 50–60.`)
+    !t ? check('fail', 'Title tag', 'Missing — every page needs a unique <title>.', KB.title_present.fix)
+      : n < 30 ? check('warn', 'Title tag', `${n} characters — short. Aim for 50–60.`, KB.title_length.fix)
+      : n > 60 ? check('warn', 'Title tag', `${n} characters — may be cut off in Google. Aim for 50–60.`, KB.title_length.fix)
       : check('pass', 'Title tag', `${n} characters — a good length.`),
-    p.title.values.length > 1 ? check('warn', 'Multiple title tags', `${p.title.values.length} found — keep one.`) : null,
+    p.title.values.length > 1 ? check('warn', 'Multiple title tags', `${p.title.values.length} found — keep one.`, KB.title_multiple.fix) : null,
   ].filter(Boolean);
 }
 function descChecks(p) {
   const d = p.metaDescription.text; const n = len(d);
   return [
-    !d ? check('fail', 'Meta description', 'Missing — Google will pick text from the page instead.')
-      : n < 70 ? check('warn', 'Meta description', `${n} characters — short. Aim for 120–160.`)
-      : n > 160 ? check('warn', 'Meta description', `${n} characters — may be cut off. Aim for 120–160.`)
+    !d ? check('fail', 'Meta description', 'Missing — Google will pick text from the page instead.', KB.meta_desc_present.fix)
+      : n < 70 ? check('warn', 'Meta description', `${n} characters — short. Aim for 120–160.`, KB.meta_desc_length.fix)
+      : n > 160 ? check('warn', 'Meta description', `${n} characters — may be cut off. Aim for 120–160.`, KB.meta_desc_length.fix)
       : check('pass', 'Meta description', `${n} characters — a good length.`),
-    p.metaDescription.values.length > 1 ? check('warn', 'Multiple meta descriptions', `${p.metaDescription.values.length} found — keep one.`) : null,
+    p.metaDescription.values.length > 1 ? check('warn', 'Multiple meta descriptions', `${p.metaDescription.values.length} found — keep one.`, KB.meta_desc_present.fix) : null,
   ].filter(Boolean);
 }
 function headingChecks(p) {
   const h1 = p.headings.h1.filter(Boolean);
-  const out = [h1.length === 0 ? check('fail', 'H1 heading', 'No H1 — add one main heading that says what the page is about.')
-    : h1.length > 1 ? check('warn', 'H1 heading', `${h1.length} H1 headings — usually one is clearest.`)
+  const out = [h1.length === 0 ? check('fail', 'H1 heading', 'No H1 — add one main heading that says what the page is about.', KB.h1_present.fix)
+    : h1.length > 1 ? check('warn', 'H1 heading', `${h1.length} H1 headings — usually one is clearest.`, KB.h1_single.fix)
     : check('pass', 'H1 heading', `“${h1[0].slice(0, 90)}”`)];
   let prev = 0; const skips = [];
   for (const h of p.headingOrder) { if (prev && h.level > prev + 1) skips.push(`H${prev} → H${h.level}`); prev = h.level; }
-  out.push(skips.length ? check('warn', 'Heading order', `Skipped levels: ${[...new Set(skips)].slice(0, 5).join(', ')}.`) : check('pass', 'Heading order', 'No skipped levels.'));
+  out.push(skips.length ? check('warn', 'Heading order', `Skipped levels: ${[...new Set(skips)].slice(0, 5).join(', ')}.`, KB.heading_hierarchy.fix) : check('pass', 'Heading order', 'No skipped levels.'));
   const empty = p.headingOrder.filter((h) => !h.text).length;
-  if (empty) out.push(check('warn', 'Empty headings', `${empty} heading tag(s) with no text.`));
+  if (empty) out.push(check('warn', 'Empty headings', `${empty} heading tag(s) with no text.`, 'Add descriptive text to all heading tags or remove empty heading elements.'));
   return out;
 }
 function imageChecks(p) {
   const imgs = p.images;
   const missing = imgs.filter((i) => i.alt === null).length;
   if (!imgs.length) return [check('info', 'Images', 'No images found on this page.')];
-  return [missing ? check(missing > imgs.length / 2 ? 'fail' : 'warn', 'Image ALT text', `${missing} of ${imgs.length} images have no alt attribute.`) : check('pass', 'Image ALT text', `All ${imgs.length} images have an alt attribute.`)];
+  return [missing ? check(missing > imgs.length / 2 ? 'fail' : 'warn', 'Image ALT text', `${missing} of ${imgs.length} images have no alt attribute.`, KB.img_alt.fix) : check('pass', 'Image ALT text', `All ${imgs.length} images have an alt attribute.`)];
 }
 function canonicalChecks(p, url) {
   const c = p.canonicals;
-  if (!c.length) return [check('warn', 'Canonical URL', 'No canonical tag — add one pointing to the preferred URL.')];
-  if (c.length > 1) return [check('fail', 'Canonical URL', `${c.length} canonical tags — search engines may ignore them all.`)];
+  if (!c.length) return [check('warn', 'Canonical URL', 'No canonical tag — add one pointing to the preferred URL.', KB.canonical_present.fix)];
+  if (c.length > 1) return [check('fail', 'Canonical URL', `${c.length} canonical tags — search engines may ignore them all.`, KB.canonical_multiple.fix)];
   const self = c[0].resolved && c[0].resolved.replace(/\/$/, '') === url.replace(/\/$/, '');
-  return [check(self ? 'pass' : 'info', 'Canonical URL', self ? 'Points to this page.' : `Points to ${c[0].resolved || c[0].raw}.`)];
+  return [check(self ? 'pass' : 'info', 'Canonical URL', self ? 'Points to this page.' : `Points to ${c[0].resolved || c[0].raw}.`, self ? null : KB.canonical_match.fix)];
 }
 function siteBasics(p, url) {
   const noindex = p.metaRobots.some((m) => /noindex/i.test(m));
   return [
-    check(url.startsWith('https:') ? 'pass' : 'fail', 'HTTPS', url.startsWith('https:') ? 'The page is served securely.' : 'Not served over HTTPS.'),
-    check(noindex ? 'fail' : 'pass', 'Indexable', noindex ? 'A robots meta tag says noindex — Google will not show this page.' : 'No noindex tag found.'),
-    check(p.viewport ? 'pass' : 'fail', 'Mobile viewport', p.viewport ? 'Viewport tag present.' : 'No viewport tag — the page may not display well on phones.'),
-    check(p.lang ? 'pass' : 'warn', 'Language', p.lang ? `lang="${p.lang}"` : 'No lang attribute on <html>.'),
-    check(p.og['og:title'] && p.og['og:image'] ? 'pass' : 'warn', 'Social sharing (Open Graph)', p.og['og:title'] && p.og['og:image'] ? 'Title and image set.' : 'Missing og:title or og:image — shared links will look plain.'),
-    check(p.jsonLd.length ? 'pass' : 'warn', 'Structured data', p.jsonLd.length ? `Found: ${p.jsonLd.slice(0, 6).join(', ')}` : 'No JSON-LD schema found.'),
-    check(p.wordCount >= 300 ? 'pass' : 'warn', 'Content length', `${p.wordCount} words${p.wordCount < 300 ? ' — thin pages rarely rank well.' : '.'}`),
+    check(url.startsWith('https:') ? 'pass' : 'fail', 'HTTPS', url.startsWith('https:') ? 'The page is served securely.' : 'Not served over HTTPS.', url.startsWith('https:') ? null : KB.https.fix),
+    check(noindex ? 'fail' : 'pass', 'Indexable', noindex ? 'A robots meta tag says noindex — Google will not show this page.' : 'No noindex tag found.', noindex ? KB.noindex.fix : null),
+    check(p.viewport ? 'pass' : 'fail', 'Mobile viewport', p.viewport ? 'Viewport tag present.' : 'No viewport tag — the page may not display well on phones.', p.viewport ? null : KB.viewport.fix),
+    check(p.lang ? 'pass' : 'warn', 'Language', p.lang ? `lang="${p.lang}"` : 'No lang attribute on <html>.', p.lang ? null : KB.lang_attr.fix),
+    check(p.og['og:title'] && p.og['og:image'] ? 'pass' : 'warn', 'Social sharing (Open Graph)', p.og['og:title'] && p.og['og:image'] ? 'Title and image set.' : 'Missing og:title or og:image — shared links will look plain.', (p.og['og:title'] && p.og['og:image']) ? null : KB.og_tags.fix),
+    check(p.jsonLd.length ? 'pass' : 'warn', 'Structured data', p.jsonLd.length ? `Found: ${p.jsonLd.slice(0, 6).join(', ')}` : 'No JSON-LD schema found.', p.jsonLd.length ? null : KB.structured_data.fix),
+    check(p.wordCount >= 300 ? 'pass' : 'warn', 'Content length', `${p.wordCount} words${p.wordCount < 300 ? ' — thin pages rarely rank well.' : '.'}`, p.wordCount >= 300 ? null : KB.content_length.fix),
   ];
 }
 function fullCheck(p, url) {
   return [...titleChecks(p), ...descChecks(p), ...headingChecks(p), ...imageChecks(p), ...canonicalChecks(p, url), ...siteBasics(p, url)];
 }
-const STOP = new Set('a an and are as at be but by for from has have in into is it its of on or our that the their this to was we were will with you your can not all more about also any been more most other out over so than then there these they those up what when which who why how i me my he she him her us them do does did just only very'.split(' '));
-function terms(text, n) {
-  const words = (text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || []).filter((w) => w.length > 1);
-  const counts = new Map();
-  for (let i = 0; i + n <= words.length; i++) {
-    const g = words.slice(i, i + n);
-    if (STOP.has(g[0]) || STOP.has(g[n - 1]) || g.every((w) => /^\d+$/.test(w))) continue;
-    const k = g.join(' ');
-    counts.set(k, (counts.get(k) || 0) + 1);
-  }
-  return { total: words.length, top: [...counts].sort((a, b) => b[1] - a[1]).slice(0, 15) };
-}
-
 // ── Live tools ───────────────────────────────────────────────────────────
 async function websiteChecker({ url: input }) {
   const { url, page } = await loadPage(input);
   const checks = fullCheck(page, url);
-  return { url, score: score(checks), checks };
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks };
 }
 async function scoreChecker(body) {
   const r = await websiteChecker(body);
@@ -127,7 +134,8 @@ async function scoreChecker(body) {
 async function metaAnalyzer({ url: input }) {
   const { url, page } = await loadPage(input);
   const checks = [...titleChecks(page), ...descChecks(page)];
-  return { url, score: score(checks), checks, serp: { title: page.title.text || '(no title)', url, description: page.metaDescription.text || '(no meta description — Google will choose text from the page)' } };
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, serp: { title: page.title.text || '(no title)', url, description: page.metaDescription.text || '(no meta description — Google will choose text from the page)' } };
 }
 async function metaGenerator(b) {
   const f = (k, n) => String(b?.[k] ?? '').trim().slice(0, n);
@@ -138,122 +146,225 @@ async function metaGenerator(b) {
     `<meta property="og:type" content="website">`, `<meta property="og:title" content="${e(title)}">`, desc && `<meta property="og:description" content="${e(desc)}">`,
     url && `<meta property="og:url" content="${e(url)}">`, image && `<meta property="og:image" content="${e(image)}">`, site && `<meta property="og:site_name" content="${e(site)}">`,
     `<meta name="twitter:card" content="${image ? 'summary_large_image' : 'summary'}">`, `<meta name="twitter:title" content="${e(title)}">`, desc && `<meta name="twitter:description" content="${e(desc)}">`, image && `<meta name="twitter:image" content="${e(image)}">`].filter(Boolean);
-  const checks = [len(title) > 60 ? check('warn', 'Title length', `${len(title)} characters — may be cut off. Aim for 50–60.`) : check('pass', 'Title length', `${len(title)} characters.`),
-    !desc ? check('warn', 'Description', 'Add a description of 120–160 characters.') : len(desc) > 160 ? check('warn', 'Description length', `${len(desc)} characters — may be cut off.`) : check('pass', 'Description length', `${len(desc)} characters.`)];
-  return { checks, code: lines.join('\n'), serp: { title, url: url || 'https://yourwebsite.com/page', description: desc || '' } };
+  const checks = [len(title) > 60 ? check('warn', 'Title length', `${len(title)} characters — may be cut off. Aim for 50–60.`, KB.title_length.fix) : check('pass', 'Title length', `${len(title)} characters.`),
+    !desc ? check('warn', 'Description', 'Add a description of 120–160 characters.', KB.meta_desc_present.fix) : len(desc) > 160 ? check('warn', 'Description length', `${len(desc)} characters — may be cut off.`, KB.meta_desc_length.fix) : check('pass', 'Description length', `${len(desc)} characters.`)];
+  return { checks, counts: countChecks(checks), score: null, scoreAvailable: false, code: lines.join('\n'), serp: { title, url: url || 'https://yourwebsite.com/page', description: desc || '' } };
 }
 async function headingChecker({ url: input }) {
   const { url, page } = await loadPage(input);
   const checks = headingChecks(page);
-  return { url, score: score(checks), checks, tree: page.headingOrder.slice(0, 120) };
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, tree: page.headingOrder.slice(0, 120) };
 }
 async function keywordDensity({ url: input, keyword }) {
   const { url, page } = await loadPage(input);
-  const one = terms(page.text, 1); const two = terms(page.text, 2); const three = terms(page.text, 3);
-  const pct = (c) => `${((100 * c) / Math.max(1, one.total)).toFixed(2)}%`;
-  const out = { url, checks: [check('info', 'Words on page', `${page.wordCount} words analysed.`)], tables: [
-    { title: 'Top keywords', cols: ['Keyword', 'Count', 'Density'], rows: one.top.map(([k, c]) => [k, c, pct(c)]) },
-    { title: 'Top 2-word phrases', cols: ['Phrase', 'Count', 'Density'], rows: two.top.map(([k, c]) => [k, c, pct(c)]) },
-    { title: 'Top 3-word phrases', cols: ['Phrase', 'Count', 'Density'], rows: three.top.map(([k, c]) => [k, c, pct(c)]) },
-  ] };
-  const kw = String(keyword || '').trim().toLowerCase().slice(0, 80);
+  const kw = String(keyword || '').trim().slice(0, 80);
+  const targetKeywords = kw ? [kw] : [];
+  const analysis = analyzeKeywords(page, url, targetKeywords);
+
+  const pct = (d) => `${Number(d || 0).toFixed(2)}%`;
+  const tables = [
+    { title: 'Top keywords', cols: ['Keyword', 'Count', 'Density'], rows: analysis.keywords.slice(0, 15).map((k) => [k.term, k.count, pct(k.density)]) },
+    { title: 'Top 2-word phrases', cols: ['Phrase', 'Count', 'Density'], rows: analysis.phrases2.slice(0, 15).map((p) => [p.term, p.count, pct(p.density)]) },
+    { title: 'Top 3-word phrases', cols: ['Phrase', 'Count', 'Density'], rows: analysis.phrases3.slice(0, 15).map((p) => [p.term, p.count, pct(p.density)]) },
+  ];
+
+  const checks = [
+    check('info', 'Words on page', `${analysis.totalWords || page.wordCount} words analysed (${analysis.uniqueWords} unique).`),
+  ];
+
   if (kw) {
-    const n = (page.text.toLowerCase().match(new RegExp(`(^|[^\\p{L}\\p{N}])${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|[^\\p{L}\\p{N}])`, 'gu')) || []).length;
-    const d = (100 * n * kw.split(/\s+/).length) / Math.max(1, one.total);
-    const inTitle = (page.title.text || '').toLowerCase().includes(kw); const inH1 = page.headings.h1.join(' ').toLowerCase().includes(kw); const inDesc = (page.metaDescription.text || '').toLowerCase().includes(kw);
-    out.checks.push(check(n === 0 ? 'fail' : d > 4 ? 'warn' : 'pass', `“${kw}” on the page`, `${n} time(s) · ${d.toFixed(2)}% density${d > 4 ? ' — may read as keyword stuffing.' : ''}`),
-      check(inTitle ? 'pass' : 'warn', 'In the title', inTitle ? 'Yes' : 'No'), check(inH1 ? 'pass' : 'warn', 'In the H1', inH1 ? 'Yes' : 'No'), check(inDesc ? 'pass' : 'warn', 'In the meta description', inDesc ? 'Yes' : 'No'));
+    const target = analysis.targetKeywords[0];
+    const n = target ? target.occurrences : 0;
+    const d = target ? target.density : 0;
+    checks.push(
+      check(n === 0 ? 'fail' : d > 4 ? 'warn' : 'pass', `“${kw}” on the page`, `${n} time(s) · ${pct(d)} density${d > 4 ? ' — may read as keyword stuffing.' : ''}`, n === 0 ? 'Include your target keyword naturally in the title, H1 heading, and content.' : d > 4 ? 'Reduce repetition of this keyword to keep density under 4%.' : null),
+      check(target?.title ? 'pass' : 'warn', 'In the title', target?.title ? 'Yes' : 'No', target?.title ? null : 'Include your target keyword in the page <title> tag.'),
+      check(target?.h1 ? 'pass' : 'warn', 'In the H1', target?.h1 ? 'Yes' : 'No', target?.h1 ? null : 'Include your target keyword in the main H1 headline.'),
+      check(target?.meta ? 'pass' : 'warn', 'In the meta description', target?.meta ? 'Yes' : 'No', target?.meta ? null : 'Include your target keyword in the meta description.'),
+    );
   }
-  return out;
+
+  if (analysis.possibleStuffing?.length > 0) {
+    const stuffed = analysis.possibleStuffing.slice(0, 3).map((s) => `“${s.term}” (${pct(s.density)})`).join(', ');
+    checks.push(check('warn', 'Keyword stuffing warning', `High repetition detected for: ${stuffed}. Aim for natural wording under 4% density.`, 'Reduce repetition of heavily repeated phrases to sound natural and avoid search penalties.'));
+  }
+
+  return {
+    url,
+    score: null,
+    scoreAvailable: false,
+    counts: countChecks(checks),
+    checks,
+    tables,
+    engine: {
+      totalWords: analysis.totalWords,
+      uniqueWords: analysis.uniqueWords,
+      possibleStuffingCount: analysis.possibleStuffing.length,
+      matrix: analysis.matrix,
+    },
+  };
 }
 async function imageAlt({ url: input }) {
   const { url, page } = await loadPage(input);
   const imgs = page.images;
   const rows = imgs.slice(0, 150).map((i) => [i.filename || i.src, i.alt === null ? 'Missing' : i.alt === '' ? '(empty — decorative)' : i.alt, i.alt === null ? 'fail' : /\.(jpe?g|png|webp|gif)$|^img[_-]?\d+|^dsc/i.test(i.alt) ? 'warn' : i.alt.length > 125 ? 'warn' : 'pass']);
   const missing = imgs.filter((i) => i.alt === null).length; const fileLike = rows.filter((r) => r[2] === 'warn').length;
-  const checks = [...imageChecks(page), fileLike ? check('warn', 'Weak ALT text', `${fileLike} image(s) use file names or very long ALT text.`) : null].filter(Boolean);
-  return { url, score: imgs.length ? Math.round((100 * (imgs.length - missing)) / imgs.length) : null, checks, tables: imgs.length ? [{ title: `Images (${imgs.length})`, cols: ['Image', 'ALT text', ''], rows, statusCol: 2 }] : [] };
+  const checks = [...imageChecks(page), fileLike ? check('warn', 'Weak ALT text', `${fileLike} image(s) use file names or very long ALT text.`, KB.image_filenames.fix) : null].filter(Boolean);
+  const sc = imgs.length ? Math.round((100 * (imgs.length - missing)) / imgs.length) : null;
+  return { url, score: sc, scoreAvailable: sc != null, counts: countChecks(checks), checks, tables: imgs.length ? [{ title: `Images (${imgs.length})`, cols: ['Image', 'ALT text', ''], rows, statusCol: 2 }] : [] };
 }
 async function canonicalChecker({ url: input }) {
   const { url, page } = await loadPage(input);
   const checks = canonicalChecks(page, url);
   const c = page.canonicals[0];
-  if (c?.resolved) {
-    if (!/^https?:\/\//i.test(c.raw)) checks.push(check('warn', 'Relative canonical', 'Use a full absolute URL (https://…).'));
-    if (c.resolved !== url.replace(/\/$/, '') && c.resolved !== url) {
-      const st = await checkStatus(c.resolved).catch(() => null);
-      checks.push(st?.status === 200 ? check('pass', 'Canonical target', `${c.resolved} returns 200.`) : check('fail', 'Canonical target', `${c.resolved} returns ${st?.status || 'an error'}.`));
+  if (c) {
+    if (c.raw && !/^https?:\/\//i.test(c.raw)) {
+      checks.push(check('warn', 'Relative canonical', 'Use a full absolute URL (https://…).', 'Use a full absolute URL including https:// for canonical tags.'));
+    }
+    const target = c.resolved;
+    let isValidHttpUrl = false;
+    if (typeof target === 'string' && /^https?:\/\//i.test(target)) {
+      try {
+        new URL(target);
+        isValidHttpUrl = true;
+      } catch {
+        isValidHttpUrl = false;
+      }
+    }
+
+    if (!isValidHttpUrl) {
+      checks.push(check('fail', 'Canonical target', `Invalid canonical URL: “${c.raw || target || ''}”. Must be a valid http:// or https:// URL.`, 'Ensure the canonical link is a valid, absolute http:// or https:// address.'));
+    } else if (target !== url.replace(/\/$/, '') && target !== url) {
+      const st = await checkStatus(target).catch(() => null);
+      checks.push(st?.status === 200 ? check('pass', 'Canonical target', `${target} returns 200.`) : check('fail', 'Canonical target', `${target} returns ${st?.status || 'an error'}.`, KB.canonical_match.fix));
     }
   }
-  return { url, score: score(checks), checks };
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks };
 }
 async function robotsChecker({ url: input }) {
   const u = normalizeInputUrl(input);
   const r = await fetchRobots(u.origin);
   const checks = [];
-  if (!r.available) checks.push(check(r.status === 404 ? 'warn' : 'fail', 'robots.txt', r.note || r.error?.message || 'Could not read robots.txt.'));
+  if (!r.available) checks.push(check(r.status === 404 ? 'warn' : 'fail', 'robots.txt', r.note || r.error?.message || 'Could not read robots.txt.', KB.robots_txt.fix));
   else {
     checks.push(check('pass', 'robots.txt', `Found at ${r.url}`));
     const path = u.pathname || '/';
     for (const agent of ['Googlebot', 'Bingbot', '*']) {
       const a = isAllowed(r.parsed, path, agent);
-      checks.push(check(a.allowed ? 'pass' : 'fail', `${agent === '*' ? 'All crawlers' : agent} → ${path}`, a.allowed ? 'Allowed' : `Blocked by “${a.rule?.type}: ${a.rule?.path}”`));
+      checks.push(check(a.allowed ? 'pass' : 'fail', `${agent === '*' ? 'All crawlers' : agent} → ${path}`, a.allowed ? 'Allowed' : `Blocked by “${a.rule?.type}: ${a.rule?.path}”`, a.allowed ? null : KB.robots_blocks_site.fix));
     }
-    checks.push(check(r.parsed.sitemaps.length ? 'pass' : 'warn', 'Sitemap listed', r.parsed.sitemaps.length ? r.parsed.sitemaps.join(', ') : 'Add a “Sitemap:” line pointing to your XML sitemap.'));
+    checks.push(check(r.parsed.sitemaps.length ? 'pass' : 'warn', 'Sitemap listed', r.parsed.sitemaps.length ? r.parsed.sitemaps.join(', ') : 'Add a “Sitemap:” line pointing to your XML sitemap.', r.parsed.sitemaps.length ? null : KB.robots_sitemap_ref.fix));
   }
-  return { url: u.toString(), score: score(checks), checks, tables: r.parsed ? [{ title: 'Rules', cols: ['User-agent', 'Rules'], rows: r.parsed.groups.slice(0, 30).map((g) => [g.agents.join(', '), g.rules.map((x) => `${x.type}: ${x.path}`).join('\n') || '(none)']) }] : [] };
+  const rows = [];
+  if (r.parsed?.groups) {
+    for (const g of r.parsed.groups.slice(0, 30)) {
+      if (!g.rules.length) {
+        rows.push([g.agents.join(', '), '(no directives)', 'No directives defined for this agent group.']);
+      } else {
+        for (const rule of g.rules) {
+          const exp = explainRule(rule, g.agents);
+          rows.push([g.agents.join(', '), `${rule.type}: ${rule.path || '(empty)'}`, exp?.text || '']);
+        }
+      }
+    }
+  }
+  const s = score(checks);
+  return {
+    url: u.toString(),
+    score: s,
+    scoreAvailable: s != null,
+    counts: countChecks(checks),
+    checks,
+    tables: r.parsed ? [{ title: 'Rules', cols: ['User-agent', 'Directive', 'Explanation'], rows }] : [],
+  };
 }
 async function sitemapChecker({ url: input }) {
   const u = normalizeInputUrl(input);
   const robots = await fetchRobots(u.origin);
   const s = await analyzeSitemaps(u.origin, robots.parsed?.sitemaps || []);
   const checks = [
-    check(s.found ? 'pass' : 'fail', 'XML sitemap', s.found ? `Found: ${s.primary.url}` : 'No valid XML sitemap found at the usual locations.'),
-    check(s.referencedInRobots ? 'pass' : 'warn', 'Listed in robots.txt', s.referencedInRobots ? 'Yes' : 'Add a “Sitemap:” line to robots.txt.'),
+    check(s.found ? 'pass' : 'fail', 'XML sitemap', s.found ? `Found: ${s.primary.url}` : 'No valid XML sitemap found at the usual locations.', s.found ? null : KB.sitemap.fix),
+    check(s.referencedInRobots ? 'pass' : 'warn', 'Listed in robots.txt', s.referencedInRobots ? 'Yes' : 'Add a “Sitemap:” line to robots.txt.', s.referencedInRobots ? null : KB.robots_sitemap_ref.fix),
   ];
   if (s.found) checks.push(check(s.urlCount ? 'pass' : 'warn', 'URLs in sitemap', `${s.urlCount}${s.urlCountIsPartial ? '+ (partial count of a sitemap index)' : ''}`));
-  return { url: u.origin, score: score(checks), checks, tables: s.sampleUrls?.length ? [{ title: 'Sample URLs', cols: ['URL'], rows: s.sampleUrls.slice(0, 50).map((x) => [x]) }] : [] };
+  const sc = score(checks);
+  return { url: u.origin, score: sc, scoreAvailable: sc != null, counts: countChecks(checks), checks, tables: s.sampleUrls?.length ? [{ title: 'Sample URLs', cols: ['URL'], rows: s.sampleUrls.slice(0, 50).map((x) => [x]) }] : [] };
 }
 async function schemaValidator({ url: input }) {
   const { url, page } = await loadPage(input);
   const checks = [
-    check(page.jsonLd.length ? 'pass' : 'warn', 'JSON-LD structured data', page.jsonLd.length ? `${page.jsonLd.length} type(s): ${page.jsonLd.join(', ')}` : 'None found.'),
-    page.jsonLdErrors.length ? check('fail', 'JSON syntax errors', `${page.jsonLdErrors.length} script block(s) are not valid JSON and will be ignored.`) : check('pass', 'JSON syntax', 'All JSON-LD blocks parse correctly.'),
+    check(page.jsonLd.length ? 'pass' : 'warn', 'JSON-LD structured data', page.jsonLd.length ? `${page.jsonLd.length} type(s): ${page.jsonLd.join(', ')}` : 'None found.', page.jsonLd.length ? null : KB.structured_data.fix),
+    page.jsonLdErrors.length ? check('fail', 'JSON syntax errors', `${page.jsonLdErrors.length} script block(s) are not valid JSON and will be ignored.`, KB.structured_data_errors.fix) : check('pass', 'JSON syntax', 'All JSON-LD blocks parse correctly.'),
     check(page.hasMicrodata ? 'info' : 'info', 'Microdata', page.hasMicrodata ? 'itemscope markup present.' : 'None.'),
   ];
-  return { url, score: score(checks), checks, note: 'This checks that your structured data is valid JSON and lists its types. To check eligibility for Google rich results, also run Google’s Rich Results Test.' };
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, note: 'This checks that your structured data is valid JSON and lists its types. To check eligibility for Google rich results, also run Google’s Rich Results Test.' };
 }
 async function ogChecker({ url: input }) {
   const { url, page } = await loadPage(input);
   const og = page.og; const tw = page.twitter;
-  const checks = ['og:title', 'og:description', 'og:image', 'og:url', 'og:type'].map((k) => check(og[k] ? 'pass' : k === 'og:image' || k === 'og:title' ? 'fail' : 'warn', k, og[k] || 'Missing'));
+  const checks = ['og:title', 'og:description', 'og:image', 'og:url', 'og:type'].map((k) => check(og[k] ? 'pass' : k === 'og:image' || k === 'og:title' ? 'fail' : 'warn', k, og[k] || 'Missing', og[k] ? null : KB.og_tags.fix));
   if (og['og:image']) {
     const img = new URL(og['og:image'], url).toString();
     const st = await checkStatus(img).catch(() => null);
-    checks.push(check(st?.status === 200 ? 'pass' : 'fail', 'og:image loads', st?.status === 200 ? 'Yes' : `Returned ${st?.status || 'an error'}.`));
+    checks.push(check(st?.status === 200 ? 'pass' : 'fail', 'og:image loads', st?.status === 200 ? 'Yes' : `Returned ${st?.status || 'an error'}.`, st?.status === 200 ? null : 'Make sure the og:image URL is accessible and returns HTTP 200.'));
   }
-  checks.push(check(tw['twitter:card'] ? 'pass' : 'warn', 'twitter:card', tw['twitter:card'] || 'Missing'));
-  return { url, score: score(checks), checks, og: { title: og['og:title'] || page.title.text || '', description: og['og:description'] || page.metaDescription.text || '', image: og['og:image'] ? new URL(og['og:image'], url).toString() : '', site: new URL(url).hostname } };
+  checks.push(check(tw['twitter:card'] ? 'pass' : 'warn', 'twitter:card', tw['twitter:card'] || 'Missing', tw['twitter:card'] ? null : KB.twitter_card.fix));
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, og: { title: og['og:title'] || page.title.text || '', description: og['og:description'] || page.metaDescription.text || '', image: og['og:image'] ? new URL(og['og:image'], url).toString() : '', site: new URL(url).hostname } };
 }
 async function internalLinks({ url: input }) {
   const { url, page } = await loadPage(input);
   const internal = page.links.filter((l) => l.type === 'internal');
   const unique = [...new Set(internal.map((l) => l.url))];
   const noAnchor = internal.filter((l) => !l.anchor).length; const nofollow = internal.filter((l) => l.nofollow).length;
-  const checks = [check(internal.length ? 'pass' : 'warn', 'Internal links', `${internal.length} links to ${unique.length} unique pages.`),
-    noAnchor ? check('warn', 'Links without anchor text', `${noAnchor} — search engines use link text to understand pages.`) : check('pass', 'Anchor text', 'Every internal link has text.'),
-    nofollow ? check('warn', 'Nofollow internal links', `${nofollow} — usually unnecessary on your own pages.`) : check('pass', 'Nofollow', 'No nofollow internal links.')];
-  return { url, score: score(checks), checks, tables: [{ title: 'Internal links', cols: ['Anchor text', 'URL'], rows: internal.slice(0, 150).map((l) => [l.anchor || '(no text)', l.url]) }] };
+  const checks = [check(internal.length ? 'pass' : 'warn', 'Internal links', `${internal.length} links to ${unique.length} unique pages.`, internal.length ? null : KB.internal_link_count.fix),
+    noAnchor ? check('warn', 'Links without anchor text', `${noAnchor} — search engines use link text to understand pages.`, 'Add descriptive anchor text to all internal links.') : check('pass', 'Anchor text', 'Every internal link has text.'),
+    nofollow ? check('warn', 'Nofollow internal links', `${nofollow} — usually unnecessary on your own pages.`, KB.nofollow_internal.fix) : check('pass', 'Nofollow', 'No nofollow internal links.')];
+  const s = score(checks);
+  return { url, score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, tables: [{ title: 'Internal links', cols: ['Anchor text', 'URL'], rows: internal.slice(0, 150).map((l) => [l.anchor || '(no text)', l.url]) }] };
 }
 async function brokenLinks({ url: input }) {
   const { url, page } = await loadPage(input);
-  const targets = [...new Set(page.links.filter((l) => l.type === 'internal' || l.type === 'external').map((l) => l.url))].slice(0, 60);
+  const allUnique = [...new Set(page.links.filter((l) => l.type === 'internal' || l.type === 'external').map((l) => l.url))];
+  const totalDiscovered = allUnique.length;
+  const targets = allUnique.slice(0, 30);
+  const limited = totalDiscovered > targets.length;
   const results = [];
-  await pool(targets, 6, async (t) => { const r = await checkStatus(t).catch(() => null); results.push([t, r?.status || 'Error']); });
+  await pool(targets, 6, async (t) => {
+    const r = await checkStatus(t, 4000).catch(() => null);
+    results.push([t, r?.status || 'Error']);
+  });
   const broken = results.filter(([, s]) => s === 'Error' || s >= 400);
-  const checks = [check(broken.length ? 'fail' : 'pass', 'Broken links', broken.length ? `${broken.length} of ${results.length} links checked are broken.` : `All ${results.length} links checked work.`)];
-  if (targets.length === 60) checks.push(check('info', 'Limit', 'The first 60 links on the page were checked. A full SEO audit checks every page.'));
-  return { url, score: score(checks), checks, tables: [{ title: 'Links checked', cols: ['URL', 'Status'], rows: results.sort((a, b) => (b[1] === 'Error' ? 999 : b[1]) - (a[1] === 'Error' ? 999 : a[1])).map(([u, s]) => [u, String(s)]) }] };
+  const checks = [
+    check(
+      broken.length ? 'fail' : 'pass',
+      'Broken links',
+      broken.length ? `${broken.length} of ${results.length} links checked are broken.` : `All ${results.length} links checked work.`,
+      broken.length ? KB.broken_internal_links.fix : null
+    ),
+  ];
+  if (limited) {
+    checks.push(check('info', 'Limit', `Checked ${targets.length} of ${totalDiscovered} links found on the page. A full SEO audit checks every link across every page.`));
+  }
+  const s = score(checks);
+  return {
+    url,
+    score: s,
+    scoreAvailable: s != null,
+    counts: countChecks(checks),
+    checked: targets.length,
+    totalDiscovered,
+    limited,
+    checks,
+    tables: [{
+      title: 'Links checked',
+      cols: ['URL', 'Status'],
+      rows: results.sort((a, b) => (b[1] === 'Error' ? 999 : b[1]) - (a[1] === 'Error' ? 999 : a[1])).map(([u, s]) => [u, String(s)]),
+    }],
+  };
 }
 async function redirectChecker({ url: input }) {
   const u = normalizeInputUrl(input);
@@ -261,9 +372,10 @@ async function redirectChecker({ url: input }) {
   const hops = [...(res.redirects || []).map((r) => [r.url, String(r.status), r.location]), [res.url, String(res.status || 'Error'), '—']];
   const n = res.redirects?.length || 0;
   const checks = [res.ok ? check(res.status < 400 ? 'pass' : 'fail', 'Final response', `HTTP ${res.status}`) : check('fail', 'Final response', res.error?.message || 'Request failed'),
-    check(n === 0 ? 'pass' : n === 1 ? 'pass' : 'warn', 'Redirect hops', n === 0 ? 'No redirects.' : `${n} redirect(s)${n > 1 ? ' — chains slow pages down; point links straight to the final URL.' : '.'}`)];
-  if ((res.redirects || []).some((r) => r.status === 302 || r.status === 307)) checks.push(check('warn', 'Temporary redirects', 'A 302/307 is used — use 301 for permanent moves.'));
-  return { url: u.toString(), score: score(checks), checks, tables: [{ title: 'Redirect path', cols: ['URL', 'Status', 'Goes to'], rows: hops }] };
+    check(n === 0 ? 'pass' : n === 1 ? 'pass' : 'warn', 'Redirect hops', n === 0 ? 'No redirects.' : `${n} redirect(s)${n > 1 ? ' — chains slow pages down; point links straight to the final URL.' : '.'}`, n > 1 ? KB.redirect_chain.fix : null)];
+  if ((res.redirects || []).some((r) => r.status === 302 || r.status === 307)) checks.push(check('warn', 'Temporary redirects', 'A 302/307 is used — use 301 for permanent moves.', 'Use a permanent 301 redirect instead of temporary 302/307 redirects for moved pages.'));
+  const s = score(checks);
+  return { url: u.toString(), score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, tables: [{ title: 'Redirect path', cols: ['URL', 'Status', 'Goes to'], rows: hops }] };
 }
 
 export const TOOLS = [
@@ -272,16 +384,16 @@ export const TOOLS = [
   T('on-page', 'meta-analyzer', 'Meta Title & Description Analyzer', 'Check your title tag and meta description length and see how the page looks in Google.', metaAnalyzer),
   T('on-page', 'meta-generator', 'Meta Tag Generator', 'Generate the title, description, Open Graph and Twitter tags for a page, ready to paste.', metaGenerator),
   T('on-page', 'heading-checker', 'Heading Structure Checker', 'See the H1–H6 outline of any page and find missing, duplicate or skipped headings.', headingChecker),
-  T('on-page', 'keyword-density', 'Keyword Density Checker', 'Find the most-used words and phrases on a page and check how often your target keyword appears.', keywordDensity),
+  T('keyword', 'keyword-density', 'Keyword Density Checker', 'Find the most-used words and phrases on a page and check how often your target keyword appears.', keywordDensity),
   T('on-page', 'image-alt-checker', 'Image ALT Text Checker', 'Find images with missing or weak ALT text on any page.', imageAlt),
-  T('on-page', 'canonical-checker', 'Canonical URL Checker', 'Check a page’s canonical tag and whether it points to a working URL.', canonicalChecker),
-  T('on-page', 'robots-checker', 'Robots.txt Checker', 'Read a site’s robots.txt and check whether Google and Bing are allowed to crawl a page.', robotsChecker),
-  T('on-page', 'sitemap-checker', 'XML Sitemap Checker', 'Find a website’s XML sitemap, check it is valid and count its URLs.', sitemapChecker),
-  T('on-page', 'schema-validator', 'Schema Markup Validator', 'Check that a page’s JSON-LD structured data is valid and see which schema types it uses.', schemaValidator),
+  T('technical', 'canonical-checker', 'Canonical URL Checker', 'Check a page’s canonical tag and whether it points to a working URL.', canonicalChecker),
+  T('technical', 'robots-checker', 'Robots.txt Checker', 'Read a site’s robots.txt and check whether Google and Bing are allowed to crawl a page.', robotsChecker),
+  T('technical', 'sitemap-checker', 'XML Sitemap Checker', 'Find a website’s XML sitemap, check it is valid and count its URLs.', sitemapChecker),
+  T('technical', 'schema-validator', 'Schema Markup Validator', 'Check that a page’s JSON-LD structured data is valid and see which schema types it uses.', schemaValidator),
   T('on-page', 'open-graph-checker', 'Open Graph Preview', 'Preview how a link looks when shared on WhatsApp, Facebook or LinkedIn and check its Open Graph tags.', ogChecker),
   T('on-page', 'internal-link-checker', 'Internal Link Checker', 'List every internal link on a page and spot links without anchor text or with nofollow.', internalLinks),
-  T('on-page', 'broken-link-checker', 'Broken Link Checker', 'Check the links on a page and find the ones that return errors.', brokenLinks),
-  T('on-page', 'redirect-checker', 'Redirect Checker', 'Follow a URL’s redirects hop by hop and see the status code of each step.', redirectChecker),
+  T('technical', 'broken-link-checker', 'Broken Link Checker', 'Check the links on a page and find the ones that return errors.', brokenLinks),
+  T('technical', 'redirect-checker', 'Redirect Checker', 'Follow a URL’s redirects hop by hop and see the status code of each step.', redirectChecker),
   ...soon('keyword', ['Keyword Suggestion Tool', 'Keyword Difficulty Checker', 'Keyword Density Analyzer', 'Long-Tail Keyword Generator', 'Keyword Clustering Tool', 'Search Intent Classifier', 'Related Keywords Generator', 'Question Keyword Generator', 'Keyword-to-Content Generator', 'SERP Preview Tool']),
   ...soon('technical', ['Page Speed Checker', 'Core Web Vitals Checker', 'Mobile SEO Checker', 'HTTPS / SSL Checker', 'HTTP Status Code Checker', 'Redirect Chain Checker', 'URL Inspection Tool', 'Robots.txt Generator', 'XML Sitemap Generator', 'Hreflang Generator', 'Schema Generator', '.htaccess Redirect Generator', 'URL Encoder / Decoder']),
   ...soon('local', ['Local SEO Checker', 'Google Business Profile Audit', 'NAP Consistency Checker', 'Local Business Schema Generator', 'Google Review Link Generator', 'Local Keyword Generator', 'Google Maps Ranking Checklist', 'Citation Checker', 'Local SERP Checker']),
@@ -296,7 +408,15 @@ export async function runTool(slug, body) {
   const tool = liveTool(slug);
   if (!tool) throw Object.assign(new Error('Unknown tool.'), { status: 404 });
   try {
-    return { tool: tool.name, ...(await tool.run(body || {})) };
+    const raw = await tool.run(body || {});
+    const counts = raw.counts || (raw.checks ? countChecks(raw.checks) : undefined);
+    const status = raw.status || (counts ? (counts.critical > 0 ? 'fail' : counts.warning > 0 ? 'warn' : 'pass') : undefined);
+    return {
+      tool: tool.name,
+      ...(status ? { status } : {}),
+      ...(counts ? { counts } : {}),
+      ...raw,
+    };
   } catch (e) {
     if (e instanceof AuditInputError) throw Object.assign(new Error(e.message), { status: 400 });
     throw e;
@@ -323,9 +443,14 @@ export function hubVars() {
   };
 }
 
-export function toolVars(tool) {
+export function toolVars(tool, s = {}) {
   const cat = CATEGORIES.find((c) => c.id === tool.cat);
-  const related = TOOLS.filter((t) => t.live && t.slug !== tool.slug).slice(0, 6);
+  const c = TOOL_CONTENT[tool.slug] || {};
+  const relatedSlugs = c.relatedSlugs || [];
+  const related = relatedSlugs.length
+    ? relatedSlugs.map((slug) => liveTool(slug)).filter(Boolean)
+    : TOOLS.filter((t) => t.live && t.slug !== tool.slug).slice(0, 4);
+
   const form = FORM_TOOLS.has(tool.slug)
     ? `<div class="tl-form-grid"><div class="field"><label for="f-title">Page title *</label><input class="input" id="f-title" name="title" maxlength="120" required></div>
        <div class="field"><label for="f-site">Site name</label><input class="input" id="f-site" name="siteName" maxlength="80"></div>
@@ -334,9 +459,22 @@ export function toolVars(tool) {
        <div class="field"><label for="f-img">Share image URL</label><input class="input" id="f-img" name="image" placeholder="https://"></div></div>
        <button class="btn primary lg" type="submit">Generate Meta Tags</button>`
     : `<div class="tl-url"><input class="input" name="url" placeholder="Enter your website — e.g. yourbusiness.in" inputmode="url" autocomplete="url" required aria-label="Website URL">${tool.slug === 'keyword-density' ? '<input class="input" name="keyword" placeholder="Target keyword (optional)" aria-label="Target keyword">' : ''}<button class="btn primary lg" type="submit">Check →</button></div>`;
+
+  const wa = s.whatsapp ? String(s.whatsapp).replace(/\D/g, '') : '919940411837';
+  const waHref = `https://wa.me/${wa}?text=${encodeURIComponent(`Hi Click2Client Media, I used the free ${tool.name} tool and would like to talk to an SEO expert.`)}`;
+  const contentHtml = renderToolContentHtml(tool, c, waHref);
+
   return {
-    'tool.name': esc(tool.name), 'tool.desc': esc(tool.desc), 'tool.slug': esc(tool.slug), 'tool.cat': esc(cat?.name || ''), 'tool.catId': esc(tool.cat),
+    'tool.name': esc(tool.name),
+    'tool.desc': esc(tool.desc),
+    'tool.h1': esc(c.h1 || tool.name),
+    'tool.intro': esc(c.intro || tool.desc),
+    'tool.slug': esc(tool.slug),
+    'tool.cat': esc(cat?.name || 'SEO Tools'),
+    'tool.catId': esc(tool.cat || 'on-page'),
     'tool.form': form,
+    'tool.content': contentHtml,
     'tool.related': related.map((t) => `<a class="tl-card" href="/seo-tools/${t.slug}"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span><i>Use tool →</i></a>`).join(''),
+    'tools.live': String(TOOLS.filter((t) => t.live).length),
   };
 }
