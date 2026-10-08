@@ -11,8 +11,15 @@ const ICON = { pass: '✓', warn: '!', fail: '✕', info: 'i' };
 const ring = (n) => `<div class="tl-score s-${n >= 80 ? 'good' : n >= 50 ? 'ok' : 'bad'}" style="--p:${n}"><b>${n}</b><span>/100</span></div>`;
 const checks = (list) => `<ul class="tl-checks">${list.map((c) => `<li class="c-${c.status}"><i>${ICON[c.status] || 'i'}</i><div><b>${esc(c.label)}</b>${c.detail ? `<span>${esc(c.detail)}</span>` : ''}</div></li>`).join('')}</ul>`;
 const table = (t) => `<div class="tl-table"><h3>${esc(t.title)}</h3><div class="table-scroll"><table><thead><tr>${t.cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${t.rows.map((r) => `<tr>${r.map((v, i) => (i === t.statusCol ? `<td><span class="tl-dot d-${v}">${v === 'fail' ? 'Missing' : v === 'warn' ? 'Check' : 'OK'}</span></td>` : `<td>${esc(v).replace(/\n/g, '<br>')}</td>`)).join('')}</tr>`).join('') || `<tr><td colspan="${t.cols.length}">Nothing found.</td></tr>`}</tbody></table></div></div>`;
-const serp = (s) => `<div class="tl-serp"><span class="tl-serp-label">Google preview</span><div class="u">${esc(s.url)}</div><div class="t">${esc(s.title.length > 60 ? s.title.slice(0, 58) + '…' : s.title)}</div><div class="d">${esc(s.description.length > 160 ? s.description.slice(0, 157) + '…' : s.description)}</div></div>`;
-const og = (o) => `<div class="tl-og"><span class="tl-serp-label">Share preview</span><div class="tl-og-card">${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="tl-og-noimg">No share image</div>'}<div><small>${esc(o.site)}</small><b>${esc(o.title || '(no title)')}</b><span>${esc(o.description)}</span></div></div></div>`;
+const serp = (s) => {
+  const url = String(s?.url ?? '');
+  const title = String(s?.title ?? '');
+  const desc = String(s?.description ?? '');
+  const t = title.length > 60 ? title.slice(0, 58) + '…' : title;
+  const d = desc.length > 160 ? desc.slice(0, 157) + '…' : desc;
+  return `<div class="tl-serp"><span class="tl-serp-label">Google preview</span><div class="u">${esc(url)}</div><div class="t">${esc(t)}</div><div class="d">${esc(d)}</div></div>`;
+};
+const og = (o) => `<div class="tl-og"><span class="tl-serp-label">Share preview</span><div class="tl-og-card">${o?.image ? `<img src="${esc(o.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<div class="tl-og-noimg">No share image</div>'}<div><small>${esc(o?.site)}</small><b>${esc(o?.title || '(no title)')}</b><span>${esc(o?.description)}</span></div></div></div>`;
 const tree = (t) => `<div class="tl-table"><h3>Heading outline</h3><ol class="tl-tree">${t.map((h) => `<li style="--l:${h.level}"><code>H${h.level}</code>${esc(h.text) || '<em>(empty)</em>'}</li>`).join('') || '<li>No headings found.</li>'}</ol></div>`;
 
 function render(r) {
