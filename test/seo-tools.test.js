@@ -4,7 +4,7 @@ import { normalizeInputUrl, AuditInputError, checkStatus } from '../server/lib/n
 import { parsePage } from '../server/engine/parse.js';
 import { analyzeKeywords } from '../server/engine/keywords.js';
 import { parseRobots, isAllowed, explainRule } from '../server/engine/robots.js';
-import { runTool, liveTool } from '../server/tools.js';
+import { runTool, liveTool, check, countChecks, TOOLS, hubVars } from '../server/tools.js';
 import { config } from '../server/config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -572,5 +572,500 @@ describe('Frontend Null-Safe SERP & OG Rendering', () => {
       const ogHtml = og({ image: null, site: null, title: null, description: null });
       assert.ok(ogHtml.includes('Share preview'));
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backend Result Enrichment (Tests 38–43)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Backend Result Enrichment (Phase B Stage 1A)', () => {
+  const originalFetch = globalThis.fetch;
+  const originalAllowPrivate = config.crawler.allowPrivateHosts;
+
+  const sampleHtml = `<!doctype html>
+  <html lang="en">
+    <head>
+      <title>Click2Client Media - Best Digital Marketing and SEO Agency</title>
+      <meta name="description" content="Click2Client Media offers top SEO agency services, digital marketing and growth audits.">
+      <link rel="canonical" href="https://mock.example.com/page">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta property="og:title" content="Click2Client Media">
+      <meta property="og:image" content="https://mock.example.com/og.jpg">
+      <script type="application/ld+json">{"@type": "Organization", "name": "Click2Client"}</script>
+    </head>
+    <body>
+      <h1>Top SEO Agency Services</h1>
+      <h2>Digital Marketing Solutions</h2>
+      <p>Click2Client Media provides digital marketing and SEO services.</p>
+      <a href="https://mock.example.com/about">About us</a>
+      <img src="https://mock.example.com/logo.png" alt="Company Logo">
+    </body>
+  </html>`;
+
+  function setupMock() {
+    config.crawler.allowPrivateHosts = true;
+    globalThis.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('robots.txt')) {
+        return new Response('User-agent: *\nDisallow: /admin\nSitemap: https://mock.example.com/sitemap.xml', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        });
+      }
+      if (u.includes('sitemap.xml')) {
+        return new Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://mock.example.com/page</loc></url></urlset>', {
+          status: 200,
+          headers: { 'content-type': 'application/xml' },
+        });
+      }
+      return new Response(sampleHtml, {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    };
+  }
+
+  function teardownMock() {
+    globalThis.fetch = originalFetch;
+    config.crawler.allowPrivateHosts = originalAllowPrivate;
+  }
+
+  it('38. check helper recommendation field compatibility', () => {
+    const cWithout = check('pass', 'Title', 'Good length');
+    assert.equal(cWithout.status, 'pass');
+    assert.equal(cWithout.label, 'Title');
+    assert.equal(cWithout.detail, 'Good length');
+    assert.equal(cWithout.recommendation, undefined);
+
+    const cWith = check('fail', 'Title', 'Missing', 'Add a unique title tag.');
+    assert.equal(cWith.status, 'fail');
+    assert.equal(cWith.label, 'Title');
+    assert.equal(cWith.detail, 'Missing');
+    assert.equal(cWith.recommendation, 'Add a unique title tag.');
+  });
+
+  it('39. counts existence and mathematical accuracy', () => {
+    const testChecks = [
+      check('fail', 'H1', 'Missing', 'Add an H1'),
+      check('warn', 'Title', 'Short', 'Extend title'),
+      check('warn', 'Desc', 'Short', 'Extend desc'),
+      check('pass', 'HTTPS', 'Secure'),
+      check('info', 'Words', '500 words'),
+    ];
+    const counts = countChecks(testChecks);
+    assert.deepEqual(counts, { critical: 1, warning: 2, pass: 1, info: 1 });
+    assert.equal(counts.critical + counts.warning + counts.pass + counts.info, testChecks.length);
+  });
+
+  it('40. tool results include counts and status metadata', async () => {
+    setupMock();
+    try {
+      const res = await runTool('website-seo-checker', { url: 'https://mock.example.com/page' });
+      assert.ok(res.counts, 'Should have counts metadata');
+      assert.equal(typeof res.counts.critical, 'number');
+      assert.equal(typeof res.counts.warning, 'number');
+      assert.equal(typeof res.counts.pass, 'number');
+      assert.equal(typeof res.counts.info, 'number');
+      assert.equal(
+        res.counts.critical + res.counts.warning + res.counts.pass + res.counts.info,
+        res.checks.length,
+        'Sum of counts must equal checks length'
+      );
+      assert.ok(['pass', 'warn', 'fail'].includes(res.status), 'Status must be pass, warn, or fail');
+    } finally {
+      teardownMock();
+    }
+  });
+
+  it('41. existing response fields preserved across tools', async () => {
+    setupMock();
+    try {
+      const res = await runTool('meta-analyzer', { url: 'https://mock.example.com/page' });
+      assert.equal(typeof res.url, 'string');
+      assert.equal(typeof res.score, 'number');
+      assert.equal(res.scoreAvailable, true);
+      assert.ok(Array.isArray(res.checks));
+      assert.ok(res.serp, 'serp field must be preserved');
+      assert.equal(typeof res.serp.title, 'string');
+    } finally {
+      teardownMock();
+    }
+  });
+
+  it('42. keyword density exposes additive placement matrix', async () => {
+    setupMock();
+    try {
+      const res = await runTool('keyword-density', { url: 'https://mock.example.com/page', keyword: 'seo agency' });
+      assert.ok(res.engine, 'Must have engine object');
+      assert.ok(Array.isArray(res.engine.matrix), 'engine.matrix must be an array');
+      assert.ok(res.engine.matrix.length > 0);
+      assert.ok(res.engine.matrix.some((m) => m.term === 'seo agency'));
+    } finally {
+      teardownMock();
+    }
+  });
+
+  it('43. all 15 tools return valid structure with score/scoreAvailable preserved', async () => {
+    setupMock();
+    try {
+      const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
+      assert.equal(liveSlugs.length, 15, 'Must test exactly 15 live tools');
+
+      for (const slug of liveSlugs) {
+        const body = slug === 'meta-generator'
+          ? { title: 'Test Title', pageUrl: 'https://mock.example.com/page' }
+          : { url: 'https://mock.example.com/page' };
+        const res = await runTool(slug, body);
+        assert.ok(res, `${slug} must return a result`);
+        assert.equal(typeof res.tool, 'string', `${slug} must have tool name`);
+        assert.ok(Array.isArray(res.checks), `${slug} must have checks array`);
+        assert.ok(res.counts, `${slug} must have counts`);
+        assert.equal(
+          res.counts.critical + res.counts.warning + res.counts.pass + res.counts.info,
+          res.checks.length,
+          `${slug} counts must equal checks count`
+        );
+        assert.equal(typeof res.scoreAvailable, 'boolean', `${slug} must have boolean scoreAvailable`);
+      }
+    } finally {
+      teardownMock();
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 4: Conversion CTA & Lead Generation (Tests 44–49)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Conversion CTA & Lead Generation (Phase B Stage 4)', () => {
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+  // Mirror exact helper logic from public/js/tools.js
+  const toolContexts = {
+    'website-seo-checker': { title: 'Want to check your entire website?' },
+    'seo-score-checker': { title: 'Want to benchmark your entire website?' },
+    'meta-analyzer': { title: 'Metadata is just the beginning of your SEO.' },
+    'meta-generator': { title: 'Implemented your tags? Audit your complete site.' },
+    'heading-checker': { title: 'Audit content structure across your whole site.' },
+    'keyword-density': { title: 'Turn keyword analysis into a complete ranking strategy.' },
+    'image-alt-checker': { title: 'Improve image SEO and accessibility sitewide.' },
+    'canonical-checker': { title: 'Prevent duplicate content penalties across all pages.' },
+    'robots-checker': { title: 'Ensure search engines crawl what matters most.' },
+    'sitemap-checker': { title: 'Verify indexation for every page in your sitemap.' },
+    'schema-validator': { title: 'Scale rich structured data across your website.' },
+    'open-graph-checker': { title: 'Maximize social engagement for every page you share.' },
+    'internal-link-checker': { title: 'Strengthen internal linking and PageRank distribution.' },
+    'broken-link-checker': { title: 'Eliminate dead links and 404 errors across your site.' },
+    'redirect-checker': { title: 'Optimize redirect paths and preserve link equity.' },
+  };
+
+  function getCtaCopy(toolSlug, r) {
+    const counts = r?.counts || { critical: 0, warning: 0, pass: 0, info: 0 };
+    const hasCrit = counts.critical > 0;
+    const hasWarn = counts.warning > 0;
+    const lowScore = r?.score != null && r.score < 60;
+    const specific = toolContexts[toolSlug] || { title: 'Ready for a complete website SEO audit?' };
+
+    let eyebrow = 'NEXT STEP FOR YOUR WEBSITE';
+    if (hasCrit) {
+      eyebrow = `ATTENTION: ${counts.critical} CRITICAL ISSUE${counts.critical > 1 ? 'S' : ''} DETECTED`;
+    } else if (hasWarn) {
+      eyebrow = `OPPORTUNITY: ${counts.warning} AREA${counts.warning > 1 ? 'S' : ''} TO OPTIMIZE`;
+    } else if (lowScore) {
+      eyebrow = 'HEALTH SCORE INDICATES IMPROVEMENT NEEDED';
+    } else {
+      eyebrow = 'EXPAND YOUR ANALYSIS SITEWIDE';
+    }
+
+    return { eyebrow, title: specific.title };
+  }
+
+  function renderConversionCta(toolSlug, r, waHref) {
+    const copy = getCtaCopy(toolSlug, r);
+    const auditHref = r?.url
+      ? `/seo-audit?url=${encodeURIComponent(r.url)}#free-audit`
+      : '/seo-audit#free-audit';
+
+    return `
+      <section class="tl-conversion-card" role="region" aria-label="Next Steps and Audit CTA">
+        <div class="tl-cta-content">
+          <span class="tl-cta-eyebrow">${esc(copy.eyebrow)}</span>
+          <h3 class="tl-cta-title">${esc(copy.title)}</h3>
+          <div class="tl-cta-tiers-hint">
+            <span>Free 10-page audit</span> · <span>25 &amp; 50-page deep audits from ₹125</span> · <span>Actionable fix roadmap</span>
+          </div>
+        </div>
+        <div class="tl-cta-actions">
+          <a href="${esc(auditHref)}" class="btn primary lg" id="seo-tools-audit-cta">
+            Get Full SEO Audit →
+          </a>
+          ${waHref ? `
+            <a href="${esc(waHref)}" target="_blank" rel="noopener noreferrer" class="btn outline lg wa-cta-btn" id="seo-tools-whatsapp-cta">
+              Talk to an SEO Expert
+            </a>
+          ` : ''}
+        </div>
+      </section>
+    `;
+  }
+
+  it('44. tool-specific CTA messaging covers all 15 live tools', () => {
+    const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
+    assert.equal(liveSlugs.length, 15);
+    for (const slug of liveSlugs) {
+      const copy = getCtaCopy(slug, { counts: { critical: 0, warning: 0 } });
+      assert.ok(copy.title, `${slug} must have a specific CTA title`);
+      assert.notEqual(copy.title, 'Ready for a complete website SEO audit?', `${slug} must not fallback to generic title`);
+    }
+  });
+
+  it('45. contextual eyebrow reflects critical issues, warnings, low score and healthy states', () => {
+    // Critical issues
+    const critCopy = getCtaCopy('website-seo-checker', { counts: { critical: 3, warning: 1 } });
+    assert.equal(critCopy.eyebrow, 'ATTENTION: 3 CRITICAL ISSUES DETECTED');
+
+    const critOneCopy = getCtaCopy('website-seo-checker', { counts: { critical: 1, warning: 0 } });
+    assert.equal(critOneCopy.eyebrow, 'ATTENTION: 1 CRITICAL ISSUE DETECTED');
+
+    // Warnings only
+    const warnCopy = getCtaCopy('website-seo-checker', { counts: { critical: 0, warning: 4 } });
+    assert.equal(warnCopy.eyebrow, 'OPPORTUNITY: 4 AREAS TO OPTIMIZE');
+
+    const warnOneCopy = getCtaCopy('website-seo-checker', { counts: { critical: 0, warning: 1 } });
+    assert.equal(warnOneCopy.eyebrow, 'OPPORTUNITY: 1 AREA TO OPTIMIZE');
+
+    // Low score without critical/warnings (e.g. score < 60)
+    const lowScoreCopy = getCtaCopy('seo-score-checker', { score: 45, counts: { critical: 0, warning: 0 } });
+    assert.equal(lowScoreCopy.eyebrow, 'HEALTH SCORE INDICATES IMPROVEMENT NEEDED');
+
+    // Healthy page
+    const healthyCopy = getCtaCopy('website-seo-checker', { score: 95, counts: { critical: 0, warning: 0 } });
+    assert.equal(healthyCopy.eyebrow, 'EXPAND YOUR ANALYSIS SITEWIDE');
+  });
+
+  it('46. URL preservation in primary CTA href', () => {
+    const htmlWithUrl = renderConversionCta('canonical-checker', { url: 'https://example.com/test-page?q=1' });
+    assert.ok(htmlWithUrl.includes('href="/seo-audit?url=https%3A%2F%2Fexample.com%2Ftest-page%3Fq%3D1#free-audit"'));
+
+    const htmlWithoutUrl = renderConversionCta('meta-generator', {});
+    assert.ok(htmlWithoutUrl.includes('href="/seo-audit#free-audit"'));
+  });
+
+  it('47. stable semantic tracking IDs on primary and secondary CTAs', () => {
+    const waLink = 'https://wa.me/919940411837?text=Hi';
+    const html = renderConversionCta('meta-analyzer', { url: 'https://example.com' }, waLink);
+    assert.ok(html.includes('id="seo-tools-audit-cta"'), 'Must have id="seo-tools-audit-cta"');
+    assert.ok(html.includes('id="seo-tools-whatsapp-cta"'), 'Must have id="seo-tools-whatsapp-cta"');
+  });
+
+  it('48. WhatsApp CTA omitted if no WhatsApp configuration available', () => {
+    const html = renderConversionCta('robots-checker', { url: 'https://example.com' }, '');
+    assert.ok(html.includes('id="seo-tools-audit-cta"'));
+    assert.ok(!html.includes('id="seo-tools-whatsapp-cta"'));
+  });
+
+  it('49. null-safe and handles missing data without crashing', () => {
+    assert.doesNotThrow(() => {
+      const html1 = renderConversionCta('unknown-tool', null);
+      assert.ok(html1.includes('Get Full SEO Audit'));
+
+      const html2 = renderConversionCta(null, {});
+      assert.ok(html2.includes('Get Full SEO Audit'));
+
+      const copy = getCtaCopy('meta-analyzer', { counts: null, score: null });
+      assert.ok(copy.eyebrow);
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 5: SEO & Content Architecture (Tests 50–57)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
+  const { TOOL_CONTENT, renderToolContentHtml } = await import('../server/site/tools-content.js');
+  const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
+
+  it('50. all 15 tools have unique, non-generic titles and meta descriptions', () => {
+    assert.equal(liveSlugs.length, 15);
+    const titles = new Set();
+    const descriptions = new Set();
+
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.ok(c, `${slug} must have content entry`);
+      assert.ok(c.title, `${slug} must have title`);
+      assert.ok(c.description, `${slug} must have description`);
+      assert.ok(c.title.includes('Click2Client Media'), `${slug} title should be branded`);
+      assert.ok(c.title.length >= 40 && c.title.length <= 80, `${slug} title length (${c.title.length}) should be within optimal limits`);
+      assert.ok(c.description.length >= 100 && c.description.length <= 200, `${slug} description length (${c.description.length}) should be within optimal limits`);
+
+      assert.ok(!titles.has(c.title), `Duplicate title found: ${c.title}`);
+      assert.ok(!descriptions.has(c.description), `Duplicate description found for: ${slug}`);
+      titles.add(c.title);
+      descriptions.add(c.description);
+    }
+  });
+
+  it('51. all 15 tools define clear, single user-intent H1 headings', () => {
+    const h1s = new Set();
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.ok(c.h1, `${slug} must have H1`);
+      assert.ok(c.h1.length >= 10 && c.h1.length <= 60, `${slug} H1 length (${c.h1.length}) must be concise`);
+      assert.ok(!h1s.has(c.h1), `Duplicate H1 found: ${c.h1}`);
+      h1s.add(c.h1);
+    }
+  });
+
+  it('52. every tool has 4-step workflow, 4 checks, and 4 practical fixes', () => {
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.equal(c.steps.length, 4, `${slug} must have 4 steps`);
+      assert.equal(c.checks.length, 4, `${slug} must have 4 checks`);
+      assert.equal(c.fixes.length, 4, `${slug} must have 4 fixes`);
+      c.steps.forEach((s) => { assert.ok(s.num); assert.ok(s.title); assert.ok(s.desc); });
+      c.checks.forEach((ch) => { assert.ok(ch.icon); assert.ok(ch.title); assert.ok(ch.desc); });
+      c.fixes.forEach((f) => { assert.ok(f.title); assert.ok(f.desc); });
+    }
+  });
+
+  it('53. every tool has exactly 5 search-intent FAQs with full answers', () => {
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.ok(Array.isArray(c.faqs), `${slug} must have faqs array`);
+      assert.equal(c.faqs.length, 5, `${slug} must have exactly 5 FAQs`);
+      for (const faq of c.faqs) {
+        assert.ok(faq.q && faq.q.endsWith('?'), `${slug} question must end with ?: "${faq.q}"`);
+        assert.ok(faq.a && faq.a.length >= 40, `${slug} answer must be informative: "${faq.a}"`);
+      }
+    }
+  });
+
+  it('54. FAQPage schema maps 1-to-1 with visible FAQs and is valid JSON-LD', () => {
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      const faqSchema = {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: c.faqs.map((f) => ({
+          '@type': 'Question',
+          name: f.q,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: f.a,
+          },
+        })),
+      };
+      const jsonStr = JSON.stringify(faqSchema);
+      assert.doesNotThrow(() => JSON.parse(jsonStr), `${slug} FAQ schema must be valid JSON`);
+      const parsed = JSON.parse(jsonStr);
+      assert.equal(parsed['@type'], 'FAQPage');
+      assert.equal(parsed.mainEntity.length, 5);
+      assert.equal(parsed.mainEntity[0].name, c.faqs[0].q);
+      assert.equal(parsed.mainEntity[0].acceptedAnswer.text, c.faqs[0].a);
+    }
+  });
+
+  it('55. curated related tools link to 3-4 valid complementary live tools', () => {
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.ok(Array.isArray(c.relatedSlugs), `${slug} must have relatedSlugs`);
+      assert.ok(c.relatedSlugs.length >= 3 && c.relatedSlugs.length <= 4, `${slug} must have 3-4 related tools`);
+      assert.ok(!c.relatedSlugs.includes(slug), `${slug} must not link to itself`);
+      for (const rel of c.relatedSlugs) {
+        assert.ok(liveSlugs.includes(rel), `Related slug "${rel}" for "${slug}" must be a live tool`);
+      }
+    }
+  });
+
+  it('56. renderToolContentHtml generates accessible, semantic content hierarchy', () => {
+    const sampleTool = TOOLS.find((t) => t.slug === 'broken-link-checker');
+    const c = TOOL_CONTENT['broken-link-checker'];
+    const html = renderToolContentHtml(sampleTool, c, 'https://wa.me/919940411837');
+
+    assert.ok(html.includes('class="section tl-guide-sec"'), 'Must have guide section');
+    assert.ok(html.includes('class="section tint tl-checks-info-sec"'), 'Must have checks info section');
+    assert.ok(html.includes('class="section tl-fixes-sec"'), 'Must have fixes section');
+    assert.ok(html.includes('class="section tint tl-faq-sec"'), 'Must have FAQ section');
+    assert.ok(html.includes('class="section tight tl-bridge-sec"'), 'Must have audit bridge section');
+
+    // No H1 in body content (H1 is strictly reserved for the page hero)
+    assert.ok(!html.includes('<h1'), 'Content must not introduce competing H1 headings');
+    assert.ok(html.includes('<h2'), 'Content must include semantic H2 headings');
+    assert.ok(html.includes('<h3'), 'Content must include semantic H3 subheadings');
+    assert.ok(html.includes('<details class="tl-faq-item'), 'FAQs must be accessible details elements');
+  });
+
+  it('57. hubVars categorizes all 15 tools with live links and clean navigation', () => {
+    const hub = hubVars();
+    assert.equal(hub['tools.live'], '15');
+    assert.ok(hub['tools.cats'].includes('href="/seo-tools/website-seo-checker"'));
+    assert.ok(hub['tools.cats'].includes('href="/seo-tools/broken-link-checker"'));
+    assert.ok(hub['tools.cats'].includes('href="/seo-tools/keyword-density"'));
+    for (const slug of liveSlugs) {
+      assert.ok(hub['tools.cats'].includes(`/seo-tools/${slug}`), `Hub must link to ${slug}`);
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Stage 6: Final QA & Production Readiness (Tests 58–61)
+  // ─────────────────────────────────────────────────────────────────────────────
+  it('58. WebApplication schema integrity and properties verified for all 15 tools', () => {
+    for (const slug of liveSlugs) {
+      const tool = TOOLS.find((t) => t.slug === slug);
+      const c = TOOL_CONTENT[slug];
+      const webApp = {
+        '@type': 'WebApplication',
+        name: tool.name,
+        description: c.description || tool.desc,
+        url: `https://click2client.media/seo-tools/${tool.slug}`,
+        applicationCategory: 'UtilitiesApplication',
+        operatingSystem: 'All',
+        browserRequirements: 'Requires JavaScript. Requires HTML5.',
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
+      };
+      assert.equal(webApp['@type'], 'WebApplication');
+      assert.equal(webApp.applicationCategory, 'UtilitiesApplication');
+      assert.equal(webApp.offers.price, '0');
+      assert.ok(webApp.name && webApp.name.length > 3);
+      assert.ok(webApp.description && webApp.description.length >= 100);
+      assert.ok(webApp.url.includes(`/seo-tools/${slug}`));
+    }
+  });
+
+  it('59. breadcrumb trail maps accurately to Home > SEO Tools > Tool', () => {
+    for (const slug of liveSlugs) {
+      const tool = TOOLS.find((t) => t.slug === slug);
+      const trail = [
+        { name: 'Home', path: '/' },
+        { name: 'SEO Tools', path: '/seo-tools' },
+        { name: tool.name, path: `/seo-tools/${tool.slug}` },
+      ];
+      assert.equal(trail.length, 3);
+      assert.equal(trail[0].path, '/');
+      assert.equal(trail[1].path, '/seo-tools');
+      assert.equal(trail[2].path, `/seo-tools/${slug}`);
+    }
+  });
+
+  it('60. educational audit bridge consistently points to free audit anchor', () => {
+    for (const slug of liveSlugs) {
+      const tool = TOOLS.find((t) => t.slug === slug);
+      const c = TOOL_CONTENT[slug];
+      const html = renderToolContentHtml(tool, c, '');
+      assert.ok(html.includes('href="/seo-audit#free-audit"'), `${slug} bridge must link to free audit`);
+      assert.ok(html.includes('Audit Your Entire Website with Click2Client Media'), `${slug} must feature audit heading`);
+    }
+  });
+
+  it('61. no tool self-links in related tools and all related slugs resolve to live tools', () => {
+    for (const slug of liveSlugs) {
+      const c = TOOL_CONTENT[slug];
+      assert.ok(Array.isArray(c.relatedSlugs));
+      assert.ok(!c.relatedSlugs.includes(slug), `${slug} must never link to itself`);
+      for (const rel of c.relatedSlugs) {
+        const found = TOOLS.find((t) => t.slug === rel && t.live);
+        assert.ok(found, `Related slug "${rel}" from "${slug}" must resolve to a live tool`);
+      }
+    }
   });
 });
