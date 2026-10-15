@@ -1,0 +1,148 @@
+import { useEffect, useState } from 'react'
+import { CalendarOff, Code2, GraduationCap, MessageCircle, Plus, Save, Settings as SettingsIcon, Trash2, UserRound } from 'lucide-react'
+import { useAuth } from '../auth'
+import { supabase } from '../lib/supabase'
+import { fmtDate } from '../lib/util'
+import { Button, Card, inputCls, Label, PageHeader, toast } from '../ui'
+
+export default function Settings() {
+  const { profile, isCeo, settings, reloadSettings } = useAuth()
+  const [programs, setPrograms] = useState(settings.programs)
+  const [newProgram, setNewProgram] = useState('')
+  const [holidays, setHolidays] = useState(settings.holidays)
+  const [hol, setHol] = useState({ date: '', name: '' })
+  const [year, setYear] = useState(settings.academic_year)
+  const [wa, setWa] = useState(settings.whatsapp)
+  const [token, setToken] = useState('')
+  const [hasToken, setHasToken] = useState(false)
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => { if (isCeo) supabase.rpc('has_secret', { k: 'whatsapp_token' }).then(({ data }) => setHasToken(!!data)) }, [isCeo])
+
+  async function save(key: string, value: unknown) {
+    setBusy(key)
+    const { error } = await supabase.from('settings').upsert({ key, value })
+    setBusy('')
+    if (error) return toast(error.message, 'error')
+    await reloadSettings()
+    toast('Saved')
+  }
+
+  async function saveWhatsApp() {
+    if (token) {
+      const { error } = await supabase.rpc('set_secret', { k: 'whatsapp_token', v: token.trim() })
+      if (error) return toast(error.message, 'error')
+      setHasToken(true)
+      setToken('')
+    }
+    await save('whatsapp', wa)
+  }
+
+  const intakeUrl = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://YOUR-PROJECT.supabase.co'}/rest/v1/rpc/submit_lead`
+  const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'YOUR-ANON-KEY'
+  const ro = !isCeo
+
+  return (
+    <>
+      <PageHeader icon={SettingsIcon} title="Settings" subtitle={isCeo ? 'Configure your school' : 'Only the CEO can change these'} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><UserRound className="h-5 w-5 text-honey" />Your account</h2>
+          <p className="font-semibold">{profile!.full_name}</p>
+          <p className="text-sm opacity-60">@{profile!.username} · {isCeo ? 'CEO' : 'Coordinator'} · {profile!.phone ?? 'no phone'}</p>
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><GraduationCap className="h-5 w-5 text-mint-ink" />Programs & academic year</h2>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {programs.map((p) => (
+              <span key={p} className="flex items-center gap-1 rounded-full bg-mint px-3 py-1 text-sm font-semibold text-mint-ink">
+                {p}{!ro && <button onClick={() => setPrograms(programs.filter((x) => x !== p))} aria-label={`Remove ${p}`}><Trash2 className="h-3.5 w-3.5" /></button>}
+              </span>
+            ))}
+          </div>
+          {!ro && (
+            <div className="flex gap-2">
+              <input className={inputCls} value={newProgram} onChange={(e) => setNewProgram(e.target.value)} placeholder="Add a program" />
+              <Button variant="soft" icon={Plus} onClick={() => { if (newProgram.trim()) { setPrograms([...programs, newProgram.trim()]); setNewProgram('') } }}>Add</Button>
+            </div>
+          )}
+          <Label label="Current academic year" className="mt-3">
+            <input className={inputCls} value={year} onChange={(e) => setYear(e.target.value)} disabled={ro} placeholder="2026-27" />
+          </Label>
+          {!ro && (
+            <Button className="mt-3" icon={Save} loading={busy === 'programs'}
+              onClick={async () => { await save('programs', programs); await save('academic_year', year) }}>Save</Button>
+          )}
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><CalendarOff className="h-5 w-5 text-rose-ink" />Holidays</h2>
+          <p className="mb-3 text-sm opacity-60">Greyed out on the attendance grid, like Sundays.</p>
+          <ul className="mb-3 space-y-1">
+            {[...holidays].sort((a, b) => a.date.localeCompare(b.date)).map((h) => (
+              <li key={h.date} className="flex items-center justify-between rounded-2xl bg-rose/50 px-3 py-1.5 text-sm dark:bg-rose/10">
+                <span><b>{fmtDate(h.date)}</b> · {h.name}</span>
+                {!ro && <button onClick={() => setHolidays(holidays.filter((x) => x.date !== h.date))} aria-label="Remove holiday"><Trash2 className="h-4 w-4" /></button>}
+              </li>
+            ))}
+            {!holidays.length && <li className="text-sm opacity-50">No holidays added.</li>}
+          </ul>
+          {!ro && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <input type="date" className={inputCls + ' w-44'} value={hol.date} onChange={(e) => setHol({ ...hol, date: e.target.value })} />
+                <input className={inputCls + ' flex-1'} value={hol.name} onChange={(e) => setHol({ ...hol, name: e.target.value })} placeholder="Holiday name" />
+                <Button variant="soft" icon={Plus} onClick={() => {
+                  if (!hol.date) return
+                  setHolidays([...holidays.filter((x) => x.date !== hol.date), { date: hol.date, name: hol.name || 'Holiday' }])
+                  setHol({ date: '', name: '' })
+                }}>Add</Button>
+              </div>
+              <Button className="mt-3" icon={Save} loading={busy === 'holidays'} onClick={() => save('holidays', holidays)}>Save holidays</Button>
+            </>
+          )}
+        </Card>
+
+        {isCeo && (
+          <Card>
+            <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><MessageCircle className="h-5 w-5 text-leaf-ink" />WhatsApp Business API</h2>
+            <p className="mb-3 text-sm opacity-60">
+              From Meta Business → WhatsApp → API setup. Without these, messages open as click-to-send wa.me links instead.
+            </p>
+            <div className="space-y-3">
+              <Label label="Phone number ID">
+                <input className={inputCls} value={wa.phone_number_id} onChange={(e) => setWa({ ...wa, phone_number_id: e.target.value })} />
+              </Label>
+              <Label label={`Permanent access token ${hasToken ? '(saved — leave blank to keep)' : ''}`}>
+                <input type="password" className={inputCls} value={token} onChange={(e) => setToken(e.target.value)} placeholder={hasToken ? '••••••••' : 'EAAG…'} autoComplete="off" />
+              </Label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" className="h-4 w-4 accent-honey" checked={wa.enabled} onChange={(e) => setWa({ ...wa, enabled: e.target.checked })} />
+                Send automatically through the API
+              </label>
+              <Button icon={Save} loading={busy === 'whatsapp'} onClick={saveWhatsApp}>Save WhatsApp settings</Button>
+            </div>
+          </Card>
+        )}
+
+        {isCeo && (
+          <Card className="lg:col-span-2">
+            <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><Code2 className="h-5 w-5 text-lav-ink" />Website lead endpoint</h2>
+            <p className="mb-2 text-sm opacity-60">
+              Point your website forms here. <code>category</code> is one of ntt, consultation, franchise, cbse, degree, jv. Any extra fields (e.g. investment_budget) are saved too.
+            </p>
+            <pre className="overflow-x-auto rounded-2xl bg-charcoal p-4 text-xs text-cream">{`fetch('${intakeUrl}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', apikey: '${anonKey}' },
+  body: JSON.stringify({ p: {
+    category: 'franchise', name: 'Asha', phone: '9845012345', email: 'asha@example.com',
+    city: 'Mysuru', message: 'Interested', investment_budget: '₹15 lakh', preferred_location: 'Mysuru'
+  } })
+})`}</pre>
+          </Card>
+        )}
+      </div>
+    </>
+  )
+}

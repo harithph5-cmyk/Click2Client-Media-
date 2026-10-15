@@ -1,0 +1,6 @@
+# Only the settings this project needs; `supabase init` fills in the rest.
+[auth]
+enable_signup = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
