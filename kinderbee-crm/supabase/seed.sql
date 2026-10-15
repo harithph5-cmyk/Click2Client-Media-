@@ -9,6 +9,7 @@ declare
   coord uuid := '22222222-2222-2222-2222-222222222222';
   u record;
 begin
+  perform set_config('kb.allow_signup', 'on', true); -- see 0003_block_signups.sql
   for u in select * from (values
     (ceo, 'ceo@kinderbee.local', 'KinderBee@123',
       '{"provider":"email","providers":["email"],"role":"ceo","full_name":"Lakshmi Rao","phone":"+919845000001","username":"ceo"}'::jsonb),
@@ -23,6 +24,7 @@ begin
     insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
     values (gen_random_uuid(), u.id, u.id::text, jsonb_build_object('sub', u.id::text, 'email', u.email), 'email', now(), now(), now());
   end loop;
+  perform set_config('kb.allow_signup', 'off', true);
 end $$;
 
 -- Students
