@@ -1620,11 +1620,69 @@ details[open] .tl-chevron { transform: rotate(180deg); }
 .tl-hop-badge.b-err { background: var(--fail-soft); color: var(--fail); }
 .tl-hop-arrow { color: var(--ink-4); font-size: 16px; text-align: center; padding: 2px 0 2px 20px; }
 
+/* Core Web Vitals Grid & Pills */
+.tl-cwv-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+.tl-cwv-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-cwv-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.tl-cwv-name {
+  font: 600 12px var(--display);
+  color: var(--ink-3);
+}
+.tl-cwv-val {
+  font: 800 22px/1.2 var(--display);
+  color: var(--ink);
+  margin-top: 4px;
+}
+.tl-cwv-target {
+  font: 500 11.5px var(--mono);
+  color: var(--ink-4);
+}
+.tl-cwv-pill {
+  font: 700 10.5px var(--display);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+.tl-cwv-pill.cwv-good {
+  background: var(--pass-soft);
+  color: var(--pass);
+}
+.tl-cwv-pill.cwv-ok {
+  background: rgba(230, 115, 0, 0.1);
+  color: var(--saffron);
+}
+.tl-cwv-pill.cwv-poor {
+  background: var(--fail-soft);
+  color: var(--fail);
+}
+
 @media (max-width: 640px) {
   .tl-meta-panel { grid-template-columns: 1fr; }
   .tl-score-scale { grid-template-columns: 1fr; }
   .tl-agents-grid { grid-template-columns: 1fr; }
   .tl-canon-row { grid-template-columns: 1fr; gap: 4px; }
+  .tl-cwv-grid { grid-template-columns: 1fr; }
 }
 
 /* ── Stage 4: Lead Generation & Conversion CTA ──────── */

@@ -1,5 +1,5 @@
 // /seo-tools/<tool>: submits the form to /api/tools/<tool> and renders the result.
-import { api, esc, track, fmtNum } from './common.js';
+import { api, esc, track, fmtNum, sanitizeUrl } from './common.js';
 
 let publicConfigPromise;
 const getPublicConfig = () => (publicConfigPromise ||= api('/public/config').catch(() => null));
@@ -9,6 +9,11 @@ const out = document.getElementById('toolOut');
 const box = document.getElementById('toolResult');
 const err = document.getElementById('toolErr');
 const slug = form.dataset.tool;
+
+// Tool view event tracking
+if (slug) {
+  track('seo_tool_view', { tool_name: slug, page_location: location.pathname });
+}
 
 const ICON = { pass: '✓', warn: '!', fail: '✕', info: 'i' };
 
@@ -446,6 +451,189 @@ function toolRedirectChecker(r) {
   `;
 }
 
+function toolCoreWebVitals(r) {
+  const m = r.mobile;
+  const lab = m?.lab || {};
+  const ttfb = r.serverTtfb != null ? `${r.serverTtfb}ms` : '—';
+
+  const badge = (val, good, poor, isLowerGood = true) => {
+    if (val == null) return '<span class="tl-cwv-pill">N/A</span>';
+    const isGood = isLowerGood ? val <= good : val >= good;
+    const isPoor = isLowerGood ? val > poor : val < poor;
+    const cls = isGood ? 'cwv-good' : isPoor ? 'cwv-poor' : 'cwv-ok';
+    const label = isGood ? 'Good' : isPoor ? 'Poor' : 'Needs Work';
+    return `<span class="tl-cwv-pill ${cls}">${label}</span>`;
+  };
+
+  const lcpVal = lab.lcp?.value ? (lab.lcp.value / 1000).toFixed(2) + 's' : '—';
+  const clsVal = lab.cls?.value != null ? Number(lab.cls.value.toFixed(3)) : '—';
+  const tbtVal = lab.tbt?.value != null ? Math.round(lab.tbt.value) + 'ms' : '—';
+  const fcpVal = lab.fcp?.value ? (lab.fcp.value / 1000).toFixed(2) + 's' : '—';
+
+  return `
+    <div class="tl-score-panel" role="region" aria-label="Core Web Vitals Assessment">
+      <h3>Core Web Vitals Performance Breakdown</h3>
+      <p>Evaluates speed and stability benchmarks required for optimal search ranking. Metrics reflect mobile Lighthouse audit and server response time.</p>
+      <div class="tl-cwv-grid">
+        <div class="tl-cwv-card">
+          <div class="tl-cwv-card-top">
+            <span class="tl-cwv-name">LCP (Largest Contentful Paint)</span>
+            ${badge(lab.lcp?.value, 2500, 4000)}
+          </div>
+          <b class="tl-cwv-val">${lcpVal}</b>
+          <span class="tl-cwv-target">Target: ≤ 2.5s</span>
+        </div>
+        <div class="tl-cwv-card">
+          <div class="tl-cwv-card-top">
+            <span class="tl-cwv-name">CLS (Layout Shift)</span>
+            ${badge(lab.cls?.value, 0.1, 0.25)}
+          </div>
+          <b class="tl-cwv-val">${clsVal}</b>
+          <span class="tl-cwv-target">Target: ≤ 0.1</span>
+        </div>
+        <div class="tl-cwv-card">
+          <div class="tl-cwv-card-top">
+            <span class="tl-cwv-name">TBT (Total Blocking Time)</span>
+            ${badge(lab.tbt?.value, 200, 600)}
+          </div>
+          <b class="tl-cwv-val">${tbtVal}</b>
+          <span class="tl-cwv-target">Target: ≤ 200ms</span>
+        </div>
+        <div class="tl-cwv-card">
+          <div class="tl-cwv-card-top">
+            <span class="tl-cwv-name">FCP (First Contentful Paint)</span>
+            ${badge(lab.fcp?.value, 1800, 3000)}
+          </div>
+          <b class="tl-cwv-val">${fcpVal}</b>
+          <span class="tl-cwv-target">Target: ≤ 1.8s</span>
+        </div>
+        <div class="tl-cwv-card">
+          <div class="tl-cwv-card-top">
+            <span class="tl-cwv-name">Server TTFB (Measured)</span>
+            ${badge(r.serverTtfb, 800, 1800)}
+          </div>
+          <b class="tl-cwv-val">${ttfb}</b>
+          <span class="tl-cwv-target">Target: ≤ 800ms</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toolHttpsSecurityChecker(r) {
+  const isHttps = r.url?.startsWith('https:');
+  const hstsCheck = (r.checks || []).find((c) => c.label && c.label.includes('HSTS'));
+  const cspCheck = (r.checks || []).find((c) => c.label && c.label.includes('CSP'));
+  const mixedCheck = (r.checks || []).find((c) => c.label && c.label.includes('Mixed Content'));
+
+  return `
+    <div class="tl-score-panel" role="region" aria-label="Security Status Overview">
+      <h3>HTTPS &amp; Transport Security Posture</h3>
+      <p>Validates encryption, transport security hardening, and resource integrity across core headers.</p>
+      <div class="tl-agents-grid">
+        <div class="tl-agent-card ${isHttps ? 'allowed' : 'blocked'}">
+          <b>HTTPS Encryption</b>
+          <span>${isHttps ? 'Active ✓' : 'Insecure ✕'}</span>
+        </div>
+        <div class="tl-agent-card ${hstsCheck?.status === 'pass' ? 'allowed' : 'blocked'}">
+          <b>HSTS Policy</b>
+          <span>${hstsCheck?.status === 'pass' ? 'Configured ✓' : 'Missing !'}</span>
+        </div>
+        <div class="tl-agent-card ${cspCheck?.status === 'pass' ? 'allowed' : 'blocked'}">
+          <b>Content Security (CSP)</b>
+          <span>${cspCheck?.status === 'pass' ? 'Configured ✓' : 'Missing !'}</span>
+        </div>
+        <div class="tl-agent-card ${mixedCheck?.status === 'pass' ? 'allowed' : 'blocked'}">
+          <b>Mixed Content</b>
+          <span>${mixedCheck?.status === 'pass' ? 'Clean ✓' : 'Detected ✕'}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toolKeywordSuggester(r) {
+  const total = r.totalSuggestions || (r.suggestions || []).length || 0;
+  const questions = (r.suggestions || []).filter((s) => s.type === 'Question').length;
+  const commercial = (r.suggestions || []).filter((s) => s.type && s.type.includes('Commercial')).length;
+
+  return `
+    <div class="tl-heading-bar" role="region" aria-label="Keyword Suggestions Overview">
+      <span class="tl-heading-chip">Seed Keyword: <b>${esc(r.keyword || '—')}</b></span>
+      <span class="tl-heading-chip">Total Suggestions: <b>${total}</b></span>
+      <span class="tl-heading-chip" style="color:var(--accent);">Question Queries: <b>${questions}</b></span>
+      <span class="tl-heading-chip" style="color:var(--pass);">Commercial Intent: <b>${commercial}</b></span>
+    </div>
+  `;
+}
+
+function toolSearchIntentClassifier(r) {
+  const s = r.stats || { informational: 0, commercial: 0, transactional: 0, navigational: 0 };
+  return `
+    <div class="tl-score-panel" role="region" aria-label="Search Intent Breakdown">
+      <h3>Search Intent &amp; Funnel Distribution</h3>
+      <p>Categorizes search queries across the organic funnel to match user intent with the right content format.</p>
+      <div class="tl-vocab-grid">
+        <div class="tl-vocab-card">
+          <b>${s.informational}</b>
+          <span>Informational (TOFU)</span>
+        </div>
+        <div class="tl-vocab-card">
+          <b>${s.commercial}</b>
+          <span>Commercial (MOFU)</span>
+        </div>
+        <div class="tl-vocab-card">
+          <b>${s.transactional}</b>
+          <span>Transactional (BOFU)</span>
+        </div>
+        <div class="tl-vocab-card">
+          <b>${s.navigational}</b>
+          <span>Navigational (Brand)</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toolKeywordClustering(r) {
+  const kws = r.totalKeywords || 0;
+  const clusters = r.clusterCount || (r.clusters || []).length || 0;
+  return `
+    <div class="tl-heading-bar" role="region" aria-label="Topic Clusters Summary">
+      <span class="tl-heading-chip">Keywords Analyzed: <b>${kws}</b></span>
+      <span class="tl-heading-chip" style="color:var(--accent);">Topic Clusters: <b>${clusters}</b></span>
+      <span class="tl-heading-chip">Avg. Depth: <b>${clusters > 0 ? (kws / clusters).toFixed(1) : 0} kws/pillar</b></span>
+    </div>
+  `;
+}
+
+function toolContentBriefGenerator(r) {
+  const b = r.brief || {};
+  return `
+    <div class="tl-score-panel" role="region" aria-label="SEO Content Brief Summary">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h3 style="margin:0 0 6px;">${esc(b.h1 || r.topic || 'SEO Content Brief')}</h3>
+          <p style="margin:0;">Target Word Count: <strong>${esc(b.targetWordCount || '1,800 – 2,400 words')}</strong> · Intent: <strong>${esc(b.searchIntent || 'Informational')}</strong></p>
+        </div>
+        <span class="tl-status-badge b-pass">Brief Blueprint Ready</span>
+      </div>
+      ${b.titles?.length ? `
+        <div style="margin-top:16px;">
+          <b style="font-size:13px;display:block;margin-bottom:6px;color:var(--ink-2);">Recommended Title Tag:</b>
+          <div class="tl-meta-content" style="padding:10px 14px;font-size:14px;">${esc(b.titles[0])}</div>
+        </div>
+      ` : ''}
+      ${b.descriptions?.length ? `
+        <div style="margin-top:12px;">
+          <b style="font-size:13px;display:block;margin-bottom:6px;color:var(--ink-2);">Recommended Meta Description:</b>
+          <div class="tl-meta-content" style="padding:10px 14px;font-size:14px;">${esc(b.descriptions[0])}</div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
 function renderToolSpecific(toolSlug, r) {
   switch (toolSlug) {
     case 'website-seo-checker': return toolWebsiteSeoChecker(r);
@@ -463,6 +651,12 @@ function renderToolSpecific(toolSlug, r) {
     case 'internal-link-checker': return toolInternalLinkChecker(r);
     case 'broken-link-checker': return toolBrokenLinkChecker(r);
     case 'redirect-checker': return toolRedirectChecker(r);
+    case 'core-web-vitals': return toolCoreWebVitals(r);
+    case 'https-security-checker': return toolHttpsSecurityChecker(r);
+    case 'keyword-suggester': return toolKeywordSuggester(r);
+    case 'search-intent-classifier': return toolSearchIntentClassifier(r);
+    case 'keyword-clustering': return toolKeywordClustering(r);
+    case 'content-brief-generator': return toolContentBriefGenerator(r);
     default: return '';
   }
 }
@@ -535,6 +729,30 @@ function getCtaCopy(toolSlug, r) {
     'redirect-checker': {
       title: 'Optimize redirect paths and preserve link equity.',
       desc: 'Chained redirects slow page loads and bleed link equity. Run a complete audit to streamline redirects across your domain.',
+    },
+    'core-web-vitals': {
+      title: 'Accelerate page load speeds across your entire site.',
+      desc: 'Slow pages hurt user conversion and Google rankings. A full SEO audit pinpoints unoptimized assets, render-blocking scripts, and server bottlenecks across up to 50 pages.',
+    },
+    'https-security-checker': {
+      title: 'Strengthen security headers and HTTPS integrity sitewide.',
+      desc: 'Security misconfigurations expose users and degrade search engine trust. A comprehensive audit checks SSL certificates, mixed content, and security headers on every page.',
+    },
+    'keyword-suggester': {
+      title: 'Turn search queries into a full organic content plan.',
+      desc: 'Discovering keyword variations is just the starting point. Click2Client Media maps keywords to targeted landing pages and creates high-converting site architectures.',
+    },
+    'search-intent-classifier': {
+      title: 'Align your complete content library with search intent.',
+      desc: 'Targeting the wrong search intent leads to high bounce rates and lost revenue. A full SEO audit audits your site’s search intent alignment across all ranking pages.',
+    },
+    'keyword-clustering': {
+      title: 'Build authoritative content pillars that dominate SERPs.',
+      desc: 'Prevent internal keyword cannibalization and establish topical authority. Our full audits design site-wide topic clusters and strategic internal linking structures.',
+    },
+    'content-brief-generator': {
+      title: 'Scale your content strategy with expert SEO execution.',
+      desc: 'A great brief needs expert execution. Partner with Click2Client Media for full-service SEO content creation, technical optimization, and revenue-driven lead generation.',
     },
   };
 
@@ -921,11 +1139,11 @@ async function render(r) {
 
   // Conversion CTA Click Event Tracking
   document.getElementById('seo-tools-audit-cta')?.addEventListener('click', () => {
-    track('seo_tool_audit_cta_clicked', { tool: slug, target_url: r.url || '' });
+    track('seo_tool_audit_cta_clicked', { tool: slug, target_url: sanitizeUrl(r.url) });
   });
 
   document.getElementById('seo-tools-whatsapp-cta')?.addEventListener('click', () => {
-    track('seo_tool_whatsapp_cta_clicked', { tool: slug, target_url: r.url || '' });
+    track('seo_tool_whatsapp_cta_clicked', { tool: slug, target_url: sanitizeUrl(r.url) });
   });
 
   // Copy code handler
@@ -1003,6 +1221,7 @@ form.addEventListener('submit', async (e) => {
 
   box.hidden = false;
   renderLoading();
+  track('seo_tool_run', { tool_name: slug });
   box.scrollIntoView({
     behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     block: 'start',
@@ -1012,8 +1231,10 @@ form.addEventListener('submit', async (e) => {
     const res = await api(`/public/tools/${slug}`, { method: 'POST', body });
     await render(res);
     track('seo_tool_used', { tool: slug });
+    track('seo_tool_success', { tool_name: slug });
   } catch (ex) {
     box.hidden = true;
+    track('seo_tool_error', { tool_name: slug, error_type: ex.code || 'request_failed' });
     renderError(ex.message || 'Request failed. Please try again.');
   } finally {
     btn.disabled = false;

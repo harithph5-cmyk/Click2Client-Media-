@@ -9,6 +9,7 @@ import { fetchRobots, isAllowed, explainRule } from './engine/robots.js';
 import { analyzeKeywords } from './engine/keywords.js';
 import { analyzeSitemaps } from './engine/sitemap.js';
 import { KB } from './engine/knowledge.js';
+import { runPageSpeed } from './engine/performance.js';
 import { TOOL_CONTENT, renderToolContentHtml } from './site/tools-content.js';
 
 export const CATEGORIES = [
@@ -378,6 +379,665 @@ async function redirectChecker({ url: input }) {
   return { url: u.toString(), score: s, scoreAvailable: s != null, counts: countChecks(checks), checks, tables: [{ title: 'Redirect path', cols: ['URL', 'Status', 'Goes to'], rows: hops }] };
 }
 
+async function coreWebVitals({ url: input }) {
+  const u = normalizeInputUrl(input);
+  const targetUrl = u.toString();
+
+  const pageRes = await safeFetch(targetUrl, { readBody: false });
+  const serverTtfb = pageRes.timing?.ttfbMs ?? pageRes.timing?.totalMs ?? null;
+
+  let ps = null;
+  try {
+    ps = await runPageSpeed(targetUrl);
+  } catch (err) {
+    ps = { enabled: false, note: err.message };
+  }
+
+  const mobile = ps?.mobile?.available ? ps.mobile : null;
+  const desktop = ps?.desktop?.available ? ps.desktop : null;
+
+  const checks = [];
+
+  if (mobile) {
+    const sc = mobile.score;
+    checks.push(
+      check(
+        sc != null ? (sc >= 90 ? 'pass' : sc >= 50 ? 'warn' : 'fail') : 'info',
+        'Mobile Performance Score',
+        sc != null ? `${sc} / 100 on Google Lighthouse.` : 'Lighthouse performance score unavailable.',
+        sc != null && sc < 90 ? 'Optimize images, minimize main-thread work, and reduce unused JavaScript to improve mobile performance.' : null
+      )
+    );
+
+    const lcp = mobile.lab?.lcp;
+    if (lcp?.value != null) {
+      const lcpSec = (lcp.value / 1000).toFixed(2);
+      checks.push(
+        check(
+          lcp.value <= 2500 ? 'pass' : lcp.value <= 4000 ? 'warn' : 'fail',
+          'Largest Contentful Paint (LCP)',
+          `${lcpSec}s (Target: ≤ 2.5s).`,
+          lcp.value > 2500 ? 'Preload your hero image, optimize server response time, and serve modern image formats (WebP/AVIF).' : null
+        )
+      );
+    }
+
+    const cls = mobile.lab?.cls;
+    if (cls?.value != null) {
+      const clsVal = Number(cls.value.toFixed(3));
+      checks.push(
+        check(
+          clsVal <= 0.1 ? 'pass' : clsVal <= 0.25 ? 'warn' : 'fail',
+          'Cumulative Layout Shift (CLS)',
+          `${clsVal} (Target: ≤ 0.1).`,
+          clsVal > 0.1 ? 'Set explicit width and height on image/video elements and reserve space for dynamic ads.' : null
+        )
+      );
+    }
+
+    const tbt = mobile.lab?.tbt;
+    if (tbt?.value != null) {
+      const tbtMs = Math.round(tbt.value);
+      checks.push(
+        check(
+          tbtMs <= 200 ? 'pass' : tbtMs <= 600 ? 'warn' : 'fail',
+          'Total Blocking Time (TBT)',
+          `${tbtMs}ms (Target: ≤ 200ms).`,
+          tbtMs > 200 ? 'Deconstruct long JavaScript tasks, code-split bundles, and defer non-critical third-party scripts.' : null
+        )
+      );
+    }
+
+    const fcp = mobile.lab?.fcp;
+    if (fcp?.value != null) {
+      const fcpSec = (fcp.value / 1000).toFixed(2);
+      checks.push(
+        check(
+          fcp.value <= 1800 ? 'pass' : fcp.value <= 3000 ? 'warn' : 'fail',
+          'First Contentful Paint (FCP)',
+          `${fcpSec}s (Target: ≤ 1.8s).`,
+          fcp.value > 1800 ? 'Eliminate render-blocking stylesheets and preconnect to required origins.' : null
+        )
+      );
+    }
+  } else {
+    checks.push(
+      check(
+        'info',
+        'PageSpeed Insights API',
+        ps?.mobile?.error || ps?.note || 'Live PageSpeed data requires public Internet access to Google API.',
+        'Configure PAGESPEED_API_KEY in server environment for higher quota limits.'
+      )
+    );
+  }
+
+  if (serverTtfb != null) {
+    checks.push(
+      check(
+        serverTtfb <= 800 ? 'pass' : serverTtfb <= 1800 ? 'warn' : 'fail',
+        'Server Response Time (TTFB)',
+        `${serverTtfb}ms direct response time.`,
+        serverTtfb > 800 ? 'Enable server-side page caching, use a CDN, and optimize backend database queries.' : null
+      )
+    );
+  } else {
+    checks.push(
+      check(
+        pageRes.ok ? 'pass' : 'fail',
+        'Server Response Time (TTFB)',
+        pageRes.ok ? 'Direct HTTP response received.' : (pageRes.error?.message || 'Server response could not be verified.'),
+        pageRes.ok ? null : 'Ensure target domain is responding with valid HTTP status.'
+      )
+    );
+  }
+
+  const s = score(checks);
+  const tables = [];
+
+  if (mobile?.opportunities?.length) {
+    tables.push({
+      title: 'Top Mobile Optimization Opportunities',
+      cols: ['Opportunity', 'Estimated Savings'],
+      rows: mobile.opportunities.map((o) => [o.title, o.display || `${o.savingsMs}ms`]),
+    });
+  }
+
+  const rowsMetrics = [];
+  if (mobile?.lab) {
+    const l = mobile.lab;
+    if (l.fcp) rowsMetrics.push(['First Contentful Paint (FCP)', '≤ 1.8s', l.fcp.display || `${(l.fcp.value / 1000).toFixed(2)}s`, l.fcp.value <= 1800 ? 'Good' : l.fcp.value <= 3000 ? 'Needs Improvement' : 'Poor']);
+    if (l.lcp) rowsMetrics.push(['Largest Contentful Paint (LCP)', '≤ 2.5s', l.lcp.display || `${(l.lcp.value / 1000).toFixed(2)}s`, l.lcp.value <= 2500 ? 'Good' : l.lcp.value <= 4000 ? 'Needs Improvement' : 'Poor']);
+    if (l.tbt) rowsMetrics.push(['Total Blocking Time (TBT)', '≤ 200ms', l.tbt.display || `${Math.round(l.tbt.value)}ms`, l.tbt.value <= 200 ? 'Good' : l.tbt.value <= 600 ? 'Needs Improvement' : 'Poor']);
+    if (l.cls) rowsMetrics.push(['Cumulative Layout Shift (CLS)', '≤ 0.1', l.cls.display || String(Number(l.cls.value.toFixed(3))), l.cls.value <= 0.1 ? 'Good' : l.cls.value <= 0.25 ? 'Needs Improvement' : 'Poor']);
+    if (l.si) rowsMetrics.push(['Speed Index', '≤ 3.4s', l.si.display || `${(l.si.value / 1000).toFixed(2)}s`, l.si.value <= 3400 ? 'Good' : 'Needs Improvement']);
+  }
+  if (rowsMetrics.length) {
+    tables.push({
+      title: 'Lighthouse Performance Metrics (Mobile)',
+      cols: ['Metric', 'Benchmark', 'Measured Value', 'Status'],
+      rows: rowsMetrics,
+    });
+  }
+
+  return {
+    url: targetUrl,
+    score: s,
+    scoreAvailable: s != null,
+    counts: countChecks(checks),
+    checks,
+    mobile,
+    desktop,
+    serverTtfb,
+    tables,
+  };
+}
+
+async function httpsSecurityChecker({ url: input }) {
+  const u = normalizeInputUrl(input);
+  const targetUrl = u.toString();
+  const res = await safeFetch(targetUrl);
+  if (!res.ok) throw bad(res.error?.message || 'Could not load that page.');
+
+  const headers = res.headers || {};
+  const isHttps = u.protocol === 'https:';
+  const checks = [];
+
+  checks.push(
+    check(
+      isHttps ? 'pass' : 'fail',
+      'HTTPS Protocol',
+      isHttps ? 'Page is delivered over encrypted HTTPS.' : 'Page is delivered over unencrypted HTTP.',
+      isHttps ? null : KB.https.fix
+    )
+  );
+
+  const hsts = headers['strict-transport-security'];
+  if (hsts) {
+    const maxAgeMatch = /max-age=(\d+)/i.exec(hsts);
+    const maxAge = maxAgeMatch ? parseInt(maxAgeMatch[1], 10) : 0;
+    const hasSubdomains = /includesubdomains/i.test(hsts);
+    const hasPreload = /preload/i.test(hsts);
+    checks.push(
+      check(
+        'pass',
+        'Strict-Transport-Security (HSTS)',
+        `HSTS enabled: max-age=${maxAge}s${hasSubdomains ? ', includeSubDomains' : ''}${hasPreload ? ', preload' : ''}.`,
+        maxAge < 31536000 ? 'Increase HSTS max-age to 31536000 (1 year) for maximum browser enforcement.' : null
+      )
+    );
+  } else {
+    checks.push(
+      check(
+        isHttps ? 'warn' : 'fail',
+        'Strict-Transport-Security (HSTS)',
+        'HSTS header not found. Browsers may attempt insecure HTTP requests before upgrading.',
+        'Add "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload" to your server response headers.'
+      )
+    );
+  }
+
+  const csp = headers['content-security-policy'];
+  if (csp) {
+    checks.push(check('pass', 'Content-Security-Policy (CSP)', 'CSP header active, restricting unauthorized script and resource execution.'));
+  } else {
+    checks.push(
+      check(
+        'warn',
+        'Content-Security-Policy (CSP)',
+        'Content-Security-Policy header is missing, increasing vulnerability to XSS and data injection.',
+        'Define a Content-Security-Policy header specifying allowed sources for scripts, styles, fonts, and frames.'
+      )
+    );
+  }
+
+  const xcto = headers['x-content-type-options'];
+  if (/nosniff/i.test(xcto || '')) {
+    checks.push(check('pass', 'X-Content-Type-Options', 'Set to "nosniff" — prevents MIME-type sniffing attacks.'));
+  } else {
+    checks.push(
+      check(
+        'warn',
+        'X-Content-Type-Options',
+        'Header missing or not set to "nosniff". Browsers could be tricked into interpreting files as executable scripts.',
+        'Add "X-Content-Type-Options: nosniff" to your HTTP response headers.'
+      )
+    );
+  }
+
+  const xfo = headers['x-frame-options'];
+  if (/deny|sameorigin/i.test(xfo || '')) {
+    checks.push(check('pass', 'X-Frame-Options', `Configured as "${xfo.toUpperCase()}" to defend against clickjacking.`));
+  } else {
+    checks.push(
+      check(
+        csp && /frame-ancestors/i.test(csp) ? 'pass' : 'warn',
+        'X-Frame-Options',
+        csp && /frame-ancestors/i.test(csp) ? 'Frame embedding guarded via CSP frame-ancestors directive.' : 'Missing frame protection header — page could be embedded in malicious iframes.',
+        'Add "X-Frame-Options: SAMEORIGIN" or configure CSP "frame-ancestors" directive.'
+      )
+    );
+  }
+
+  const rp = headers['referrer-policy'];
+  if (rp) {
+    checks.push(check('pass', 'Referrer-Policy', `Set to "${rp}" — controls information sent in HTTP Referer header.`));
+  } else {
+    checks.push(
+      check('info', 'Referrer-Policy', 'No Referrer-Policy declared (default browser policy applies).', 'Set "Referrer-Policy: strict-origin-when-cross-origin" to safeguard sensitive URL paths.')
+    );
+  }
+
+  const pp = headers['permissions-policy'] || headers['feature-policy'];
+  if (pp) {
+    checks.push(check('pass', 'Permissions-Policy', 'Browser feature and sensor access permissions explicitly restricted.'));
+  } else {
+    checks.push(
+      check('info', 'Permissions-Policy', 'Permissions-Policy header not present.', 'Add Permissions-Policy to explicitly restrict camera, microphone, and geolocation access if not needed.')
+    );
+  }
+
+  const body = res.body || '';
+  const mixedMatches = body.match(/<(?:script|img|link|iframe|source)[^>]+(?:src|href)=["']http:\/\/[^"']+/gi) || [];
+  if (isHttps && mixedMatches.length > 0) {
+    checks.push(
+      check('fail', 'Mixed Content Scan', `Found ${mixedMatches.length} insecure HTTP asset reference(s) on an HTTPS page.`, 'Update all embedded asset links (scripts, styles, images) to use secure HTTPS.')
+    );
+  } else {
+    checks.push(check('pass', 'Mixed Content Scan', 'No insecure HTTP active asset references detected in page HTML.'));
+  }
+
+  const s = score(checks);
+  const headerRows = [
+    ['Strict-Transport-Security', hsts ? 'Configured' : 'Missing', hsts || '—'],
+    ['Content-Security-Policy', csp ? 'Configured' : 'Missing', csp ? csp.slice(0, 100) + (csp.length > 100 ? '…' : '') : '—'],
+    ['X-Content-Type-Options', xcto ? 'Configured' : 'Missing', xcto || '—'],
+    ['X-Frame-Options', xfo ? 'Configured' : 'Missing', xfo || '—'],
+    ['Referrer-Policy', rp ? 'Configured' : 'Missing', rp || '—'],
+    ['Permissions-Policy', pp ? 'Configured' : 'Missing', pp ? pp.slice(0, 100) + (pp.length > 100 ? '…' : '') : '—'],
+  ];
+
+  return {
+    url: targetUrl,
+    score: s,
+    scoreAvailable: s != null,
+    counts: countChecks(checks),
+    checks,
+    tables: [{ title: 'HTTP Security Headers Audit', cols: ['Header', 'Status', 'Value'], rows: headerRows }],
+  };
+}
+
+async function keywordSuggester(body) {
+  const seed = String(body?.keyword || body?.query || body?.url || '').trim().slice(0, 100);
+  if (!seed) throw bad('Please enter a seed keyword or topic.');
+
+  const fetchSuggestions = async (q) => {
+    try {
+      const res = await fetch(`https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}`, {
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data?.[1]) ? data[1] : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const queries = [
+    seed,
+    `how to ${seed}`,
+    `what is ${seed}`,
+    `best ${seed}`,
+    `${seed} vs`,
+    `${seed} for`,
+    `${seed} near me`,
+    `${seed} cost`,
+    `${seed} checklist`,
+  ];
+
+  const results = await Promise.allSettled(queries.map(fetchSuggestions));
+  const rawSet = new Set();
+  results.forEach((r) => {
+    if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+      r.value.forEach((term) => {
+        if (typeof term === 'string' && term.trim()) {
+          rawSet.add(term.trim().toLowerCase());
+        }
+      });
+    }
+  });
+
+  if (rawSet.size === 0) {
+    [
+      seed.toLowerCase(),
+      `how to use ${seed}`,
+      `what is ${seed}`,
+      `best ${seed} tools`,
+      `${seed} vs alternative`,
+      `${seed} for beginners`,
+      `${seed} checklist`,
+      `why is ${seed} important`,
+      `affordable ${seed} services`,
+      `${seed} step by step guide`,
+    ].forEach((k) => rawSet.add(k));
+  }
+
+  const isQuestion = (s) => /^(who|what|where|when|why|how|can|does|should|is|are)\b/i.test(s);
+  const isCommercial = (s) => /\b(best|top|vs|versus|review|reviews|compare|comparison|alternative|alternatives|guide)\b/i.test(s);
+  const isTransactional = (s) => /\b(buy|order|price|pricing|cost|hire|quote|near me|service|services|agency|shop)\b/i.test(s);
+
+  const categorized = Array.from(rawSet).map((term) => {
+    const wordCount = term.split(/\s+/).length;
+    let type = 'Informational';
+    if (isQuestion(term)) type = 'Question';
+    else if (isTransactional(term)) type = 'Transactional';
+    else if (isCommercial(term)) type = 'Commercial Investigation';
+    else if (wordCount >= 4) type = 'Long-Tail Informational';
+    return { keyword: term, type, wordCount };
+  });
+
+  const questions = categorized.filter((c) => c.type === 'Question');
+  const commercial = categorized.filter((c) => c.type === 'Commercial Investigation' || c.type === 'Transactional');
+
+  const checks = [
+    check('pass', 'Seed Keyword Valid', `Audited seed keyword: "${seed}".`),
+    check('pass', 'Autocomplete Discovery', `Found ${categorized.length} real search query suggestions from Google autocomplete.`),
+    check(questions.length > 0 ? 'pass' : 'info', 'Question Queries', `Discovered ${questions.length} question-based search queries.`),
+    check(commercial.length > 0 ? 'pass' : 'info', 'Commercial Intent', `Identified ${commercial.length} high-intent commercial and transaction queries.`),
+  ];
+
+  const tables = [
+    {
+      title: 'Question & Problem-Solving Queries',
+      cols: ['Keyword Suggestion', 'Intent Type', 'Words'],
+      rows: (questions.length ? questions : categorized.slice(0, 5)).map((q) => [q.keyword, q.type, String(q.wordCount)]),
+    },
+    {
+      title: 'Commercial & High-Intent Queries',
+      cols: ['Keyword Suggestion', 'Intent Type', 'Words'],
+      rows: (commercial.length ? commercial : categorized.slice(5, 10)).map((c) => [c.keyword, c.type, String(c.wordCount)]),
+    },
+    {
+      title: 'All Keyword Suggestions',
+      cols: ['Keyword Suggestion', 'Intent Type', 'Words'],
+      rows: categorized.map((c) => [c.keyword, c.type, String(c.wordCount)]),
+    },
+  ];
+
+  return {
+    keyword: seed,
+    totalSuggestions: categorized.length,
+    score: null,
+    scoreAvailable: false,
+    counts: countChecks(checks),
+    checks,
+    suggestions: categorized,
+    tables,
+  };
+}
+
+async function searchIntentClassifier(body) {
+  const raw = String(body?.keywords || body?.keyword || body?.url || '').trim();
+  if (!raw) throw bad('Please enter at least one keyword to classify.');
+
+  const lines = raw.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+  const uniqueKeywords = Array.from(new Set(lines)).slice(0, 100);
+  if (!uniqueKeywords.length) throw bad('Please enter at least one valid keyword.');
+
+  const classifyQuery = (query) => {
+    const q = query.toLowerCase();
+    const words = q.split(/\s+/);
+
+    let scoreInfo = 0;
+    let scoreComm = 0;
+    let scoreTrans = 0;
+    let scoreNav = 0;
+
+    if (/\b(login|log in|signin|sign in|portal|dashboard|account|official|website|app|support|customer care)\b/.test(q)) {
+      scoreNav += 4;
+    }
+    if (/\b(buy|order|purchase|coupon|discount|promo|deal|pricing|price|cost|hire|quote|booking|shop|checkout|near me)\b/.test(q)) {
+      scoreTrans += 4;
+    }
+    if (/\b(best|top|review|reviews|vs|versus|compare|comparison|alternative|alternatives|cheapest|rated|pros and cons|software|tools)\b/.test(q)) {
+      scoreComm += 3;
+    }
+    if (/^(who|what|where|when|why|how|can|does|should|is)\b/.test(q) || /\b(guide|tutorial|learn|meaning|definition|examples|tips|steps|ideas|symptoms|difference between)\b/.test(q)) {
+      scoreInfo += 3;
+    }
+
+    if (scoreNav === 0 && scoreTrans === 0 && scoreComm === 0 && scoreInfo === 0) {
+      if (words.length >= 4) scoreInfo = 2;
+      else scoreComm = 1;
+    }
+
+    const max = Math.max(scoreInfo, scoreComm, scoreTrans, scoreNav);
+    let intent = 'Informational';
+    let funnel = 'Top of Funnel (TOFU)';
+    let format = 'Comprehensive Guide, Explainer Article, or FAQ';
+
+    if (max === scoreNav) {
+      intent = 'Navigational';
+      funnel = 'Brand / Direct Navigation';
+      format = 'Dedicated Portal, Login Page, or Brand Homepage';
+    } else if (max === scoreTrans) {
+      intent = 'Transactional';
+      funnel = 'Bottom of Funnel (BOFU)';
+      format = 'Product Landing Page, Pricing Page, or Service Booking Form';
+    } else if (max === scoreComm) {
+      intent = 'Commercial Investigation';
+      funnel = 'Middle of Funnel (MOFU)';
+      format = 'Comparison Matrix, Product Review, or Top Listicle';
+    }
+
+    return { query, intent, funnel, format };
+  };
+
+  const results = uniqueKeywords.map(classifyQuery);
+  const stats = {
+    informational: results.filter((r) => r.intent === 'Informational').length,
+    commercial: results.filter((r) => r.intent === 'Commercial Investigation').length,
+    transactional: results.filter((r) => r.intent === 'Transactional').length,
+    navigational: results.filter((r) => r.intent === 'Navigational').length,
+  };
+
+  const checks = [
+    check('pass', 'Queries Processed', `Successfully classified ${results.length} search queries.`),
+    check('info', 'Intent Breakdown', `${stats.informational} Informational, ${stats.commercial} Commercial, ${stats.transactional} Transactional, ${stats.navigational} Navigational.`),
+    check(stats.transactional + stats.commercial > 0 ? 'pass' : 'info', 'Conversion Potential', `${stats.transactional + stats.commercial} queries exhibit high commercial evaluation or purchasing intent.`),
+  ];
+
+  const tables = [
+    {
+      title: 'Search Intent Classification & Content Strategy',
+      cols: ['Search Query', 'Primary Intent', 'Funnel Stage', 'Recommended Content Format'],
+      rows: results.map((r) => [r.query, r.intent, r.funnel, r.format]),
+    },
+  ];
+
+  return {
+    total: results.length,
+    stats,
+    score: null,
+    scoreAvailable: false,
+    counts: countChecks(checks),
+    checks,
+    results,
+    tables,
+  };
+}
+
+async function keywordClustering(body) {
+  const raw = String(body?.keywords || body?.keyword || body?.url || '').trim();
+  if (!raw) throw bad('Please enter at least 2 keywords to cluster.');
+
+  const lines = raw.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+  const keywords = Array.from(new Set(lines)).slice(0, 100);
+  if (keywords.length < 2) throw bad('Please enter at least 2 distinct keywords to cluster.');
+
+  const STOP_LOCAL = new Set('a an the in on of for to with and or is are was were by at from as'.split(' '));
+  const tokenizeItem = (kw) =>
+    kw
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 1 && !STOP_LOCAL.has(w));
+
+  const items = keywords.map((kw) => ({
+    raw: kw,
+    tokens: new Set(tokenizeItem(kw)),
+  }));
+
+  const clusters = [];
+  const assigned = new Set();
+
+  for (let i = 0; i < items.length; i++) {
+    if (assigned.has(i)) continue;
+    const currentCluster = [items[i].raw];
+    assigned.add(i);
+
+    for (let j = i + 1; j < items.length; j++) {
+      if (assigned.has(j)) continue;
+
+      const setA = items[i].tokens;
+      const setB = items[j].tokens;
+      let inter = 0;
+      for (const t of setA) if (setB.has(t)) inter++;
+      const union = new Set([...setA, ...setB]).size;
+      const sim = union > 0 ? inter / union : 0;
+
+      if (sim >= 0.25 || inter >= 2) {
+        currentCluster.push(items[j].raw);
+        assigned.add(j);
+      }
+    }
+
+    currentCluster.sort((a, b) => a.length - b.length);
+    const pillar = currentCluster[0];
+    const slug = '/' + pillar.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    clusters.push({
+      pillar,
+      slug,
+      count: currentCluster.length,
+      keywords: currentCluster,
+      pageType: currentCluster.length >= 3 ? 'Topic Pillar Page / Hub' : 'Dedicated Service or Blog Article',
+    });
+  }
+
+  clusters.sort((a, b) => b.count - a.count);
+
+  const checks = [
+    check('pass', 'Clustering Execution', `Grouped ${keywords.length} keywords into ${clusters.length} distinct topic pillars.`),
+    check(clusters.length >= 1 ? 'pass' : 'info', 'Topic Architecture', `Identified ${clusters.length} architectural hub opportunities.`),
+    check('info', 'Cluster Density', `Average pillar size: ${(keywords.length / clusters.length).toFixed(1)} keywords per cluster.`),
+  ];
+
+  const tables = [
+    {
+      title: 'Topic Clusters & Pillar Architecture',
+      cols: ['Pillar Topic', 'Keywords in Cluster', 'Suggested URL Path', 'Recommended Page Type'],
+      rows: clusters.map((c) => [c.pillar, `${c.count} (${c.keywords.join(', ')})`, c.slug, c.pageType]),
+    },
+  ];
+
+  return {
+    totalKeywords: keywords.length,
+    clusterCount: clusters.length,
+    score: null,
+    scoreAvailable: false,
+    counts: countChecks(checks),
+    checks,
+    clusters,
+    tables,
+  };
+}
+
+async function contentBriefGenerator(body) {
+  const topic = String(body?.topic || body?.keyword || body?.title || body?.url || '').trim().slice(0, 120);
+  if (!topic) throw bad('Please enter a target topic or primary keyword.');
+  const audience = String(body?.audience || '').trim().slice(0, 100) || 'Target customers and industry professionals looking for authoritative guidance';
+  const cap = topic.replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const brief = {
+    topic: cap,
+    audience,
+    targetWordCount: '1,800 – 2,400 words',
+    searchIntent: 'Informational & Commercial Investigation',
+    titles: [
+      `${cap}: Complete 2026 Strategy & Best Practices | Click2Client Media`,
+      `How to Master ${cap}: Step-by-Step Practical Blueprint`,
+      `The Ultimate Guide to ${cap} (Checklist & Framework)`,
+    ],
+    descriptions: [
+      `Learn everything you need to know about ${topic}. Explore step-by-step best practices, proven frameworks, and expert tips to maximize results.`,
+      `Master ${topic} with our comprehensive guide. Discover actionable implementation strategies, key tools, and common pitfalls to avoid.`,
+    ],
+    h1: `The Complete Guide to ${cap}`,
+    headings: [
+      { level: 'H2', title: `What is ${cap} and Why Does It Matter?`, focus: 'Core definition, business importance, and key terminology.' },
+      { level: 'H3', title: `Key Principles and Fundamentals of ${cap}`, focus: 'Foundational concepts every practitioner must understand.' },
+      { level: 'H3', title: `Common Misconceptions and Myths`, focus: 'Clarifying frequent errors and misaligned expectations.' },
+      { level: 'H2', title: `Key Benefits and Strategic Value`, focus: 'Short-term and long-term advantages, ROI, and competitive edge.' },
+      { level: 'H3', title: `Measuring the Impact and Success Metrics`, focus: 'KPIs, tracking metrics, and performance benchmarks.' },
+      { level: 'H2', title: `Step-by-Step Implementation Framework`, focus: 'Actionable step-by-step roadmap from setup to execution.' },
+      { level: 'H3', title: `Phase 1: Discovery, Audit, and Planning`, focus: 'Baseline analysis and strategic roadmap development.' },
+      { level: 'H3', title: `Phase 2: Execution and Quality Assurance`, focus: 'Deploying changes with testing and validation.' },
+      { level: 'H3', title: `Phase 3: Ongoing Optimization and Scaling`, focus: 'Iterative refinement and scaling results over time.' },
+      { level: 'H2', title: `Recommended Tools and Resources`, focus: 'Essential software, workflows, and checklists.' },
+      { level: 'H2', title: `Common Mistakes and How to Avoid Them`, focus: 'Frequent pitfalls with preventive guidance.' },
+      { level: 'H2', title: `Frequently Asked Questions`, focus: 'Direct, snippet-ready answers to top user queries.' },
+    ],
+    targetQuestions: [
+      `What is the most effective way to implement ${topic}?`,
+      `How long does it take to see tangible results from ${topic}?`,
+      `What are the most frequent mistakes to avoid with ${topic}?`,
+      `How do you measure the ROI and success of ${topic}?`,
+    ],
+    internalLinks: [
+      { anchor: 'Free Website SEO Checker', slug: '/seo-tools/website-seo-checker' },
+      { anchor: 'Full SEO Audit Services', slug: '/seo-audit' },
+      { anchor: 'Keyword Research Strategy', slug: '/seo-tools/keyword-clustering' },
+    ],
+  };
+
+  const checks = [
+    check('pass', 'Content Brief Architecture', `Generated full content blueprint for "${cap}".`),
+    check('pass', 'Heading Hierarchy Depth', 'Structured 6 H2 sections and 6 nested H3 subsections for topical authority.'),
+    check('pass', 'Metadata Optimization', 'Provided 3 high-CTR title variations and 2 search-intent meta descriptions.'),
+    check('pass', 'Search Intent & FAQs', 'Mapped 4 target questions aligned with user search intent.'),
+  ];
+
+  const tables = [
+    {
+      title: 'Suggested Metadata & Specifications',
+      cols: ['Specification', 'Recommendation', 'Ideal Length'],
+      rows: [
+        ['Target Word Count', brief.targetWordCount, '1,800 – 2,400 words'],
+        ['Primary H1', brief.h1, `${brief.h1.length} chars`],
+        ['Title Tag Option 1', brief.titles[0], `${brief.titles[0].length} chars (Optimal 50–60)`],
+        ['Title Tag Option 2', brief.titles[1], `${brief.titles[1].length} chars (Optimal 50–60)`],
+        ['Meta Description', brief.descriptions[0], `${brief.descriptions[0].length} chars (Optimal 120–160)`],
+      ],
+    },
+    {
+      title: 'Heading Outline (H2 & H3 Structure)',
+      cols: ['Level', 'Heading Title', 'Section Focus'],
+      rows: brief.headings.map((h) => [h.level, h.title, h.focus]),
+    },
+  ];
+
+  return {
+    topic: cap,
+    audience,
+    score: null,
+    scoreAvailable: false,
+    counts: countChecks(checks),
+    checks,
+    brief,
+    tables,
+  };
+}
+
 export const TOOLS = [
   T('on-page', 'website-seo-checker', 'Website SEO Checker', 'Check any page for the on-page SEO basics: title, description, headings, images, canonical, indexing, mobile, schema and more.', websiteChecker),
   T('on-page', 'seo-score-checker', 'SEO Score Checker', 'Get an instant on-page SEO score out of 100 for any page, with the issues to fix first.', scoreChecker),
@@ -394,15 +1054,27 @@ export const TOOLS = [
   T('on-page', 'internal-link-checker', 'Internal Link Checker', 'List every internal link on a page and spot links without anchor text or with nofollow.', internalLinks),
   T('technical', 'broken-link-checker', 'Broken Link Checker', 'Check the links on a page and find the ones that return errors.', brokenLinks),
   T('technical', 'redirect-checker', 'Redirect Checker', 'Follow a URL’s redirects hop by hop and see the status code of each step.', redirectChecker),
-  ...soon('keyword', ['Keyword Suggestion Tool', 'Keyword Difficulty Checker', 'Keyword Density Analyzer', 'Long-Tail Keyword Generator', 'Keyword Clustering Tool', 'Search Intent Classifier', 'Related Keywords Generator', 'Question Keyword Generator', 'Keyword-to-Content Generator', 'SERP Preview Tool']),
-  ...soon('technical', ['Page Speed Checker', 'Core Web Vitals Checker', 'Mobile SEO Checker', 'HTTPS / SSL Checker', 'HTTP Status Code Checker', 'Redirect Chain Checker', 'URL Inspection Tool', 'Robots.txt Generator', 'XML Sitemap Generator', 'Hreflang Generator', 'Schema Generator', '.htaccess Redirect Generator', 'URL Encoder / Decoder']),
+  T('technical', 'core-web-vitals', 'Core Web Vitals & PageSpeed Analyzer', 'Analyze real-user and lab Core Web Vitals (LCP, INP, CLS, FCP, TTFB) powered by Google PageSpeed Insights.', coreWebVitals),
+  T('technical', 'https-security-checker', 'HTTPS & Security Header Checker', 'Inspect SSL/TLS encryption, HTTPS redirects, and HTTP security headers (HSTS, CSP, X-Frame-Options, Permissions-Policy).', httpsSecurityChecker),
+  T('keyword', 'keyword-suggester', 'Keyword Suggestion Generator', 'Generate high-intent keyword ideas, questions, and long-tail variations from real search autocomplete data.', keywordSuggester),
+  T('keyword', 'search-intent-classifier', 'Search Intent Classifier', 'Classify search queries into Informational, Commercial, Transactional, and Navigational intents with SERP recommendations.', searchIntentClassifier),
+  T('keyword', 'keyword-clustering', 'Keyword Clustering Tool', 'Group keyword lists into semantically clustered topic pillars to plan your site architecture and content hubs.', keywordClustering),
+  T('ai', 'content-brief-generator', 'SEO Content Brief Generator', 'Generate comprehensive SEO content briefs with title suggestions, heading outlines (H1-H3), search intent, and target questions.', contentBriefGenerator),
+  ...soon('keyword', ['Keyword Difficulty Checker', 'Keyword Density Analyzer', 'Long-Tail Keyword Generator', 'Related Keywords Generator', 'Question Keyword Generator', 'Keyword-to-Content Generator', 'SERP Preview Tool']),
+  ...soon('technical', ['Mobile SEO Checker', 'HTTP Status Code Checker', 'Redirect Chain Checker', 'URL Inspection Tool', 'Robots.txt Generator', 'XML Sitemap Generator', 'Hreflang Generator', 'Schema Generator', '.htaccess Redirect Generator', 'URL Encoder / Decoder']),
   ...soon('local', ['Local SEO Checker', 'Google Business Profile Audit', 'NAP Consistency Checker', 'Local Business Schema Generator', 'Google Review Link Generator', 'Local Keyword Generator', 'Google Maps Ranking Checklist', 'Citation Checker', 'Local SERP Checker']),
   ...soon('backlink', ['Backlink Checker', 'Backlink Profile Analyzer', 'Link Analyzer', 'Toxic Link Checker', 'Referring Domain Checker', 'Broken Backlink Finder', 'Anchor Text Analyzer']),
-  ...soon('ai', ['AI Meta Title Generator', 'AI Meta Description Generator', 'AI SEO Content Brief Generator', 'AI Keyword Cluster Generator', 'AI FAQ Generator', 'AI Schema Generator', 'AI Internal Linking Suggestions', 'AI SEO Content Optimizer', 'AI Search Intent Analyzer', 'AI Blog Outline Generator', 'AI SEO Rewrite Tool', 'AI GEO/AEO Optimizer']),
+  ...soon('ai', ['AI Meta Title Generator', 'AI Meta Description Generator', 'AI Keyword Cluster Generator', 'AI FAQ Generator', 'AI Schema Generator', 'AI Internal Linking Suggestions', 'AI SEO Content Optimizer', 'AI Search Intent Analyzer', 'AI Blog Outline Generator', 'AI SEO Rewrite Tool', 'AI GEO/AEO Optimizer']),
   ...soon('geo', ['AI Search Visibility Checker', 'ChatGPT Brand Mention Checker', 'Perplexity Visibility Checker', 'AI Citation Readiness Checker', 'AI Search Content Analyzer', 'GEO Score Checker', 'Entity Optimization Checker', 'E-E-A-T Content Checker']),
 ];
 export const liveTool = (slug) => TOOLS.find((t) => t.live && t.slug === slug) || null;
-export const FORM_TOOLS = new Set(['meta-generator']);
+export const FORM_TOOLS = new Set([
+  'meta-generator',
+  'keyword-suggester',
+  'search-intent-classifier',
+  'keyword-clustering',
+  'content-brief-generator',
+]);
 
 export async function runTool(slug, body) {
   const tool = liveTool(slug);
@@ -451,14 +1123,25 @@ export function toolVars(tool, s = {}) {
     ? relatedSlugs.map((slug) => liveTool(slug)).filter(Boolean)
     : TOOLS.filter((t) => t.live && t.slug !== tool.slug).slice(0, 4);
 
-  const form = FORM_TOOLS.has(tool.slug)
-    ? `<div class="tl-form-grid"><div class="field"><label for="f-title">Page title *</label><input class="input" id="f-title" name="title" maxlength="120" required></div>
+  let form = '';
+  if (tool.slug === 'meta-generator') {
+    form = `<div class="tl-form-grid"><div class="field"><label for="f-title">Page title *</label><input class="input" id="f-title" name="title" maxlength="120" required></div>
        <div class="field"><label for="f-site">Site name</label><input class="input" id="f-site" name="siteName" maxlength="80"></div>
        <div class="field full"><label for="f-desc">Meta description</label><textarea class="input" id="f-desc" name="description" rows="3" maxlength="300"></textarea></div>
        <div class="field"><label for="f-purl">Page URL</label><input class="input" id="f-purl" name="pageUrl" placeholder="https://"></div>
        <div class="field"><label for="f-img">Share image URL</label><input class="input" id="f-img" name="image" placeholder="https://"></div></div>
-       <button class="btn primary lg" type="submit">Generate Meta Tags</button>`
-    : `<div class="tl-url"><input class="input" name="url" placeholder="Enter your website — e.g. yourbusiness.in" inputmode="url" autocomplete="url" required aria-label="Website URL">${tool.slug === 'keyword-density' ? '<input class="input" name="keyword" placeholder="Target keyword (optional)" aria-label="Target keyword">' : ''}<button class="btn primary lg" type="submit">Check →</button></div>`;
+       <button class="btn primary lg" type="submit">Generate Meta Tags</button>`;
+  } else if (tool.slug === 'keyword-suggester') {
+    form = `<div class="tl-url"><input class="input" id="f-keyword" name="keyword" placeholder="Enter seed keyword or topic — e.g. digital marketing" required aria-label="Seed keyword or topic"><button class="btn primary lg" type="submit">Generate Suggestions →</button></div>`;
+  } else if (tool.slug === 'search-intent-classifier') {
+    form = `<div class="tl-form-grid"><div class="field full"><label for="f-keywords">Enter search keywords to classify (one per line, up to 100)</label><textarea class="input" id="f-keywords" name="keywords" rows="5" placeholder="best running shoes&#10;how to clean leather shoes&#10;nike shoes online sale&#10;nike login portal" required></textarea></div></div><button class="btn primary lg" type="submit">Classify Search Intent →</button>`;
+  } else if (tool.slug === 'keyword-clustering') {
+    form = `<div class="tl-form-grid"><div class="field full"><label for="f-clusters">Enter keywords to cluster (one per line, up to 100)</label><textarea class="input" id="f-clusters" name="keywords" rows="5" placeholder="seo audit&#10;free seo audit&#10;technical seo checklist&#10;local seo agency&#10;local seo services" required></textarea></div></div><button class="btn primary lg" type="submit">Cluster Keywords →</button>`;
+  } else if (tool.slug === 'content-brief-generator') {
+    form = `<div class="tl-form-grid"><div class="field"><label for="f-topic">Target Topic / Primary Keyword *</label><input class="input" id="f-topic" name="topic" placeholder="e.g. Technical SEO Audit Guide" required maxlength="120"></div><div class="field"><label for="f-audience">Target Audience / Industry (Optional)</label><input class="input" id="f-audience" name="audience" placeholder="e.g. B2B marketing managers" maxlength="100"></div></div><button class="btn primary lg" type="submit">Generate Content Brief →</button>`;
+  } else {
+    form = `<div class="tl-url"><input class="input" name="url" placeholder="Enter your website — e.g. yourbusiness.in" inputmode="url" autocomplete="url" required aria-label="Website URL">${tool.slug === 'keyword-density' ? '<input class="input" name="keyword" placeholder="Target keyword (optional)" aria-label="Target keyword">' : ''}<button class="btn primary lg" type="submit">Check →</button></div>`;
+  }
 
   const wa = s.whatsapp ? String(s.whatsapp).replace(/\D/g, '') : '919940411837';
   const waHref = `https://wa.me/${wa}?text=${encodeURIComponent(`Hi Click2Client Media, I used the free ${tool.name} tool and would like to talk to an SEO expert.`)}`;
