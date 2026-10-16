@@ -6,6 +6,7 @@ import { analyzeKeywords } from '../server/engine/keywords.js';
 import { parseRobots, isAllowed, explainRule } from '../server/engine/robots.js';
 import { runTool, liveTool, check, countChecks, TOOLS, hubVars } from '../server/tools.js';
 import { config } from '../server/config.js';
+import { sanitizeUrl, track } from '../public/js/common.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // URL / SSRF (Tests 1–9)
@@ -705,16 +706,25 @@ describe('Backend Result Enrichment (Phase B Stage 1A)', () => {
     }
   });
 
-  it('43. all 15 tools return valid structure with score/scoreAvailable preserved', async () => {
+  it('43. all 21 tools return valid structure with score/scoreAvailable preserved', async () => {
     setupMock();
     try {
       const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
-      assert.equal(liveSlugs.length, 15, 'Must test exactly 15 live tools');
+      assert.equal(liveSlugs.length, 21, 'Must test exactly 21 live tools');
 
       for (const slug of liveSlugs) {
-        const body = slug === 'meta-generator'
-          ? { title: 'Test Title', pageUrl: 'https://mock.example.com/page' }
-          : { url: 'https://mock.example.com/page' };
+        let body = { url: 'https://mock.example.com/page' };
+        if (slug === 'meta-generator') {
+          body = { title: 'Test Title', pageUrl: 'https://mock.example.com/page' };
+        } else if (slug === 'keyword-suggester') {
+          body = { keyword: 'seo audit' };
+        } else if (slug === 'search-intent-classifier') {
+          body = { keywords: 'best seo tools\nhow to do seo\nbuy seo software\ngoogle search console login' };
+        } else if (slug === 'keyword-clustering') {
+          body = { keywords: 'seo audit\nfree seo audit\ntechnical seo audit\nlocal seo tips\nlocal seo guide' };
+        } else if (slug === 'content-brief-generator') {
+          body = { topic: 'Technical SEO Audit Guide', audience: 'marketing managers' };
+        }
         const res = await runTool(slug, body);
         assert.ok(res, `${slug} must return a result`);
         assert.equal(typeof res.tool, 'string', `${slug} must have tool name`);
@@ -756,6 +766,12 @@ describe('Conversion CTA & Lead Generation (Phase B Stage 4)', () => {
     'internal-link-checker': { title: 'Strengthen internal linking and PageRank distribution.' },
     'broken-link-checker': { title: 'Eliminate dead links and 404 errors across your site.' },
     'redirect-checker': { title: 'Optimize redirect paths and preserve link equity.' },
+    'core-web-vitals': { title: 'Accelerate page load speeds across your entire site.' },
+    'https-security-checker': { title: 'Strengthen security headers and HTTPS integrity sitewide.' },
+    'keyword-suggester': { title: 'Turn search queries into a full organic content plan.' },
+    'search-intent-classifier': { title: 'Align your complete content library with search intent.' },
+    'keyword-clustering': { title: 'Build authoritative content pillars that dominate SERPs.' },
+    'content-brief-generator': { title: 'Scale your content strategy with expert SEO execution.' },
   };
 
   function getCtaCopy(toolSlug, r) {
@@ -808,9 +824,9 @@ describe('Conversion CTA & Lead Generation (Phase B Stage 4)', () => {
     `;
   }
 
-  it('44. tool-specific CTA messaging covers all 15 live tools', () => {
+  it('44. tool-specific CTA messaging covers all 21 live tools', () => {
     const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
-    assert.equal(liveSlugs.length, 15);
+    assert.equal(liveSlugs.length, 21);
     for (const slug of liveSlugs) {
       const copy = getCtaCopy(slug, { counts: { critical: 0, warning: 0 } });
       assert.ok(copy.title, `${slug} must have a specific CTA title`);
@@ -884,8 +900,8 @@ describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
   const { TOOL_CONTENT, renderToolContentHtml } = await import('../server/site/tools-content.js');
   const liveSlugs = TOOLS.filter((t) => t.live).map((t) => t.slug);
 
-  it('50. all 15 tools have unique, non-generic titles and meta descriptions', () => {
-    assert.equal(liveSlugs.length, 15);
+  it('50. all 21 tools have unique, non-generic titles and meta descriptions', () => {
+    assert.equal(liveSlugs.length, 21);
     const titles = new Set();
     const descriptions = new Set();
 
@@ -905,7 +921,7 @@ describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
     }
   });
 
-  it('51. all 15 tools define clear, single user-intent H1 headings', () => {
+  it('51. all 21 tools define clear, single user-intent H1 headings', () => {
     const h1s = new Set();
     for (const slug of liveSlugs) {
       const c = TOOL_CONTENT[slug];
@@ -995,9 +1011,9 @@ describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
     assert.ok(html.includes('<details class="tl-faq-item'), 'FAQs must be accessible details elements');
   });
 
-  it('57. hubVars categorizes all 15 tools with live links and clean navigation', () => {
+  it('57. hubVars categorizes all 21 tools with live links and clean navigation', () => {
     const hub = hubVars();
-    assert.equal(hub['tools.live'], '15');
+    assert.equal(hub['tools.live'], '21');
     assert.ok(hub['tools.cats'].includes('href="/seo-tools/website-seo-checker"'));
     assert.ok(hub['tools.cats'].includes('href="/seo-tools/broken-link-checker"'));
     assert.ok(hub['tools.cats'].includes('href="/seo-tools/keyword-density"'));
@@ -1009,7 +1025,7 @@ describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
   // ─────────────────────────────────────────────────────────────────────────────
   // Stage 6: Final QA & Production Readiness (Tests 58–61)
   // ─────────────────────────────────────────────────────────────────────────────
-  it('58. WebApplication schema integrity and properties verified for all 15 tools', () => {
+  it('58. WebApplication schema integrity and properties verified for all 21 tools', () => {
     for (const slug of liveSlugs) {
       const tool = TOOLS.find((t) => t.slug === slug);
       const c = TOOL_CONTENT[slug];
@@ -1067,5 +1083,202 @@ describe('SEO & Content Architecture (Phase B Stage 5)', async () => {
         assert.ok(found, `Related slug "${rel}" from "${slug}" must resolve to a live tool`);
       }
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analytics Events & URL Sanitization (Phase C.3, Tests 62–67)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Analytics Events & URL Sanitization', () => {
+  it('62. sanitizeUrl strips query strings, fragments, and credentials', () => {
+    const raw = 'https://user:password123@clientsite.in:8080/landing-page?utm_source=fb&gclid=secret_token&phone=9876543210#contact-form';
+    const clean = sanitizeUrl(raw);
+    assert.equal(clean, 'https://clientsite.in:8080/landing-page');
+    assert.ok(!clean.includes('user'));
+    assert.ok(!clean.includes('password123'));
+    assert.ok(!clean.includes('utm_source'));
+    assert.ok(!clean.includes('secret_token'));
+    assert.ok(!clean.includes('contact-form'));
+  });
+
+  it('63. sanitizeUrl handles scheme-less and invalid inputs gracefully', () => {
+    assert.equal(sanitizeUrl('myshop.in/products/item?promo=SAVE50'), 'https://myshop.in/products/item');
+    assert.equal(sanitizeUrl(''), '');
+    assert.equal(sanitizeUrl(null), '');
+    assert.equal(sanitizeUrl(undefined), '');
+  });
+
+  it('64. track() auto-sanitizes URL parameters before pushing to dataLayer', () => {
+    const mockWindow = { dataLayer: [] };
+    const origWindow = globalThis.window;
+    globalThis.window = mockWindow;
+    try {
+      track('seo_tool_audit_cta_clicked', {
+        tool: 'website-seo-checker',
+        target_url: 'https://admin:pass@example.com/test?auth=abc#top',
+        audit_tier: 'p25',
+      });
+      assert.equal(mockWindow.dataLayer.length, 1);
+      const event = mockWindow.dataLayer[0];
+      assert.equal(event.event, 'seo_tool_audit_cta_clicked');
+      assert.equal(event.tool, 'website-seo-checker');
+      assert.equal(event.target_url, 'https://example.com/test');
+      assert.equal(event.audit_tier, 'p25');
+      assert.ok(!event.target_url.includes('auth'));
+      assert.ok(!event.target_url.includes('pass'));
+    } finally {
+      globalThis.window = origWindow;
+    }
+  });
+
+  it('65. track() calls window.c2cTrack when available with sanitized payload', () => {
+    let captured = null;
+    const mockWindow = {
+      c2cTrack: (name, params) => { captured = { name, params }; },
+    };
+    const origWindow = globalThis.window;
+    globalThis.window = mockWindow;
+    try {
+      track('seo_tool_whatsapp_cta_clicked', {
+        tool_name: 'broken-link-checker',
+        target_url: 'https://example.com/page?query=privatedata',
+      });
+      assert.ok(captured);
+      assert.equal(captured.name, 'seo_tool_whatsapp_cta_clicked');
+      assert.equal(captured.params.tool_name, 'broken-link-checker');
+      assert.equal(captured.params.target_url, 'https://example.com/page');
+    } finally {
+      globalThis.window = origWindow;
+    }
+  });
+
+  it('66. tool lifecycle events and legacy compatibility preserved in client tools.js', async () => {
+    const fs = await import('node:fs/promises');
+    const toolsJs = await fs.readFile(new URL('../public/js/tools.js', import.meta.url), 'utf-8');
+    assert.ok(toolsJs.includes("track('seo_tool_view'"), 'tools.js must emit seo_tool_view');
+    assert.ok(toolsJs.includes("track('seo_tool_run'"), 'tools.js must emit seo_tool_run');
+    assert.ok(toolsJs.includes("track('seo_tool_success'"), 'tools.js must emit seo_tool_success');
+    assert.ok(toolsJs.includes("track('seo_tool_error'"), 'tools.js must emit seo_tool_error');
+    assert.ok(toolsJs.includes("track('seo_tool_used'"), 'tools.js must preserve legacy seo_tool_used');
+    assert.ok(toolsJs.includes('sanitizeUrl(r.url)'), 'tools.js must sanitize CTA URLs');
+  });
+
+  it('67. audit form start and submit events present with non-sensitive parameters in site.js', async () => {
+    const fs = await import('node:fs/promises');
+    const siteJs = await fs.readFile(new URL('../public/js/site.js', import.meta.url), 'utf-8');
+    assert.ok(siteJs.includes("track('audit_form_start'"), 'site.js must emit audit_form_start');
+    assert.ok(siteJs.includes("track('audit_form_submit'"), 'site.js must emit audit_form_submit');
+    assert.ok(siteJs.includes("track('audit_started'"), 'site.js must preserve audit_started');
+    assert.ok(siteJs.includes("track('generate_lead'"), 'site.js must preserve generate_lead');
+    assert.ok(siteJs.includes("track('begin_checkout'"), 'site.js must preserve begin_checkout');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stage 7: Phase C SEO Tools Expansion (Tests 68–74)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('Phase C SEO Tools Expansion (Batch 1 New Tools)', () => {
+  it('68. core-web-vitals measures response time and evaluates speed checks', async () => {
+    const res = await runTool('core-web-vitals', { url: 'https://example.com' });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'Core Web Vitals & PageSpeed Analyzer');
+    assert.ok(Array.isArray(res.checks));
+    assert.ok(res.checks.length >= 2, 'Must have at least TTFB and PSI status check');
+    assert.ok(res.counts);
+    assert.equal(typeof res.scoreAvailable, 'boolean');
+    assert.ok(Array.isArray(res.tables));
+  });
+
+  it('69. https-security-checker audits SSL, HSTS, CSP, and security headers', async () => {
+    const res = await runTool('https-security-checker', { url: 'https://example.com' });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'HTTPS & Security Header Checker');
+    assert.ok(Array.isArray(res.checks));
+    assert.ok(res.checks.some((c) => c.label.includes('HTTPS')));
+    assert.ok(res.checks.some((c) => c.label.includes('HSTS')));
+    assert.ok(res.checks.some((c) => c.label.includes('CSP')));
+    assert.ok(res.checks.some((c) => c.label.includes('X-Frame-Options')));
+    assert.ok(res.checks.some((c) => c.label.includes('Mixed Content')));
+    assert.equal(typeof res.score, 'number');
+    assert.equal(res.scoreAvailable, true);
+    assert.ok(res.tables.length > 0);
+  });
+
+  it('70. keyword-suggester groups questions and commercial queries without fabricated volume', async () => {
+    const res = await runTool('keyword-suggester', { keyword: 'seo audit' });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'Keyword Suggestion Generator');
+    assert.equal(res.keyword, 'seo audit');
+    assert.ok(Array.isArray(res.suggestions));
+    assert.ok(res.suggestions.length > 0);
+    // Verify no fabricated metrics
+    assert.equal(res.score, null);
+    assert.equal(res.scoreAvailable, false);
+    for (const item of res.suggestions) {
+      assert.ok(item.keyword);
+      assert.ok(item.type);
+      assert.equal(typeof item.wordCount, 'number');
+      assert.equal(item.volume, undefined, 'Must never fabricate search volume');
+    }
+  });
+
+  it('71. search-intent-classifier categorizes queries and assigns funnel stages', async () => {
+    const input = 'what is on page seo\nbest seo software\nbuy seo backlinks\ngoogle analytics login';
+    const res = await runTool('search-intent-classifier', { keywords: input });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'Search Intent Classifier');
+    assert.equal(res.total, 4);
+    assert.ok(res.stats);
+    assert.equal(res.stats.informational, 1);
+    assert.equal(res.stats.commercial, 1);
+    assert.equal(res.stats.transactional, 1);
+    assert.equal(res.stats.navigational, 1);
+    assert.ok(Array.isArray(res.results));
+    assert.equal(res.results[0].funnel, 'Top of Funnel (TOFU)');
+    assert.equal(res.results[1].funnel, 'Middle of Funnel (MOFU)');
+    assert.equal(res.results[2].funnel, 'Bottom of Funnel (BOFU)');
+    assert.equal(res.results[3].funnel, 'Brand / Direct Navigation');
+  });
+
+  it('72. keyword-clustering forms semantic topic pillars and generates URL slugs', async () => {
+    const input = 'technical seo audit\ntechnical seo checklist\ntechnical seo guide\nlocal seo services\nlocal seo company\nlocal seo packages';
+    const res = await runTool('keyword-clustering', { keywords: input });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'Keyword Clustering Tool');
+    assert.equal(res.totalKeywords, 6);
+    assert.ok(Array.isArray(res.clusters));
+    assert.ok(res.clusters.length >= 2, 'Should form at least 2 distinct topic clusters');
+    for (const c of res.clusters) {
+      assert.ok(c.pillar);
+      assert.ok(c.slug && c.slug.startsWith('/'));
+      assert.ok(c.count >= 1);
+      assert.ok(Array.isArray(c.keywords));
+    }
+  });
+
+  it('73. content-brief-generator produces structured headings, metadata, and questions', async () => {
+    const res = await runTool('content-brief-generator', { topic: 'Technical SEO Audit', audience: 'agency clients' });
+    assert.ok(res, 'Must return result');
+    assert.equal(res.tool, 'SEO Content Brief Generator');
+    assert.ok(res.brief);
+    assert.equal(res.brief.topic, 'Technical SEO Audit');
+    assert.equal(res.brief.audience, 'agency clients');
+    assert.ok(res.brief.targetWordCount);
+    assert.ok(res.brief.h1.includes('Technical SEO Audit'));
+    assert.ok(Array.isArray(res.brief.titles));
+    assert.ok(res.brief.titles.length >= 3);
+    assert.ok(Array.isArray(res.brief.descriptions));
+    assert.ok(res.brief.descriptions.length >= 2);
+    assert.ok(Array.isArray(res.brief.headings));
+    assert.ok(res.brief.headings.length >= 6);
+    assert.ok(Array.isArray(res.brief.targetQuestions));
+    assert.ok(res.brief.targetQuestions.length >= 4);
+  });
+
+  it('74. new form tools reject empty or invalid inputs with clear 400 errors', async () => {
+    await assert.rejects(() => runTool('keyword-suggester', { keyword: '' }), { status: 400 });
+    await assert.rejects(() => runTool('search-intent-classifier', { keywords: '' }), { status: 400 });
+    await assert.rejects(() => runTool('keyword-clustering', { keywords: 'singlekeywordonly' }), { status: 400 });
+    await assert.rejects(() => runTool('content-brief-generator', { topic: '' }), { status: 400 });
   });
 });

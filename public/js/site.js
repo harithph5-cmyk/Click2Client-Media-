@@ -62,11 +62,15 @@ async function submitting(form, fn) {
 // Free audit
 const freeForm = $('#freeForm');
 if (freeForm) {
+  freeForm.addEventListener('focusin', () => {
+    track('audit_form_start', { audit_tier: 'free', form_id: 'free_audit' });
+  }, { once: true });
   freeForm.addEventListener('submit', (e) => {
     e.preventDefault();
     submitting(freeForm, async () => {
       try {
         const r = await api('/public/audits/free', { method: 'POST', body: Object.fromEntries(new FormData(freeForm)) });
+        track('audit_form_submit', { audit_tier: 'free', conversion_source: 'free_audit' });
         track('audit_started', { audit_plan: 'free' });
         track('generate_lead', { lead_source: 'free_audit' });
         location.href = `/audit/${encodeURIComponent(r.id)}${r.existing ? '?existing=1' : ''}`;
@@ -169,11 +173,15 @@ function openOrder(plan) {
     </div>`, {
     onMount(el) {
       const form = $('form', el);
+      form.addEventListener('focusin', () => {
+        track('audit_form_start', { audit_tier: plan, form_id: 'order_' + plan });
+      }, { once: true });
       form.addEventListener('submit', (e) => {
         e.preventDefault();
         submitting(form, async () => {
           try {
             const r = await api('/public/orders', { method: 'POST', body: { ...Object.fromEntries(new FormData(form)), plan } });
+            track('audit_form_submit', { audit_tier: plan, conversion_source: 'order_' + plan });
             track('begin_checkout', { audit_plan: plan, currency: 'INR', value: plan === 'p50' ? 399 : 125 });
             track('generate_lead', { lead_source: 'order_' + plan });
             location.href = `/order/${encodeURIComponent(r.token)}`;

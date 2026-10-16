@@ -3,9 +3,42 @@
 export const esc = (v) =>
   String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+/**
+ * Sanitizes a URL for analytics:
+ * - Strips all query parameters (?foo=bar)
+ * - Strips all URL fragments (#section)
+ * - Strips embedded user credentials (user:pass@)
+ * - Normalizes protocol and domain
+ */
+export function sanitizeUrl(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  const s = raw.trim();
+  if (!s) return '';
+  try {
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(s);
+    const u = new URL(hasScheme ? s : 'https://' + s);
+    const cleanPath = (u.pathname === '/' && !s.includes('/')) ? '' : u.pathname;
+    return `${u.protocol}//${u.host}${cleanPath}`;
+  } catch {
+    return s.split(/[?#]/)[0].replace(/^[a-zA-Z]+:\/\/[^@/]+@/, '').slice(0, 300);
+  }
+}
+
 /** Sends a funnel event to GA4 / GTM when analytics is configured (no-op otherwise). */
 export function track(event, params = {}) {
-  try { window.c2cTrack ? window.c2cTrack(event, params) : (window.dataLayer = window.dataLayer || []).push({ event, ...params }); } catch {}
+  const cleanParams = {};
+  for (const [k, v] of Object.entries(params)) {
+    if (typeof v === 'string' && (k.toLowerCase().includes('url') || k.toLowerCase().includes('location') || /^https?:\/\//i.test(v))) {
+      cleanParams[k] = sanitizeUrl(v);
+    } else {
+      cleanParams[k] = v;
+    }
+  }
+  try {
+    if (typeof window !== 'undefined') {
+      window.c2cTrack ? window.c2cTrack(event, cleanParams) : (window.dataLayer = window.dataLayer || []).push({ event, ...cleanParams });
+    }
+  } catch {}
 }
 
 let csrfToken = '';
