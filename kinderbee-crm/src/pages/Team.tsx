@@ -11,6 +11,18 @@ const moduleFields: Field[] = [
 ]
 const pickModules = (v: Record<string, unknown>) => (Object.keys(MODULES) as ModuleKey[]).filter((k) => v[`m_${k}`])
 
+// Position presets apply their modules; "Custom" uses the ticked boxes. Team management stays CEO-only.
+const POSITIONS: Record<string, { modules: ModuleKey[]; verify: boolean }> = {
+  'Technical Admin': { modules: Object.keys(MODULES) as ModuleKey[], verify: true },
+  Coordinator: { modules: ['admissions', 'inquiries', 'fees', 'attendance', 'whatsapp'], verify: false },
+  'Sales & Marketing': { modules: ['inquiries', 'whatsapp'], verify: false },
+}
+const CUSTOM = 'Custom (use the boxes below)'
+const positionField: Field = { key: 'position', label: 'Position', required: true, full: true, type: 'select', options: [...Object.keys(POSITIONS), CUSTOM] }
+const access = (v: Record<string, unknown>) => POSITIONS[v.position as string] ?? { modules: pickModules(v), verify: !!v.can_verify }
+const positionOf = (p: Profile) => p.role === 'ceo' ? 'CEO' : Object.entries(POSITIONS).find(([, s]) =>
+  s.verify === p.can_verify && s.modules.length === p.modules.length && s.modules.every((m) => p.modules.includes(m)))?.[0] ?? 'Custom access'
+
 export default function Team() {
   const { profile: me } = useAuth()
   const { rows, loading, reload } = useRows<Profile>(() => supabase.from('profiles').select('*').order('role').order('full_name'))
@@ -30,15 +42,15 @@ export default function Team() {
 
   return (
     <>
-      <PageHeader icon={Users} title="Team" subtitle="Coordinator accounts and what each can access"
-        actions={<Button icon={UserPlus} onClick={() => setMode('create')}>Add coordinator</Button>} />
+      <PageHeader icon={Users} title="Team" subtitle="Team accounts and what each can access"
+        actions={<Button icon={UserPlus} onClick={() => setMode('create')}>Add team member</Button>} />
       <Card>
         {loading ? <Loading /> : (
           <Table rows={rows} rowKey={(r) => r.id}
-            empty={<Empty title="No coordinators yet" text="Add your first coordinator to share the workload." />}
+            empty={<Empty title="No team members yet" text="Add your Technical Admin, Coordinator and Sales & Marketing accounts." />}
             cols={[
               { label: 'Name', render: (r) => <><p className="font-semibold">{r.full_name}</p><p className="text-xs opacity-60">@{r.username} · {r.phone ?? '—'}</p></> },
-              { label: 'Role', render: (r) => <Pill s={r.role === 'ceo' ? 'CEO' : 'Coordinator'} className={r.role === 'ceo' ? '!bg-honey' : ''} /> },
+              { label: 'Position', render: (r) => <Pill s={positionOf(r)} className={r.role === 'ceo' ? '!bg-honey' : ''} /> },
               { label: 'Modules', render: (r) => r.role === 'ceo' ? <span className="text-sm opacity-60">Everything</span> : (
                 <div className="flex flex-wrap gap-1">
                   {r.modules.length ? r.modules.map((m) => <span key={m} className="rounded-full bg-charcoal/5 px-2 py-0.5 text-xs dark:bg-white/10">{MODULES[m]}</span>) : <span className="text-sm opacity-50">None</span>}
@@ -57,28 +69,31 @@ export default function Team() {
         )}
       </Card>
 
-      <FormModal open={mode === 'create'} onClose={() => setMode(null)} title="New coordinator" submitLabel="Create account"
+      <FormModal open={mode === 'create'} onClose={() => setMode(null)} title="New team member" submitLabel="Create account"
         fields={[
           { key: 'full_name', label: 'Full name', required: true },
           { key: 'phone', label: 'Phone', type: 'tel', placeholder: '+91' },
           { key: 'username', label: 'Username or email', required: true, placeholder: `e.g. anita → anita@${brand.loginDomain}` },
           { key: 'password', label: 'Password', required: true, placeholder: 'At least 6 characters' },
+          positionField,
           ...moduleFields,
         ]}
         onSubmit={async (v) => {
+          const a = access(v)
           await must(supabase.rpc('admin_create_user', {
             p_username: v.username, p_password: v.password, p_full_name: v.full_name, p_phone: v.phone ?? null,
-            p_modules: pickModules(v), p_can_verify: !!v.can_verify, p_domain: brand.loginDomain,
+            p_modules: a.modules, p_can_verify: a.verify, p_domain: brand.loginDomain,
           }))
-          toast('Coordinator created — share their username and password with them')
+          toast('Account created — share their username and password with them')
           reload()
         }} />
 
       <FormModal open={!!edit} onClose={() => setMode(null)} title={`Access for ${edit?.full_name}`}
-        initial={edit ? { full_name: edit.full_name, phone: edit.phone, can_verify: edit.can_verify, ...Object.fromEntries(edit.modules.map((m) => [`m_${m}`, true])) } : undefined}
-        fields={[{ key: 'full_name', label: 'Full name', required: true }, { key: 'phone', label: 'Phone', type: 'tel' }, ...moduleFields]}
+        initial={edit ? { full_name: edit.full_name, phone: edit.phone, can_verify: edit.can_verify, position: POSITIONS[positionOf(edit)] ? positionOf(edit) : CUSTOM, ...Object.fromEntries(edit.modules.map((m) => [`m_${m}`, true])) } : undefined}
+        fields={[{ key: 'full_name', label: 'Full name', required: true }, { key: 'phone', label: 'Phone', type: 'tel' }, positionField, ...moduleFields]}
         onSubmit={async (v) => {
-          const { error } = await supabase.from('profiles').update({ full_name: v.full_name, phone: v.phone, modules: pickModules(v), can_verify: !!v.can_verify }).eq('id', edit!.id)
+          const a = access(v)
+          const { error } = await supabase.from('profiles').update({ full_name: v.full_name, phone: v.phone, modules: a.modules, can_verify: a.verify }).eq('id', edit!.id)
           if (error) throw error
           toast('Access updated')
           reload()
