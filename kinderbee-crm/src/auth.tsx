@@ -9,6 +9,7 @@ export const MODULES = {
   payments: 'Payments',
   attendance: 'Attendance',
   whatsapp: 'WhatsApp',
+  website: 'Website Content',
 } as const
 export type ModuleKey = keyof typeof MODULES
 

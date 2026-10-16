@@ -15,7 +15,7 @@ const pickModules = (v: Record<string, unknown>) => (Object.keys(MODULES) as Mod
 const POSITIONS: Record<string, { modules: ModuleKey[]; verify: boolean }> = {
   'Technical Admin': { modules: Object.keys(MODULES) as ModuleKey[], verify: true },
   Coordinator: { modules: ['admissions', 'inquiries', 'fees', 'attendance', 'whatsapp'], verify: false },
-  'Sales & Marketing': { modules: ['inquiries', 'whatsapp'], verify: false },
+  'Sales & Marketing': { modules: ['inquiries', 'whatsapp', 'website'], verify: false },
 }
 const CUSTOM = 'Custom (use the boxes below)'
 const positionField: Field = { key: 'position', label: 'Position', required: true, full: true, type: 'select', options: [...Object.keys(POSITIONS), CUSTOM] }

@@ -3,7 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   CalendarCheck, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
-  Search, Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, type LucideIcon,
+  Search, Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, Image as ImageIcon, type LucideIcon,
 } from 'lucide-react'
 import { brand } from './config/brand'
 import { useAuth, type ModuleKey } from './auth'
@@ -20,6 +20,7 @@ const WhatsApp = lazy(() => import('./pages/WhatsApp'))
 const Team = lazy(() => import('./pages/Team'))
 const Settings = lazy(() => import('./pages/Settings'))
 const SearchPage = lazy(() => import('./pages/Search'))
+const WebsiteContent = lazy(() => import('./pages/WebsiteContent'))
 
 type Nav = { to: string; label: string; icon: LucideIcon; accent: Accent; module?: ModuleKey; ceo?: boolean }
 const NAV: Nav[] = [
@@ -30,6 +31,7 @@ const NAV: Nav[] = [
   { to: '/payments', label: 'Payments', icon: CreditCard, accent: 'payments', module: 'payments' },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck, accent: 'attendance', module: 'attendance' },
   { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, accent: 'whatsapp', module: 'whatsapp' },
+  { to: '/website', label: 'Website Content', icon: ImageIcon, accent: 'inquiries', module: 'website' },
   { to: '/team', label: 'Team', icon: Users, accent: 'honey', ceo: true },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, accent: 'honey' },
 ]
@@ -157,6 +159,7 @@ function Shell() {
               <Route path="/payments" element={<Guard m="payments"><Payments /></Guard>} />
               <Route path="/attendance" element={<Guard m="attendance"><Attendance /></Guard>} />
               <Route path="/whatsapp" element={<Guard m="whatsapp"><WhatsApp /></Guard>} />
+              <Route path="/website" element={<Guard m="website"><WebsiteContent /></Guard>} />
               <Route path="/team" element={<Guard ceo><Team /></Guard>} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/search" element={<SearchPage />} />
