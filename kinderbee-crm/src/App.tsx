@@ -2,7 +2,7 @@ import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from '
 import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  CalendarCheck, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
+  CalendarCheck, Contact, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
   Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, Image as ImageIcon, type LucideIcon,
 } from 'lucide-react'
 import { brand } from './config/brand'
@@ -15,6 +15,7 @@ const Admissions = lazy(() => import('./pages/Admissions'))
 const Inquiries = lazy(() => import('./pages/Inquiries'))
 const Fees = lazy(() => import('./pages/Fees'))
 const Payments = lazy(() => import('./pages/Payments'))
+const StaffPage = lazy(() => import('./pages/Staff'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const WhatsApp = lazy(() => import('./pages/WhatsApp'))
 const Team = lazy(() => import('./pages/Team'))
@@ -27,6 +28,7 @@ const NAV: Nav[] = [
   { to: '/admissions', label: 'Student Registration', icon: GraduationCap, accent: 'admissions', module: 'admissions' },
   { to: '/inquiries', label: 'Website', icon: Globe, accent: 'inquiries', module: 'inquiries' },
   { to: '/fees', label: 'Fees', icon: Wallet, accent: 'fees', module: 'fees' },
+  { to: '/staff', label: 'Teachers & Staff', icon: Contact, accent: 'payments', module: 'payments' },
   { to: '/payments', label: 'Payments', icon: CreditCard, accent: 'payments', module: 'payments' },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck, accent: 'attendance', module: 'attendance' },
   { to: '/whatsapp', label: 'WhatsApp', icon: MessageCircle, accent: 'whatsapp', module: 'whatsapp' },
@@ -148,6 +150,7 @@ function Shell() {
               <Route path="/admissions" element={<Guard m="admissions"><Admissions /></Guard>} />
               <Route path="/inquiries" element={<Guard m="inquiries"><Inquiries /></Guard>} />
               <Route path="/fees" element={<Guard m="fees"><Fees /></Guard>} />
+              <Route path="/staff" element={<Guard m="payments"><StaffPage /></Guard>} />
               <Route path="/payments" element={<Guard m="payments"><Payments /></Guard>} />
               <Route path="/attendance" element={<Guard m="attendance"><Attendance /></Guard>} />
               <Route path="/whatsapp" element={<Guard m="whatsapp"><WhatsApp /></Guard>} />

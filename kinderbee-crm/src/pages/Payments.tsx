@@ -1,14 +1,15 @@
 import { useState } from 'react'
-import { BadgeCheck, CheckCircle2, CreditCard, Download, FileDown, FileText, History, Pencil, Plus, UserPlus, XCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { BadgeCheck, CheckCircle2, CreditCard, Download, FileDown, FileText, History, Plus, UserPlus, XCircle } from 'lucide-react'
 import { useAuth } from '../auth'
 import { brand } from '../config/brand'
 import { must, openFile, sendWhatsApp, supabase, upload } from '../lib/supabase'
 import { exportExcel } from '../lib/excel'
 import { salarySlip } from '../lib/pdf'
 import { fmtDate, inr, monthLabel, monthStart, normPhone, SERVICES, today } from '../lib/util'
-import { Button, Card, clean, cx, Empty, FormModal, inputCls, Label, Loading, Modal, PageHeader, Pill, Select, Table, toast, useRows, type Field } from '../ui'
+import { Button, Card, cx, Empty, FormModal, inputCls, Label, Loading, Modal, PageHeader, Pill, Select, Table, toast, useRows } from '../ui'
 
-type Staff = {
+export type Staff = {
   id: string; name: string; role: string | null; phone: string | null; joining_date: string | null; bank_account_name: string | null
   account_no: string | null; ifsc: string | null; upi: string | null; monthly_salary: number; active: boolean
   qualification: string | null; experience: string | null
@@ -33,27 +34,16 @@ export default function Payments() {
 }
 
 function Salaries() {
+  const nav = useNavigate()
   const staff = useRows<Staff>(() => supabase.from('staff').select('*').order('name'))
   const pay = useRows<Salary>(() => supabase.from('salary_payments').select('*').order('month', { ascending: false }))
   const [month, setMonth] = useState(today().slice(0, 7))
-  const [editing, setEditing] = useState<Staff | 'new' | null>(null)
   const [paying, setPaying] = useState<Staff | null>(null)
   const [history, setHistory] = useState<Staff | null>(null)
   const m = monthStart(month)
   const active = staff.rows.filter((s) => s.active)
   const paidFor = (id: string) => pay.rows.find((p) => p.staff_id === id && p.month === m)
-  const current = editing && editing !== 'new' ? editing : null
   const net = (p: Salary) => Number(p.amount) + Number(p.bonus) - Number(p.deductions)
-
-  const staffFields: Field[] = [
-    { key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', placeholder: 'Teacher, Ayah, Driver…' },
-    { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'joining_date', label: 'Joining date', type: 'date' },
-    { key: 'qualification', label: 'Qualification' }, { key: 'experience', label: 'Experience', placeholder: '10 years, Fresher…' },
-    { key: 'monthly_salary', label: 'Monthly salary (₹)', type: 'number', required: true },
-    { key: 'bank_account_name', label: 'Bank account name' }, { key: 'account_no', label: 'Account no.' },
-    { key: 'ifsc', label: 'IFSC' }, { key: 'upi', label: 'UPI ID' },
-    { key: 'active', label: 'Currently employed', type: 'checkbox' },
-  ]
 
   async function slip(s: Staff, p: Salary) {
     const blob = await salarySlip({ staff: s, ...p })
@@ -75,11 +65,11 @@ function Salaries() {
             <Button variant="soft" icon={Download} onClick={() => exportExcel(`payroll-${month}`,
               [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'salary', label: 'Salary' }, { key: 'bonus', label: 'Bonus' }, { key: 'deductions', label: 'Deductions' }, { key: 'net', label: 'Net' }, { key: 'paid_on', label: 'Paid on' }, { key: 'mode', label: 'Mode' }, { key: 'bank', label: 'Account' }, { key: 'ifsc', label: 'IFSC' }],
               active.map((s) => { const p = paidFor(s.id); return { ...s, salary: p?.amount ?? s.monthly_salary, bonus: p?.bonus ?? '', deductions: p?.deductions ?? '', net: p ? net(p) : '', paid_on: p ? fmtDate(p.paid_on) : 'UNPAID', mode: p?.mode ?? '', bank: s.account_no } }))}>Export</Button>
-            <Button icon={UserPlus} onClick={() => setEditing('new')}>Add staff</Button>
+            <Button icon={UserPlus} onClick={() => nav('/staff')}>Add / edit staff</Button>
           </div>
         </div>
         <Table rows={staff.rows} rowKey={(r) => r.id}
-          empty={<Empty title="No staff yet" text="Add your teachers and helpers to run payroll." />}
+          empty={<Empty title="No staff yet" text="Add teachers and staff under Teachers & Staff to run payroll." />}
           cols={[
             { label: 'Staff', render: (r) => <><p className={cx('font-semibold', !r.active && 'line-through opacity-50')}>{r.name}</p><p className="text-xs opacity-60">{[r.role, r.qualification, r.experience, r.phone].filter(Boolean).join(' · ')}</p></> },
             { label: 'Salary', render: (r) => inr(r.monthly_salary) },
@@ -92,21 +82,11 @@ function Salaries() {
                     try { await openFile(p.slip_path ?? await slip(r, p)) } catch (e: any) { toast(e.message, 'error') }
                   }}>Slip</Button> : r.active && <Button size="sm" onClick={() => setPaying(r)}>Mark paid</Button>}
                   <Button size="sm" variant="ghost" icon={History} onClick={() => setHistory(r)} aria-label="Salary history" />
-                  <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditing(r)} aria-label="Edit staff" />
                 </div>
               )
             } },
           ]} />
       </Card>
-
-      <FormModal open={!!editing} onClose={() => setEditing(null)} wide title={current ? current.name : 'New staff member'}
-        fields={staffFields} initial={current ?? { active: true }}
-        onSubmit={async (v) => {
-          const row = { ...clean(v, ['name', 'role', 'qualification', 'experience', 'joining_date', 'bank_account_name', 'account_no', 'ifsc', 'upi']), phone: normPhone(v.phone) ?? (v.phone || null), monthly_salary: Number(v.monthly_salary), active: !!v.active }
-          if (current) await must(supabase.from('staff').update(row).eq('id', current.id))
-          else await must(supabase.from('staff').insert(row))
-          staff.reload()
-        }} />
 
       <FormModal open={!!paying} onClose={() => setPaying(null)} title={`Pay ${paying?.name} · ${monthLabel(m)}`} submitLabel="Mark paid & create slip"
         initial={{ amount: paying?.monthly_salary, deductions: 0, bonus: 0, paid_on: today(), mode: 'bank' }}

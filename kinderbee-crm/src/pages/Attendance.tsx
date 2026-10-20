@@ -20,7 +20,7 @@ function daysOf(month: string) {
 const isSunday = (d: string) => new Date(d + 'T00:00').getDay() === 0
 
 export default function Attendance() {
-  const [tab, setTab] = useState<'students' | 'staff'>('students')
+  const [tab, setTab] = useState<'students' | 'staff'>(new URLSearchParams(location.search).get('tab') === 'staff' ? 'staff' : 'students')
   return (
     <>
       <PageHeader icon={CalendarCheck} accent="attendance" title="Attendance" subtitle="Tap to mark — it saves instantly" />
@@ -231,7 +231,7 @@ function Staff() {
           </div>
           <input type="date" className={cx(inputCls, 'w-44 py-2')} value={day} max={today()} onChange={(e) => setDay(e.target.value)} aria-label="Day" />
         </div>
-        {staff.loading ? <Loading /> : !staff.rows.length ? <Empty title="No staff yet" text="Add staff under Payments → Staff salary." /> : (
+        {staff.loading ? <Loading /> : !staff.rows.length ? <Empty title="No staff yet" text="Add teachers and staff under Teachers & Staff." /> : (
           <ul className="divide-y divide-charcoal/5 dark:divide-white/5">
             {staff.rows.map((s) => {
               const m = todayMarks[s.id]
