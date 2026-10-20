@@ -41,4 +41,8 @@ const all = allDues([{ id: 's2', program: 'LKG', academic_year: '2026-27' }, { i
 assert.equal(all[0].overdue, 15000) // tuition only
 assert.equal(all[1].due, 0) // no structure for UKG
 
+const books = { id: 'b', program: 'LKG', academic_year: '2026-27', name: 'Books (optional)', amount: 2500, due_date: null, monthly: false, sort: 9, optional: true }
+assert.equal(studentDues([books], [], '2026-10-15').balance, 0) // not bought → nothing owed
+assert.equal(studentDues([books], [{ id: 'x', student_id: 's1', component_id: 'b', amount: 2500 } as any], '2026-10-15').paid, 2500)
+
 console.log('lib.test.ts: all passed')

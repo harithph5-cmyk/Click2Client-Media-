@@ -13,7 +13,7 @@ type Payment = {
   reference: string | null; paid_on: string; receipt_path: string | null; created_by: string | null
 }
 const MODES = [{ value: 'cash', label: 'Cash' }, { value: 'upi', label: 'UPI' }, { value: 'bank', label: 'Bank transfer' }, { value: 'cheque', label: 'Cheque' }]
-const DEFAULT_COMPONENTS = ['One-Time Payment (Admission)', 'Term 1', 'Term 2', 'Term 3', 'Monthly Tuition Fee', 'Kids Books', 'Uniform', 'Miscellaneous']
+const DEFAULT_COMPONENTS = ['Term 1', 'Term 2', 'Term 3', 'Uniform Kit', 'Books (optional)']
 
 export default function Fees() {
   const { isCeo } = useAuth()
@@ -181,7 +181,7 @@ function Structure({ comps, students, reload }: Data) {
         empty={<Empty title="No fees set for this program yet" text="Start with the standard components, then fill in the amounts." />}
         cols={[
           { label: 'Component', render: (r) => <b>{r.name}</b> },
-          { label: 'Amount', render: (r) => <>{inr(r.amount)}{r.monthly && <span className="text-xs opacity-60"> / month</span>}</> },
+          { label: 'Amount', render: (r) => <>{inr(r.amount)}{r.monthly && <span className="text-xs opacity-60"> / month</span>}{r.optional && <span className="text-xs opacity-60"> · optional</span>}</> },
           { label: 'Due date', render: (r) => fmtDate(r.due_date) + (r.monthly ? ' (first)' : '') },
           { label: '', className: 'text-right', render: (r) => (
             <span onClick={(e) => e.stopPropagation()} className="flex justify-end gap-1">
@@ -203,9 +203,10 @@ function Structure({ comps, students, reload }: Data) {
           { key: 'due_date', label: 'Due date', type: 'date' },
           { key: 'sort', label: 'Display order', type: 'number' },
           { key: 'monthly', label: 'Charged every month (amount is per month)', type: 'checkbox' },
+          { key: 'optional', label: 'Optional (only owed if the parent buys it)', type: 'checkbox' },
         ]}
         onSubmit={async (v) => {
-          const row = { name: v.name, amount: Number(v.amount), due_date: v.due_date || null, sort: Number(v.sort) || 0, monthly: !!v.monthly, program, academic_year: year }
+          const row = { name: v.name, amount: Number(v.amount), due_date: v.due_date || null, sort: Number(v.sort) || 0, monthly: !!v.monthly, optional: !!v.optional, program, academic_year: year }
           if (current) await must(supabase.from('fee_components').update(row).eq('id', current.id))
           else await must(supabase.from('fee_components').insert(row))
           reload()

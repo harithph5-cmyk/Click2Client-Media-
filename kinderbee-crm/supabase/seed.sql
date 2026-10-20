@@ -12,7 +12,7 @@ begin
   perform set_config('kb.allow_signup', 'on', true); -- see 0003_block_signups.sql
   for u in select * from (values
     (ceo, 'ceo@kinderbee.local', 'KinderBee@123',
-      '{"provider":"email","providers":["email"],"role":"ceo","full_name":"Lakshmi Rao","phone":"+919845000001","username":"ceo"}'::jsonb),
+      '{"provider":"email","providers":["email"],"role":"ceo","full_name":"Sagi","phone":"+919845000001","username":"ceo"}'::jsonb),
     (coord, 'priya@kinderbee.local', 'Coord@123',
       '{"provider":"email","providers":["email"],"role":"coordinator","full_name":"Priya Sharma","phone":"+919845000002","username":"priya","modules":["admissions","inquiries","fees","payments","attendance","whatsapp"],"can_verify":false}'::jsonb)
   ) as t(id, email, pw, meta) loop

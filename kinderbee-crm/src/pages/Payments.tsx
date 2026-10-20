@@ -10,6 +10,7 @@ import { Button, Card, clean, cx, Empty, FormModal, inputCls, Label, Loading, Mo
 type Staff = {
   id: string; name: string; role: string | null; phone: string | null; joining_date: string | null; bank_account_name: string | null
   account_no: string | null; ifsc: string | null; upi: string | null; monthly_salary: number; active: boolean
+  qualification: string | null; experience: string | null
 }
 type Salary = { id: string; staff_id: string; month: string; amount: number; deductions: number; bonus: number; paid_on: string; mode: string; slip_path: string | null }
 type ServicePayment = {
@@ -51,6 +52,7 @@ function Salaries() {
   const staffFields: Field[] = [
     { key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', placeholder: 'Teacher, Ayah, Driver…' },
     { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'joining_date', label: 'Joining date', type: 'date' },
+    { key: 'qualification', label: 'Qualification' }, { key: 'experience', label: 'Experience', placeholder: '10 years, Fresher…' },
     { key: 'monthly_salary', label: 'Monthly salary (₹)', type: 'number', required: true },
     { key: 'bank_account_name', label: 'Bank account name' }, { key: 'account_no', label: 'Account no.' },
     { key: 'ifsc', label: 'IFSC' }, { key: 'upi', label: 'UPI ID' },
@@ -83,7 +85,7 @@ function Salaries() {
         <Table rows={staff.rows} rowKey={(r) => r.id}
           empty={<Empty title="No staff yet" text="Add your teachers and helpers to run payroll." />}
           cols={[
-            { label: 'Staff', render: (r) => <><p className={cx('font-semibold', !r.active && 'line-through opacity-50')}>{r.name}</p><p className="text-xs opacity-60">{r.role} · {r.phone}</p></> },
+            { label: 'Staff', render: (r) => <><p className={cx('font-semibold', !r.active && 'line-through opacity-50')}>{r.name}</p><p className="text-xs opacity-60">{[r.role, r.qualification, r.experience, r.phone].filter(Boolean).join(' · ')}</p></> },
             { label: 'Salary', render: (r) => inr(r.monthly_salary) },
             { label: monthLabel(m), render: (r) => { const p = paidFor(r.id); return p ? <><Pill s="Paid" /> <span className="text-xs opacity-60">{inr(net(p))} · {fmtDate(p.paid_on)}</span></> : r.active ? <Pill s="Due" /> : '—' } },
             { label: '', className: 'text-right', render: (r) => {
@@ -104,7 +106,7 @@ function Salaries() {
       <FormModal open={!!editing} onClose={() => setEditing(null)} wide title={current ? current.name : 'New staff member'}
         fields={staffFields} initial={current ?? { active: true }}
         onSubmit={async (v) => {
-          const row = { ...clean(v, ['name', 'role', 'joining_date', 'bank_account_name', 'account_no', 'ifsc', 'upi']), phone: normPhone(v.phone) ?? (v.phone || null), monthly_salary: Number(v.monthly_salary), active: !!v.active }
+          const row = { ...clean(v, ['name', 'role', 'qualification', 'experience', 'joining_date', 'bank_account_name', 'account_no', 'ifsc', 'upi']), phone: normPhone(v.phone) ?? (v.phone || null), monthly_salary: Number(v.monthly_salary), active: !!v.active }
           if (current) await must(supabase.from('staff').update(row).eq('id', current.id))
           else await must(supabase.from('staff').insert(row))
           staff.reload()
