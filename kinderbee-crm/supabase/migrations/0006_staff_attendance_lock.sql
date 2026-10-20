@@ -4,6 +4,8 @@
 
 alter table public.staff_attendance add column if not exists locked_at timestamptz;
 
+drop trigger if exists staff_attendance_guard on public.staff_attendance;
+
 -- Days marked before this change count as saved
 update public.staff_attendance set locked_at = now()
  where locked_at is null and day < (now() at time zone 'Asia/Kolkata')::date;
@@ -21,7 +23,6 @@ begin
   return coalesce(new, old);
 end $$;
 
-drop trigger if exists staff_attendance_guard on public.staff_attendance;
 create trigger staff_attendance_guard before insert or update or delete on public.staff_attendance
   for each row execute function public.staff_attendance_guard();
 
