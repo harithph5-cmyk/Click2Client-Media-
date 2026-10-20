@@ -1,6 +1,6 @@
 // White-label config: change these to resell the CRM to another school.
 export const brand = {
-  name: 'KinderBee CRM',
+  name: 'Kinderbee CRM',
   school: 'Kinderbee International Preschool',
   city: 'Bengaluru',
   address: 'No. 1, Old UCO Bank Road, Rajarajeshwari Layout, Ramamurthy Nagar, Bengaluru – 560016',

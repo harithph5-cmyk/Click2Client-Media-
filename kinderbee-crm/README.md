@@ -1,6 +1,6 @@
-# KinderBee CRM
+# Kinderbee CRM
 
-A CRM for KinderBee Preschool (Bengaluru) that can be white-labelled and sold to other schools.
+A CRM for Kinderbee Preschool (Bengaluru) that can be white-labelled and sold to other schools.
 **Stack:** React + TypeScript + Vite + Tailwind 4 + Supabase (Auth, Postgres with RLS, Storage).
 
 Modules: Dashboard · Admissions & Students · Website Inquiries · Fees · Payments (salary + service payment verification) · Attendance · WhatsApp Centre · Team (CEO only) · Settings · global search.
@@ -8,7 +8,7 @@ Modules: Dashboard · Admissions & Students · Website Inquiries · Fees · Paym
 ## Setup (new school)
 
 1. **Create a Supabase project.**
-2. **SQL Editor → New query:** paste all of `supabase/setup.sql` (schema, team and lead functions, demo data) and click **Run**. It ends with a `KinderBee CRM ready | 20 | 2` row. Run it once only.
+2. **SQL Editor → New query:** paste all of `supabase/setup.sql` (schema, team and lead functions, demo data) and click **Run**. It ends with a `Kinderbee CRM ready | 20 | 2` row. Run it once only.
 3. Public sign-ups are blocked in the database (`0003_block_signups.sql`), so only the CEO can create accounts, from the Team page. Turning off "Allow new users to sign up" in Authentication settings as well is optional.
 4. **App:** copy `.env.example` to `.env` and fill in the project URL and the **anon public** key. Then `npm install` and `npm run dev`.
 5. **Deploy:** `npm run build`, then deploy `dist/` (it includes `vercel.json` for SPA routing), or import this folder into Vercel with the two `VITE_` env vars.

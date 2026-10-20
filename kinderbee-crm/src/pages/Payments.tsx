@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { BadgeCheck, CheckCircle2, CreditCard, Download, FileDown, FileText, History, Pencil, Plus, UserPlus, XCircle } from 'lucide-react'
 import { useAuth } from '../auth'
+import { brand } from '../config/brand'
 import { must, openFile, sendWhatsApp, supabase, upload } from '../lib/supabase'
 import { exportExcel } from '../lib/excel'
 import { salarySlip } from '../lib/pdf'
 import { fmtDate, inr, monthLabel, monthStart, normPhone, SERVICES, today } from '../lib/util'
-import { Button, Card, clean, cx, Empty, FormModal, inputCls, Label, Loading, Modal, PageHeader, Pill, Select, Table, Tabs, toast, useRows, type Field } from '../ui'
+import { Button, Card, clean, cx, Empty, FormModal, inputCls, Label, Loading, Modal, PageHeader, Pill, Select, Table, toast, useRows, type Field } from '../ui'
 
 type Staff = {
   id: string; name: string; role: string | null; phone: string | null; joining_date: string | null; bank_account_name: string | null
@@ -13,25 +14,20 @@ type Staff = {
   qualification: string | null; experience: string | null
 }
 type Salary = { id: string; staff_id: string; month: string; amount: number; deductions: number; bonus: number; paid_on: string; mode: string; slip_path: string | null }
-type ServicePayment = {
+export type ServicePayment = {
   id: string; payer_name: string; phone: string | null; service: string; amount: number; mode: string; reference: string | null
   paid_on: string; proof_path: string | null; status: string; reject_reason: string | null; verified_by: string | null; verified_at: string | null; created_at: string
+  website_payment_id: string | null; extra: Record<string, string | null> | null
 }
 const MODES = ['upi', 'bank', 'cash', 'cheque', 'card']
-const DEFAULT_RECEIVED = 'Hi {name}, we have received your payment of ₹{amount} for {service} on {date}. Ref: {ref}. Thank you – Team KinderBee 🐝'
+const DEFAULT_RECEIVED = 'Hi {name}, we have received your payment of ₹{amount} for {service} on {date}. Ref: {ref}. Thank you – Team Kinderbee 🐝'
 
+// Service payments and their verification live in the Website page (website payments arrive there).
 export default function Payments() {
-  const [tab, setTab] = useState<'salary' | 'service' | 'verify'>('salary')
-  const service = useRows<ServicePayment>(() => supabase.from('service_payments').select('*').order('created_at', { ascending: false }))
-  const pending = service.rows.filter((r) => r.status === 'Pending')
   return (
     <>
-      <PageHeader icon={CreditCard} accent="payments" title="Payments" subtitle="Staff salaries and service payment verification" />
-      <Tabs value={tab} onChange={setTab} tabs={[
-        { key: 'salary', label: 'Staff salary' }, { key: 'service', label: 'Service payments' },
-        { key: 'verify', label: 'Payment verification', count: pending.length || undefined },
-      ]} />
-      {tab === 'salary' ? <Salaries /> : tab === 'service' ? <Services {...service} /> : <Verify rows={pending} reload={service.reload} loading={service.loading} />}
+      <PageHeader icon={CreditCard} accent="payments" title="Payments" subtitle="Staff salaries and payslips" />
+      <Salaries />
     </>
   )
 }
@@ -150,7 +146,7 @@ function Salaries() {
   )
 }
 
-function Services({ rows, loading, reload }: { rows: ServicePayment[]; loading: boolean; reload: () => void }) {
+export function Services({ rows, loading, reload }: { rows: ServicePayment[]; loading: boolean; reload: () => void }) {
   const [adding, setAdding] = useState(false)
   const [service, setService] = useState('')
   const [status, setStatus] = useState('')
@@ -171,7 +167,7 @@ function Services({ rows, loading, reload }: { rows: ServicePayment[]; loading: 
           empty={<Empty title="No service payments yet" text="Record franchise, NTT and consultation payments here for the CEO to verify." />}
           cols={[
             { label: 'Payer', render: (r) => <><p className="font-semibold">{r.payer_name}</p><p className="text-xs opacity-60">{r.phone}</p></> },
-            { label: 'Service', render: (r) => r.service },
+            { label: 'Service', render: (r) => <><p>{r.service}</p>{r.extra?.programme && <p className="text-xs opacity-60">{r.extra.programme}</p>}</> },
             { label: 'Amount', render: (r) => <b>{inr(r.amount)}</b> },
             { label: 'Mode / Ref', render: (r) => <span className="text-sm"><span className="uppercase">{r.mode}</span> · {r.reference ?? '—'}</span> },
             { label: 'Date', render: (r) => fmtDate(r.paid_on) },
@@ -207,7 +203,24 @@ function Services({ rows, loading, reload }: { rows: ServicePayment[]; loading: 
   )
 }
 
-function Verify({ rows, reload, loading }: { rows: ServicePayment[]; reload: () => void; loading: boolean }) {
+// A payment that came from the website is also marked on the website, which unlocks the course or confirms the
+// consultation booking there. A failure only warns: the CRM record is already verified.
+async function syncWebsite(p: ServicePayment, status: 'verified' | 'rejected', notes?: string) {
+  if (!p.website_payment_id) return
+  try {
+    const { data } = await supabase.auth.getSession()
+    const r = await fetch(`${brand.websiteUrl}/api/payments/${encodeURIComponent(p.website_payment_id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token}` },
+      body: JSON.stringify(notes ? { status, notes } : { status }),
+    })
+    if (!r.ok) throw new Error(`website replied ${r.status}`)
+  } catch (e: any) {
+    toast(`Saved here, but the website could not be updated (${e.message}). Update it in the website admin too.`, 'error')
+  }
+}
+
+export function Verify({ rows, reload, loading }: { rows: ServicePayment[]; reload: () => void; loading: boolean }) {
   const { canVerify } = useAuth()
   const [rejecting, setRejecting] = useState<ServicePayment | null>(null)
   const [reason, setReason] = useState('')
@@ -218,6 +231,7 @@ function Verify({ rows, reload, loading }: { rows: ServicePayment[]; reload: () 
     setBusy(p.id)
     try {
       await must(supabase.rpc('verify_service_payment', { p_id: p.id, p_ok: true }))
+      await syncWebsite(p, 'verified')
       const { data: tpl } = await supabase.from('message_templates').select('*').eq('name', 'Payment received').maybeSingle()
       const res = await sendWhatsApp([{
         phone: p.phone!,
@@ -248,7 +262,8 @@ function Verify({ rows, reload, loading }: { rows: ServicePayment[]; reload: () 
         {rows.map((p) => (
           <Card key={p.id} className="relative overflow-hidden">
             <span className="hex absolute -right-5 -top-5 h-20 w-20 bg-sky/70 dark:bg-sky/15" />
-            <p className="relative text-xs font-bold uppercase tracking-wide opacity-50">{p.service}</p>
+            <p className="relative text-xs font-bold uppercase tracking-wide opacity-50">{p.service}{p.website_payment_id && ' · from website'}</p>
+            {p.extra?.programme && <p className="relative text-xs opacity-60">{p.extra.programme}</p>}
             <p className="relative font-display text-2xl">{inr(p.amount)}</p>
             <p className="font-semibold">{p.payer_name}</p>
             <p className="text-sm opacity-60">{p.phone} · <span className="uppercase">{p.mode}</span> · {p.reference ?? 'no ref'} · {fmtDate(p.paid_on)}</p>
@@ -270,6 +285,7 @@ function Verify({ rows, reload, loading }: { rows: ServicePayment[]; reload: () 
           <Button variant="danger" icon={BadgeCheck} disabled={!reason.trim()} onClick={async () => {
             const { error } = await supabase.rpc('verify_service_payment', { p_id: rejecting!.id, p_ok: false, p_reason: reason.trim() })
             if (error) return toast(error.message, 'error')
+            await syncWebsite(rejecting!, 'rejected', reason.trim())
             toast('Payment rejected')
             setRejecting(null)
             reload()

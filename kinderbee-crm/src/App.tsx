@@ -1,9 +1,9 @@
 import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   CalendarCheck, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
-  Search, Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, Image as ImageIcon, type LucideIcon,
+  Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, Image as ImageIcon, type LucideIcon,
 } from 'lucide-react'
 import { brand } from './config/brand'
 import { useAuth, type ModuleKey } from './auth'
@@ -19,14 +19,13 @@ const Attendance = lazy(() => import('./pages/Attendance'))
 const WhatsApp = lazy(() => import('./pages/WhatsApp'))
 const Team = lazy(() => import('./pages/Team'))
 const Settings = lazy(() => import('./pages/Settings'))
-const SearchPage = lazy(() => import('./pages/Search'))
 const WebsiteContent = lazy(() => import('./pages/WebsiteContent'))
 
 type Nav = { to: string; label: string; icon: LucideIcon; accent: Accent; module?: ModuleKey; ceo?: boolean }
 const NAV: Nav[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, accent: 'honey' },
-  { to: '/admissions', label: 'Admissions', icon: GraduationCap, accent: 'admissions', module: 'admissions' },
-  { to: '/inquiries', label: 'Website Inquiries', icon: Globe, accent: 'inquiries', module: 'inquiries' },
+  { to: '/admissions', label: 'Student Registration', icon: GraduationCap, accent: 'admissions', module: 'admissions' },
+  { to: '/inquiries', label: 'Website', icon: Globe, accent: 'inquiries', module: 'inquiries' },
   { to: '/fees', label: 'Fees', icon: Wallet, accent: 'fees', module: 'fees' },
   { to: '/payments', label: 'Payments', icon: CreditCard, accent: 'payments', module: 'payments' },
   { to: '/attendance', label: 'Attendance', icon: CalendarCheck, accent: 'attendance', module: 'attendance' },
@@ -73,8 +72,6 @@ function Shell() {
   const { profile, can, isCeo, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const [dark, setDark] = useState(document.documentElement.classList.contains('dark'))
-  const [q, setQ] = useState('')
-  const nav = useNavigate()
   const loc = useLocation()
   useEffect(() => setOpen(false), [loc.pathname])
 
@@ -137,11 +134,6 @@ function Shell() {
 
       <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-charcoal/5 bg-cream/80 px-4 py-3 backdrop-blur sm:px-6 dark:border-white/5 dark:bg-night/80">
         <button onClick={() => setOpen(true)} className="rounded-xl p-2 lg:hidden" aria-label="Open menu"><Menu /></button>
-        <form className="relative max-w-md flex-1" onSubmit={(e) => { e.preventDefault(); if (q.trim()) nav(`/search?q=${encodeURIComponent(q.trim())}`) }}>
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-40" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search students, leads, payments…"
-            className="w-full rounded-2xl border border-charcoal/10 bg-white py-2 pl-9 pr-3 outline-none focus:border-honey focus:ring-4 focus:ring-honey/25 dark:border-white/10 dark:bg-white/5" />
-        </form>
         <button onClick={toggleTheme} className="ml-auto rounded-xl p-2 hover:bg-charcoal/5 dark:hover:bg-white/10" aria-label="Toggle dark mode">
           {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
@@ -162,7 +154,6 @@ function Shell() {
               <Route path="/website" element={<Guard m="website"><WebsiteContent /></Guard>} />
               <Route path="/team" element={<Guard ceo><Team /></Guard>} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/search" element={<SearchPage />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
             </Boundary>

@@ -8,7 +8,7 @@ import { Card, Empty, Kpi, PageHeader } from '../ui'
 import { brand } from '../config/brand'
 
 type Stats = Partial<{
-  students: number; admissionsWeek: number; leadsWeek: number; leadsByCat: { name: string; count: number }[]
+  students: number; leadsWeek: number; leadsByCat: { name: string; count: number }[]
   collectedMonth: number; overdue: number; monthly: { month: string; amount: number }[]
   pendingVerify: number; staffPct: number | null; studentPct: number | null
 }>
@@ -34,11 +34,8 @@ export default function Dashboard() {
     const add = (f: () => Promise<Stats>) => jobs.push(f().then((r) => setS((p) => ({ ...p, ...r }))))
 
     if (can('admissions')) add(async () => {
-      const [st, ad] = await Promise.all([
-        supabase.from('students').select('id', { count: 'exact', head: true }).eq('active', true),
-        supabase.from('admissions').select('id', { count: 'exact', head: true }).gte('created_at', weekAgo()),
-      ])
-      return { students: st.count ?? 0, admissionsWeek: ad.count ?? 0 }
+      const { count } = await supabase.from('students').select('id', { count: 'exact', head: true }).eq('active', true)
+      return { students: count ?? 0 }
     })
     if (can('inquiries')) add(async () => {
       const { data } = await supabase.from('leads').select('category').gte('created_at', weekAgo())
@@ -87,7 +84,7 @@ export default function Dashboard() {
         subtitle={`Here's what's buzzing at ${brand.school} today · ${fmtDate(today())}`} />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {can('admissions') && <Kpi icon={GraduationCap} accent="admissions" label="Active students" value={s.students ?? '…'} hint={`${s.admissionsWeek ?? 0} new inquiries this week`} />}
+        {can('admissions') && <Kpi icon={GraduationCap} accent="admissions" label="Active students" value={s.students ?? '…'} />}
         {can('inquiries') && <Kpi icon={Globe} accent="inquiries" label="Website leads this week" value={s.leadsWeek ?? '…'} />}
         {can('fees') && <Kpi icon={Wallet} accent="fees" label="Fees collected this month" value={s.collectedMonth != null ? inr(s.collectedMonth) : '…'} />}
         {can('fees') && <Kpi icon={AlertCircle} accent="attendance" label="Fees overdue" value={s.overdue != null ? inr(s.overdue) : '…'} />}

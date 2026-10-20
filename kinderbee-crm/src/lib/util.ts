@@ -86,6 +86,7 @@ export function allDues<S extends { id: string; program: string; academic_year: 
 
 // ───────── Website inquiry categories ─────────
 export const LEAD_CATEGORIES = [
+  { key: 'admission', label: 'Admission', extra: [['programme', 'Program'], ['form', 'Form']] },
   { key: 'ntt', label: 'NTT Teacher Training', extra: [['qualification', 'Qualification'], ['batch', 'Preferred batch']] },
   { key: 'consultation', label: 'One-on-One Consultation', extra: [['topic', 'Topic'], ['preferred_date', 'Preferred date']] },
   { key: 'franchise', label: 'Franchise Enrollment', extra: [['investment_budget', 'Investment budget'], ['preferred_location', 'Preferred location']] },

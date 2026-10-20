@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { BellRing, Download, Globe, Plus, Upload } from 'lucide-react'
+import { useAuth } from '../auth'
 import { must, supabase } from '../lib/supabase'
+import { Services, Verify, type ServicePayment } from './Payments'
 import { exportExcel, importExcel } from '../lib/excel'
 import { fmtDate, LEAD_CATEGORIES, normPhone, today } from '../lib/util'
 import { Button, Card, clean, cx, Empty, FormModal, inputCls, Loading, PageHeader, Select, Table, Tabs, toast, useRows, type Field } from '../ui'
@@ -14,8 +16,30 @@ type Lead = {
 }
 const COMMON = ['name', 'phone', 'email', 'city', 'message', 'source', 'assigned_to', 'follow_up', 'notes', 'status']
 
-export default function Inquiries() {
-  const [cat, setCat] = useState<Cat>('ntt')
+// Website: everything the public website sends in — enquiries from its forms, and payments people confirm there.
+export default function Website() {
+  const { can } = useAuth()
+  const [tab, setTab] = useState<'enquiries' | 'payments' | 'verify'>('enquiries')
+  const pays = useRows<ServicePayment>(() => can('payments')
+    ? supabase.from('service_payments').select('*').order('created_at', { ascending: false })
+    : Promise.resolve({ data: [] as ServicePayment[], error: null }))
+  const pending = pays.rows.filter((r) => r.status === 'Pending')
+  return (
+    <>
+      <PageHeader icon={Globe} accent="inquiries" title="Website" subtitle="Enquiries and payments from kinderbeeschools.com, recorded as they're submitted" />
+      {can('payments') && (
+        <Tabs value={tab} onChange={setTab} tabs={[
+          { key: 'enquiries', label: 'Enquiries' }, { key: 'payments', label: 'Payments' },
+          { key: 'verify', label: 'Payment verification', count: pending.length || undefined },
+        ]} />
+      )}
+      {tab === 'enquiries' || !can('payments') ? <Leads /> : tab === 'payments' ? <Services {...pays} /> : <Verify rows={pending} reload={pays.reload} loading={pays.loading} />}
+    </>
+  )
+}
+
+function Leads() {
+  const [cat, setCat] = useState<Cat>(LEAD_CATEGORIES[0].key)
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<Lead | 'new' | null>(null)
@@ -59,7 +83,6 @@ export default function Inquiries() {
 
   return (
     <>
-      <PageHeader icon={Globe} accent="inquiries" title="Website Inquiries" subtitle="Leads from your website forms and calls" />
       <Tabs value={cat} onChange={(k) => { setCat(k); setStatus('') }}
         tabs={LEAD_CATEGORIES.map((c) => ({ key: c.key, label: c.label, count: rows.filter((r) => r.category === c.key && r.status === 'New').length || undefined }))} />
       <Card>
@@ -84,7 +107,7 @@ export default function Inquiries() {
         </div>
         {loading ? <Loading /> : (
           <Table rows={shown} rowKey={(r) => r.id} onRow={setEditing}
-            empty={<Empty title={`No ${def.label} leads yet`} text="Leads from your website land here automatically once the form endpoint is connected." />}
+            empty={<Empty title={`No ${def.label} leads yet`} text="Enquiries submitted on the website land here automatically." />}
             cols={[
               { label: 'Lead', render: (r) => <><p className="font-semibold">{r.name}</p><p className="text-xs opacity-60">{[r.phone, r.city].filter(Boolean).join(' · ')}</p></> },
               { label: def.extra[0][1], render: (r) => r.extra?.[def.extra[0][0]] ?? '—' },

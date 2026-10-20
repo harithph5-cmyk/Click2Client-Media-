@@ -26,7 +26,7 @@ export type Settings = {
 }
 
 const defaults: Settings = {
-  programs: ['Playgroup', 'Nursery', 'LKG', 'UKG'],
+  programs: ['Playgroup', 'Nursery', 'Junior KG / LKG', 'Senior KG / UKG', 'Daycare & Extended Care'],
   holidays: [],
   academic_year: '2026-27',
   whatsapp: { phone_number_id: '', enabled: false },

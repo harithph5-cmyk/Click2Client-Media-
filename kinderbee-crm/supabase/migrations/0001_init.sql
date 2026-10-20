@@ -1,4 +1,4 @@
--- KinderBee CRM schema. Access is enforced here with RLS; the UI only hides what RLS already blocks.
+-- Kinderbee CRM schema. Access is enforced here with RLS; the UI only hides what RLS already blocks.
 -- Module keys: admissions, inquiries, fees, payments, attendance, whatsapp
 
 create extension if not exists pgcrypto;
@@ -293,8 +293,8 @@ create table public.message_log (
 create index on public.message_log (provider_id);
 
 insert into public.message_templates (name, body) values
-  ('Fee reminder', 'Dear {parent_name}, this is a gentle reminder that the fee of ₹{amount} for {student_name} ({class}) is due on {due_date}. Kindly pay at the earliest. Thank you – KinderBee Preschool 🐝'),
-  ('Payment received', 'Hi {name}, we have received your payment of ₹{amount} for {service} on {date}. Ref: {ref}. Thank you – Team KinderBee 🐝');
+  ('Fee reminder', 'Dear {parent_name}, this is a gentle reminder that the fee of ₹{amount} for {student_name} ({class}) is due on {due_date}. Kindly pay at the earliest. Thank you – Kinderbee Preschool 🐝'),
+  ('Payment received', 'Hi {name}, we have received your payment of ₹{amount} for {service} on {date}. Ref: {ref}. Thank you – Team Kinderbee 🐝');
 
 -- ───────────── RLS per module ─────────────
 alter table public.students enable row level security;
