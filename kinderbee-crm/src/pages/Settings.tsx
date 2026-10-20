@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { CalendarOff, Code2, GraduationCap, MessageCircle, Plus, Save, Settings as SettingsIcon, Trash2, UserRound } from 'lucide-react'
 import { useAuth } from '../auth'
-import { supabase } from '../lib/supabase'
+import { must, supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/util'
 import { Button, Card, inputCls, Label, PageHeader, toast } from '../ui'
 
 export default function Settings() {
-  const { profile, isCeo, settings, reloadSettings } = useAuth()
+  const { profile, isCeo, settings, reloadSettings, setProfile } = useAuth()
+  const [name, setName] = useState(profile!.full_name)
   const [programs, setPrograms] = useState(settings.programs)
   const [newProgram, setNewProgram] = useState('')
   const [holidays, setHolidays] = useState(settings.holidays)
@@ -48,7 +49,21 @@ export default function Settings() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><UserRound className="h-5 w-5 text-honey" />Your account</h2>
-          <p className="font-semibold">{profile!.full_name}</p>
+          {isCeo ? (
+            <form className="mb-2 flex gap-2" onSubmit={async (e) => {
+              e.preventDefault()
+              const full_name = name.trim()
+              if (!full_name) return toast('Enter a name', 'error')
+              setBusy('name')
+              try {
+                setProfile(await must(supabase.from('profiles').update({ full_name }).eq('id', profile!.id).select().single()))
+                toast('Name updated')
+              } catch (x: any) { toast(x.message, 'error') } finally { setBusy('') }
+            }}>
+              <Label label="CEO name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} /></Label>
+              <Button type="submit" icon={Save} loading={busy === 'name'} disabled={name.trim() === profile!.full_name} className="self-end">Save</Button>
+            </form>
+          ) : <p className="font-semibold">{profile!.full_name}</p>}
           <p className="text-sm opacity-60">@{profile!.username} · {isCeo ? 'CEO' : 'Coordinator'} · {profile!.phone ?? 'no phone'}</p>
         </Card>
 

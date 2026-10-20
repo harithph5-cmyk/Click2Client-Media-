@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarCheck, CheckCheck, Download, Upload } from 'lucide-react'
+import { CalendarCheck, CheckCheck, Download, Lock, Upload } from 'lucide-react'
 import { useAuth } from '../auth'
 import { supabase } from '../lib/supabase'
 import { exportExcel } from '../lib/excel'
@@ -168,27 +168,48 @@ function Students() {
 }
 
 type StaffRow = { id: string; name: string; role: string | null; active: boolean }
-type StaffMark = { staff_id: string; day: string; status: string; check_in: string | null }
+type StaffMark = { staff_id: string; day: string; status: string; check_in: string | null; locked_at?: string | null }
 
+// Staff attendance is saved once a day and then locked: the database refuses later changes from anyone but the CEO.
 function Staff() {
+  const { isCeo } = useAuth()
   const [day, setDay] = useState(today())
+  const [saving, setSaving] = useState(false)
   const [month, setMonth] = useState(today().slice(0, 7))
   const staff = useRows<StaffRow>(() => supabase.from('staff').select('id, name, role, active').eq('active', true).order('name'))
   const marks = useRows<StaffMark>(() => supabase.from('staff_attendance').select('staff_id, day, status, check_in').gte('day', `${month}-01`).lte('day', daysOf(month).at(-1)!), [month])
   const [todayMarks, setTodayMarks] = useState<Record<string, StaffMark>>({})
 
   useEffect(() => {
-    supabase.from('staff_attendance').select('staff_id, day, status, check_in').eq('day', day)
+    supabase.from('staff_attendance').select('staff_id, day, status, check_in, locked_at').eq('day', day)
       .then(({ data }) => setTodayMarks(Object.fromEntries((data ?? []).map((r) => [r.staff_id, r]))))
   }, [day])
 
+  const lockedAt = Object.values(todayMarks).find((m) => m.locked_at)?.locked_at
+  const readOnly = !isCeo && (!!lockedAt || day !== today())
+
   async function mark(id: string, patch: Partial<StaffMark>) {
-    const row: StaffMark = { ...(todayMarks[id] ?? { status: 'P', check_in: null }), ...patch, staff_id: id, day }
+    if (readOnly) return
+    const { locked_at: _, ...prev } = todayMarks[id] ?? { status: 'P', check_in: null }
+    const row: StaffMark = { ...prev, ...patch, staff_id: id, day }
     if (row.status === 'P' && !row.check_in && !patch.check_in && day === today()) row.check_in = new Date().toTimeString().slice(0, 5)
-    setTodayMarks((m) => ({ ...m, [id]: row }))
+    setTodayMarks((m) => ({ ...m, [id]: { ...row, locked_at: todayMarks[id]?.locked_at } }))
     const { error } = await supabase.from('staff_attendance').upsert(row)
     if (error) toast(error.message, 'error')
     else if (day.startsWith(month)) marks.reload()
+  }
+
+  async function saveDay() {
+    const missing = staff.rows.filter((s) => !todayMarks[s.id]).length
+    if (missing) return toast(`Mark all staff first (${missing} not marked)`, 'error')
+    if (!confirm(`Save attendance for ${fmtDate(day)}? After saving it can't be changed${isCeo ? '' : ' (only the CEO can correct it)'}.`)) return
+    setSaving(true)
+    const { data, error } = await supabase.from('staff_attendance').update({ locked_at: new Date().toISOString() })
+      .eq('day', day).is('locked_at', null).select('staff_id, day, status, check_in, locked_at')
+    setSaving(false)
+    if (error) return toast(error.message, 'error')
+    setTodayMarks((m) => ({ ...m, ...Object.fromEntries((data ?? []).map((r) => [r.staff_id, r])) }))
+    toast('Attendance saved and locked')
   }
 
   const summary = useMemo(() => staff.rows.map((s) => {
@@ -202,7 +223,12 @@ function Staff() {
     <div className="grid gap-4 xl:grid-cols-2">
       <Card>
         <div className="mb-3 flex items-end justify-between gap-2">
-          <h2 className="font-display text-lg">Daily register</h2>
+          <div>
+            <h2 className="font-display text-lg">Daily register</h2>
+            {lockedAt
+              ? <p className="flex items-center gap-1 text-xs font-semibold text-mint-ink"><Lock className="h-3 w-3" />Saved {new Date(lockedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}{isCeo && ' · CEO can still correct'}</p>
+              : <p className="text-xs opacity-60">{readOnly ? 'Not saved. Only today can be marked.' : 'Mark everyone, then save. Saved days are locked.'}</p>}
+          </div>
           <input type="date" className={cx(inputCls, 'w-44 py-2')} value={day} max={today()} onChange={(e) => setDay(e.target.value)} aria-label="Day" />
         </div>
         {staff.loading ? <Loading /> : !staff.rows.length ? <Empty title="No staff yet" text="Add staff under Payments → Staff salary." /> : (
@@ -214,16 +240,21 @@ function Staff() {
                   <div className="min-w-0 flex-1"><p className="font-semibold">{s.name}</p><p className="text-xs opacity-60">{s.role}</p></div>
                   <div className="flex gap-1">
                     {[['P', 'Present'], ['A', 'Absent'], ['H', 'Half-day'], ['L', 'Leave']].map(([k, label]) => (
-                      <button key={k} title={label} onClick={() => mark(s.id, { status: k })}
-                        className={cx('h-9 w-9 rounded-xl font-bold transition active:scale-90', m?.status === k ? CELL[k] : 'bg-charcoal/5 opacity-60 hover:opacity-100 dark:bg-white/10')}>{k}</button>
+                      <button key={k} title={label} disabled={readOnly} onClick={() => mark(s.id, { status: k })}
+                        className={cx('h-9 w-9 rounded-xl font-bold transition active:scale-90 disabled:cursor-not-allowed', m?.status === k ? CELL[k] : 'bg-charcoal/5 opacity-60 hover:opacity-100 dark:bg-white/10')}>{k}</button>
                     ))}
                   </div>
                   <input type="time" aria-label={`${s.name} check-in`} className={cx(inputCls, 'w-32 py-1.5')} value={m?.check_in?.slice(0, 5) ?? ''}
-                    disabled={!m || m.status === 'A' || m.status === 'L'} onChange={(e) => mark(s.id, { check_in: e.target.value || null })} />
+                    disabled={readOnly || !m || m.status === 'A' || m.status === 'L'} onChange={(e) => mark(s.id, { check_in: e.target.value || null })} />
                 </li>
               )
             })}
           </ul>
+        )}
+        {!lockedAt && !readOnly && staff.rows.length > 0 && (
+          <div className="mt-3 flex justify-end">
+            <Button icon={Lock} loading={saving} onClick={saveDay}>Save {day === today() ? "today's" : fmtDate(day)} attendance</Button>
+          </div>
         )}
       </Card>
       <Card>

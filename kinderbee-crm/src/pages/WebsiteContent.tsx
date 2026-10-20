@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, Image as ImageIcon, ImagePlus, Pencil, RefreshCw, Star, Trash2, Upload,
+  ChevronLeft, ChevronRight, ExternalLink, Eye, EyeOff, FileCode, Image as ImageIcon, ImagePlus, Pencil, Plus, RefreshCw, Star, Trash2, Upload,
 } from 'lucide-react'
 import { brand } from '../config/brand'
 import { pickImages, site, titleFromFile, uploadImage } from '../lib/website'
+import { htmlToListing, htmlToPost, pickFile } from '../lib/html'
 import { Button, Card, cx, Empty, FormModal, inputCls, Loading, PageHeader, Pill, Tabs, toast } from '../ui'
 
 // Website Content: the photos shown on kinderbeeschools.com. Every change is saved on the live website straight away.
 
 type Photo = { id: string; title: string; url: string; date?: string; status: 'approved' | 'pending' | 'rejected'; uploadedBy?: string }
 type Img = { url: string; caption: string; fit?: 'contain' }
-type Listing = { id: string; title: string; location?: string; status?: string; published?: boolean; images: Img[] }
+type Row = { label: string; value: string }
+type Listing = {
+  id: string; title: string; location?: string; category?: string; status?: string; published?: boolean; featured?: boolean
+  headline?: string; summary?: string; area?: string; investmentRequirement?: string; partnershipModel?: string; timeline?: string
+  overview?: string[]; details?: Row[]; contactPhone?: string; mapUrl?: string; images: Img[]
+}
 type Post = { id: string; title: string; image?: string; date?: string; status?: string; category?: string }
 type TabKey = 'gallery' | 'hero' | 'listings' | 'blog'
 
@@ -54,12 +60,12 @@ export default function WebsiteContent() {
   return (
     <>
       <PageHeader icon={ImageIcon} accent="inquiries" title="Website Content"
-        subtitle="Photos on kinderbeeschools.com. Changes go live on the website straight away."
+        subtitle="Admin panel for kinderbeeschools.com: hero images, gallery, joint ventures and blogs. Changes go live straight away."
         actions={<a href={brand.websiteUrl} target="_blank" rel="noreferrer"><Button variant="soft" icon={ExternalLink}>Open website</Button></a>} />
       <Tabs value={tab} onChange={setTab} tabs={[
         { key: 'gallery', label: 'Gallery' },
-        { key: 'hero', label: 'NTT Hero' },
-        { key: 'listings', label: 'Property Listings' },
+        { key: 'hero', label: 'Hero images' },
+        { key: 'listings', label: 'Joint Ventures' },
         { key: 'blog', label: 'Blog' },
       ]} />
       {tab === 'gallery' && <GalleryTab />}
@@ -159,51 +165,63 @@ function GalleryTab() {
   )
 }
 
-// ───────── NTT / teacher-training hero photo ─────────
-function HeroTab() {
-  const { data, error, reload, setData } = useSite<{ nttHeroImage?: string }>('/api/settings')
-  const [busy, setBusy] = useState(false)
-  const photo = data?.nttHeroImage
+// ───────── Hero photos (one website setting per page) ─────────
+const HEROES = [
+  { key: 'homeHeroImage', title: 'Home page banner', path: '/', empty: 'No photo set: the banner video plays.',
+    text: 'Background of the big banner at the top of the home page. A wide landscape photo works best; text sits on top of it.' },
+  { key: 'aboutHeroImage', title: 'About page', path: '/about', empty: 'No photo set: the built-in campus photo is shown.',
+    text: 'The photo beside the story at the top of the About page.' },
+  { key: 'franchiseHeroImage', title: 'Preschool franchise page', path: '/preschool-franchise', empty: 'No photo set: the built-in campus photo is shown.',
+    text: 'The campus photo at the top of the Preschool Franchise page.' },
+  { key: 'nttHeroImage', title: 'Teacher training (NTT)', path: '/teacher-training', empty: 'No photo set: the page shows the illustration.',
+    text: 'The large photo at the top of the Teacher Training page.' },
+] as const
+type HeroKey = (typeof HEROES)[number]['key']
 
-  async function save(url: string) {
-    await site('/api/settings', 'PUT', { nttHeroImage: url })
-    setData((d) => ({ ...(d ?? {}), nttHeroImage: url }))
+function HeroTab() {
+  const { data, error, reload, setData } = useSite<Partial<Record<HeroKey, string>>>('/api/settings')
+  const [busy, setBusy] = useState('')
+
+  async function save(key: HeroKey, url: string) {
+    await site('/api/settings', 'PUT', { [key]: url })
+    setData((d) => ({ ...(d ?? {}), [key]: url }))
   }
-  async function replace() {
+  async function replace(key: HeroKey) {
     const [f] = await pickImages()
     if (!f) return
-    setBusy(true)
+    setBusy(key)
     try {
-      await save(await uploadImage(f, 'blog-uploads'))
+      await save(key, await uploadImage(f, 'blog-uploads'))
       toast('Hero photo updated on the website')
-    } catch (e) { toast(errMsg(e), 'error') } finally { setBusy(false) }
+    } catch (e) { toast(errMsg(e), 'error') } finally { setBusy('') }
   }
-  async function remove() {
-    if (!confirm('Remove the photo and show the illustration again?')) return
-    try { await save(''); toast('Hero photo removed') } catch (e) { toast(errMsg(e), 'error') }
+  async function remove(key: HeroKey) {
+    if (!confirm('Remove this photo and go back to the built-in one?')) return
+    try { await save(key, ''); toast('Hero photo removed') } catch (e) { toast(errMsg(e), 'error') }
   }
 
   if (error) return <Problem text={error} retry={reload} />
   if (!data) return <Loading />
   return (
-    <Card className="p-5">
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-        {photo
-          ? <Thumb src={photo} alt="NTT hero photo" className="aspect-[4/3]" />
-          : <div className="grid aspect-[4/3] place-items-center rounded-2xl border-2 border-dashed border-charcoal/15 p-6 text-center text-sm opacity-60 dark:border-white/15">
-              No photo set. The page shows the illustration (pink shape with course cards).
-            </div>}
-        <div>
-          <h2 className="font-display text-xl">Teacher training (NTT) hero</h2>
-          <p className="mt-1 text-sm opacity-70">The large photo at the top of the Teacher Training page. A landscape photo of teachers or a classroom works best.</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button icon={ImagePlus} loading={busy} onClick={replace}>{photo ? 'Replace photo' : 'Upload photo'}</Button>
-            {photo && <Button variant="soft" icon={Trash2} onClick={remove}>Remove photo</Button>}
-            <a href={`${brand.websiteUrl}/teacher-training`} target="_blank" rel="noreferrer"><Button variant="ghost" icon={ExternalLink}>View page</Button></a>
-          </div>
-        </div>
-      </div>
-    </Card>
+    <div className="grid gap-4 lg:grid-cols-2">
+      {HEROES.map((h) => {
+        const photo = data[h.key]
+        return (
+          <Card key={h.key} className="p-5">
+            {photo
+              ? <Thumb src={photo} alt={h.title} className="aspect-[16/9]" />
+              : <div className="grid aspect-[16/9] place-items-center rounded-2xl border-2 border-dashed border-charcoal/15 p-6 text-center text-sm opacity-60 dark:border-white/15">{h.empty}</div>}
+            <h2 className="mt-3 font-display text-xl">{h.title}</h2>
+            <p className="mt-1 text-sm opacity-70">{h.text}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button icon={ImagePlus} loading={busy === h.key} disabled={!!busy && busy !== h.key} onClick={() => replace(h.key)}>{photo ? 'Replace photo' : 'Upload photo'}</Button>
+              {photo && <Button variant="soft" icon={Trash2} onClick={() => remove(h.key)}>Remove</Button>}
+              <a href={brand.websiteUrl + h.path} target="_blank" rel="noreferrer"><Button variant="ghost" icon={ExternalLink}>View page</Button></a>
+            </div>
+          </Card>
+        )
+      })}
+    </div>
   )
 }
 
@@ -212,6 +230,46 @@ function ListingsTab() {
   const { data, error, reload, setData } = useSite<Listing[]>('/api/opportunities')
   const [busy, setBusy] = useState('')
   const [edit, setEdit] = useState<{ listing: Listing; i: number } | null>(null)
+  const [details, setDetails] = useState<{ listing?: Listing; initial: Record<string, unknown> } | null>(null)
+
+  const formOf = (l: Partial<Listing>) => ({
+    ...l, overview: (l.overview ?? []).join('\n\n'),
+    details: (l.details ?? []).map((r) => `${r.label}: ${r.value}`).join('\n'),
+    published: l.published ?? true,
+  })
+  async function importHtml(l?: Listing) {
+    const f = await pickFile('.html,.htm,text/html')
+    if (!f) return
+    const x = htmlToListing(await f.text())
+    if (!x.title && !x.overview.length) return toast('No text found in that HTML file', 'error')
+    const found = Object.fromEntries(Object.entries(x).filter(([, v]) => (Array.isArray(v) ? v.length : v)))
+    setDetails({ listing: l, initial: formOf({ ...(l ?? {}), ...found }) })
+  }
+  async function saveDetails(v: Record<string, any>) {
+    const str = (k: string) => String(v[k] ?? '').trim()
+    if (!str('title')) throw new Error('Title is required')
+    const body = {
+      title: str('title'), location: str('location'), category: str('category'), status: str('status'), headline: str('headline'),
+      summary: str('summary'), area: str('area'), investmentRequirement: str('investmentRequirement'), partnershipModel: str('partnershipModel'),
+      timeline: str('timeline'), contactPhone: str('contactPhone'), mapUrl: str('mapUrl'), published: !!v.published, featured: !!v.featured,
+      overview: str('overview').split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean),
+      details: str('details').split('\n').map((line) => { const i = line.indexOf(':'); return { label: line.slice(0, i).trim(), value: line.slice(i + 1).trim() } })
+        .filter((r) => r.label && r.value),
+    }
+    const target = details?.listing
+    if (target) await site(`/api/opportunities/${target.id}`, 'PUT', body)
+    else await site('/api/opportunities', 'POST', { ...body, terms: [], development: [], partnershipOptions: [], images: [] })
+    toast(target ? 'Listing updated on the website' : 'Listing added to the website')
+    reload()
+  }
+  async function removeListing(l: Listing) {
+    if (!confirm(`Delete "${l.title}" from the Joint Ventures page? Its photos and details will be removed.`)) return
+    try {
+      await site(`/api/opportunities/${l.id}`, 'DELETE')
+      setData((rows) => rows?.filter((r) => r.id !== l.id) ?? rows)
+      toast('Listing deleted')
+    } catch (e) { toast(errMsg(e), 'error') }
+  }
 
   async function save(l: Listing, images: Img[], msg?: string) {
     setData((rows) => rows?.map((r) => (r.id === l.id ? { ...r, images } : r)) ?? rows)
@@ -254,10 +312,16 @@ function ListingsTab() {
 
   if (error) return <Problem text={error} retry={reload} />
   if (!data) return <Loading />
-  if (!data.length) return <Empty title="No property listings" text="Listings are added from the website admin (Opportunities)." />
   return (
     <div className="space-y-5">
-      <p className="text-sm opacity-70">Photos for each property on the website’s Joint Ventures page. The first photo is the cover shown on the listing card.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm opacity-70">Listings on the website’s Joint Ventures page. Upload an HTML file to fill in a listing, check it, then save. The first photo is the cover.</p>
+        <div className="flex gap-2">
+          <Button variant="soft" icon={FileCode} onClick={() => importHtml()}>Upload HTML</Button>
+          <Button icon={Plus} onClick={() => setDetails({ initial: formOf({}) })}>New listing</Button>
+        </div>
+      </div>
+      {!data.length && <Empty title="No joint venture listings" text="Add one, or upload an HTML file describing the property." />}
       {data.map((l) => {
         const uploading = busy.startsWith(`${l.id}:`) ? busy.slice(l.id.length + 1) : ''
         return (
@@ -267,7 +331,12 @@ function ListingsTab() {
                 <h2 className="font-display text-xl">{l.title}</h2>
                 <p className="text-sm opacity-60">{[l.location, l.status].filter(Boolean).join(' · ')}{l.published === false ? ' · Not published' : ''}</p>
               </div>
-              <Button icon={Upload} loading={!!uploading} disabled={!!busy && !uploading} onClick={() => add(l)}>{uploading || 'Add photos'}</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="soft" icon={Pencil} onClick={() => setDetails({ listing: l, initial: formOf(l) })}>Edit details</Button>
+                <Button size="sm" variant="soft" icon={FileCode} onClick={() => importHtml(l)}>Update from HTML</Button>
+                <Button size="sm" icon={Upload} loading={!!uploading} disabled={!!busy && !uploading} onClick={() => add(l)}>{uploading || 'Add photos'}</Button>
+                <Button size="sm" variant="ghost" icon={Trash2} onClick={() => removeListing(l)} aria-label="Delete listing" title="Delete listing" className="!text-red-500" />
+              </div>
             </div>
             {l.images.length === 0 ? <p className="text-sm opacity-60">No photos yet.</p> : (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -303,15 +372,65 @@ function ListingsTab() {
           const images = listing.images.map((img, j) => (j === i ? { url: img.url, caption: String(v.caption ?? '').trim(), ...(v.whole ? { fit: 'contain' as const } : {}) } : img))
           await save(listing, images, 'Photo updated')
         }} />
+      <FormModal open={!!details} onClose={() => setDetails(null)} wide title={details?.listing ? `Edit ${details.listing.title}` : 'New joint venture listing'}
+        initial={details?.initial} submitLabel="Save to website" onSubmit={saveDetails}
+        fields={[
+          { key: 'title', label: 'Title', required: true, full: true },
+          { key: 'location', label: 'Location' }, { key: 'category', label: 'Category', placeholder: 'Land / Development' },
+          { key: 'status', label: 'Status', placeholder: 'Open for partnership' }, { key: 'area', label: 'Area' },
+          { key: 'investmentRequirement', label: 'Investment requirement' }, { key: 'partnershipModel', label: 'Partnership model' },
+          { key: 'timeline', label: 'Timeline' }, { key: 'contactPhone', label: 'Contact phone', type: 'tel' },
+          { key: 'headline', label: 'Headline (top of the detail view)', full: true },
+          { key: 'summary', label: 'Summary (on the listing card)', type: 'textarea' },
+          { key: 'overview', label: 'Overview (blank line between paragraphs)', type: 'textarea' },
+          { key: 'details', label: 'Details table (one "Label: value" per line)', type: 'textarea' },
+          { key: 'mapUrl', label: 'Google Maps link', full: true },
+          { key: 'published', label: 'Show on the website', type: 'checkbox' },
+          { key: 'featured', label: 'Featured', type: 'checkbox' },
+        ]} />
     </div>
   )
 }
 
-// ───────── Blog cover images ─────────
+// ───────── Blog: new posts from an HTML file, cover images ─────────
 function BlogTab() {
   const { data, error, reload, setData } = useSite<Post[]>('/api/blogs')
   const [q, setQ] = useState('')
   const [busy, setBusy] = useState('')
+  // a post read from an uploaded HTML file, waiting for the details form (target = the post it replaces)
+  const [draft, setDraft] = useState<{ target?: Post; post: ReturnType<typeof htmlToPost> } | null>(null)
+
+  async function readHtml(target?: Post) {
+    const f = await pickFile('.html,.htm,text/html')
+    if (!f) return
+    const post = htmlToPost(await f.text())
+    if (!post.content) return toast('No text found in that HTML file', 'error')
+    setDraft({ target, post: { ...post, title: post.title || target?.title || titleFromFile(f.name) } })
+  }
+
+  async function publish(v: Record<string, any>) {
+    const { target, post } = draft!
+    const image = v.cover instanceof File ? await uploadImage(v.cover, 'blog-uploads') : target?.image ?? ''
+    const body = {
+      title: String(v.title).trim(), category: String(v.category || 'General').trim(), excerpt: String(v.excerpt ?? '').trim(),
+      content: post.content, readTime: post.readTime, image, status: v.status || 'Published',
+      metaTitle: String(v.title).trim(), metaDescription: String(v.excerpt ?? '').trim().slice(0, 160),
+      ...(target ? {} : { author: 'Kinderbee', date: new Date().toISOString().slice(0, 10), views: 0 }),
+    }
+    if (target) await site(`/api/blogs/${target.id}`, 'PUT', body)
+    else await site('/api/blogs', 'POST', body)
+    toast(target ? 'Post updated on the website' : body.status === 'Published' ? 'Post published on the website' : 'Saved as draft')
+    reload()
+  }
+
+  async function removePost(p: Post) {
+    if (!confirm(`Delete "${p.title}" from the website blog?`)) return
+    try {
+      await site(`/api/blogs/${p.id}`, 'DELETE')
+      setData((rows) => rows?.filter((r) => r.id !== p.id) ?? rows)
+      toast('Post deleted')
+    } catch (e) { toast(errMsg(e), 'error') }
+  }
 
   async function replace(p: Post) {
     const [f] = await pickImages()
@@ -328,11 +447,15 @@ function BlogTab() {
   if (error) return <Problem text={error} retry={reload} />
   if (!data) return <Loading />
   const shown = data.filter((p) => p.title.toLowerCase().includes(q.trim().toLowerCase()))
+  const categories = [...new Set(data.map((p) => p.category).filter((c): c is string => !!c))]
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm opacity-70">The cover image shown on each blog post and on the blog list.</p>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search posts…" className={cx(inputCls, 'max-w-xs')} />
+        <p className="text-sm opacity-70">Upload a blog post as an HTML file: its headings, paragraphs, lists and links go on the website. Cover images can be replaced per post.</p>
+        <div className="flex gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search posts…" className={cx(inputCls, 'max-w-xs')} />
+          <Button icon={FileCode} onClick={() => readHtml()}>Upload HTML post</Button>
+        </div>
       </div>
       {shown.length === 0 ? <Empty title="No posts found" /> : (
         <div className="space-y-3">
@@ -345,11 +468,31 @@ function BlogTab() {
                 <p className="font-semibold leading-snug">{p.title}</p>
                 <p className="text-xs opacity-60">{[p.date, p.category, p.status].filter(Boolean).join(' · ')}</p>
               </div>
-              <Button size="sm" variant="soft" icon={ImagePlus} loading={busy === p.id} disabled={!!busy && busy !== p.id} onClick={() => replace(p)}>Replace image</Button>
+              <div className="flex flex-wrap gap-1">
+                <Button size="sm" variant="soft" icon={ImagePlus} loading={busy === p.id} disabled={!!busy && busy !== p.id} onClick={() => replace(p)}>Replace image</Button>
+                <Button size="sm" variant="soft" icon={FileCode} onClick={() => readHtml(p)}>Replace text (HTML)</Button>
+                <Button size="sm" variant="ghost" icon={Trash2} onClick={() => removePost(p)} aria-label="Delete post" title="Delete post" className="!text-red-500" />
+              </div>
             </Card>
           ))}
         </div>
       )}
+      <FormModal open={!!draft} onClose={() => setDraft(null)} wide submitLabel={draft?.target ? 'Update post' : 'Save to website'}
+        title={draft?.target ? `Replace "${draft.target.title}"` : 'New blog post'}
+        initial={draft ? {
+          title: draft.post.title, excerpt: draft.post.excerpt || draft.target?.title,
+          category: draft.target?.category ?? categories[0] ?? 'General', status: draft.target?.status ?? 'Published',
+        } : undefined}
+        fields={[
+          { key: 'title', label: 'Title', required: true, full: true },
+          { key: 'category', label: 'Category', type: 'select', options: categories.length ? categories : ['General'], required: true },
+          { key: 'status', label: 'Status', type: 'select', options: ['Published', 'Draft'], required: true },
+          { key: 'excerpt', label: 'Short description (blog list and Google)', type: 'textarea' },
+          { key: 'cover', label: draft?.target ? 'New cover image (optional)' : 'Cover image', type: 'file', accept: 'image/*' },
+        ]}
+        onSubmit={publish}>
+        {draft && <p className="mt-3 text-xs opacity-60">{draft.post.content.split('\n\n').length} blocks of text read from the file · {draft.post.readTime}</p>}
+      </FormModal>
     </>
   )
 }

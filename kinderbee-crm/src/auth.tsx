@@ -41,6 +41,7 @@ type Auth = {
   can: (m: ModuleKey) => boolean
   canVerify: boolean
   reloadSettings: () => Promise<void>
+  setProfile: (p: Profile) => void
   signIn: (email: string, password: string, role: Profile['role']) => Promise<void>
   authError: string
   signOut: () => Promise<void>
@@ -88,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isCeo = profile?.role === 'ceo'
   const value: Auth = {
-    session, profile, loading, settings, isCeo, reloadSettings,
+    session, profile, loading, settings, isCeo, reloadSettings, setProfile,
     can: (m) => isCeo || !!profile?.modules.includes(m),
     canVerify: isCeo || (!!profile?.can_verify && !!profile?.modules.includes('payments')),
     authError,
