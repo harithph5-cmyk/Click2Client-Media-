@@ -18,7 +18,7 @@ type Listing = {
   overview?: string[]; details?: Row[]; contactPhone?: string; mapUrl?: string; images: Img[]
 }
 type Post = { id: string; title: string; image?: string; date?: string; status?: string; category?: string }
-type TabKey = 'gallery' | 'hero' | 'listings' | 'blog'
+type TabKey = 'gallery' | 'slider' | 'hero' | 'listings' | 'blog'
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong')
 
@@ -63,12 +63,14 @@ export default function WebsiteContent() {
         subtitle="Admin panel for kinderbeeschools.com: hero images, gallery, joint ventures and blogs. Changes go live straight away."
         actions={<a href={brand.websiteUrl} target="_blank" rel="noreferrer"><Button variant="soft" icon={ExternalLink}>Open website</Button></a>} />
       <Tabs value={tab} onChange={setTab} tabs={[
-        { key: 'gallery', label: 'Gallery' },
+        { key: 'gallery', label: 'Life at Kinderbee' },
+        { key: 'slider', label: 'Course posters' },
         { key: 'hero', label: 'Hero images' },
         { key: 'listings', label: 'Joint Ventures' },
         { key: 'blog', label: 'Blog' },
       ]} />
       {tab === 'gallery' && <GalleryTab />}
+      {tab === 'slider' && <SliderTab />}
       {tab === 'hero' && <HeroTab />}
       {tab === 'listings' && <ListingsTab />}
       {tab === 'blog' && <BlogTab />}
@@ -132,7 +134,7 @@ function GalleryTab() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm opacity-70">Shown in the campus gallery on the website’s About page. Hidden photos stay here but not on the site.</p>
+        <p className="text-sm opacity-70">The “Life at Kinderbee” gallery on the website’s About page. New photos show first. Hidden photos stay here but not on the site.</p>
         <Button icon={Upload} loading={!!busy} onClick={add}>{busy || 'Upload photos'}</Button>
       </div>
       {data.length === 0 ? (
@@ -161,6 +163,91 @@ function GalleryTab() {
       <FormModal open={!!rename} onClose={() => setRename(null)} title="Rename photo" initial={rename ? { title: rename.title } : undefined}
         fields={[{ key: 'title', label: 'Title shown on the website', required: true, full: true }]}
         onSubmit={async (v) => { await update(rename!, { title: String(v.title).trim() }); toast('Title updated') }} />
+    </>
+  )
+}
+
+// ───────── Course poster slider (Teacher Training page) ─────────
+type Slide = { title: string; image: string; subtitle?: string }
+// Copy of the website's built-in posters (FwaPage.tsx), shown until the first change here saves a list of its own
+const DEFAULT_SLIDES: Slide[] = [
+  { title: 'Advanced Diploma in Early Childhood Care & Education', image: '/images/fwa/advanced-diploma-vijayadashami-offer.jpg' },
+  { title: 'Certificate in Nordic inspired Preschool Teaching', image: '/images/fwa/certificate-vijayadashami-offer.jpg' },
+  { title: 'Diploma in Play school Teacher Training', image: '/images/fwa/play-school-diploma-vijayadashami-offer.jpg' },
+  { title: 'Foundational Stage Curriculum Design', image: 'https://uvsqqvhjtdtsexfsinvp.supabase.co/storage/v1/object/public/NTT%20-%20Teacher%20Training/Sliders/Foundational%20Stage%20Curriculum%20Design.png' },
+]
+
+function SliderTab() {
+  const { data, error, reload, setData } = useSite<{ nttSlides?: Slide[] }>('/api/settings')
+  const [busy, setBusy] = useState('')
+  const [rename, setRename] = useState<number | null>(null)
+  const slides = data?.nttSlides?.length ? data.nttSlides : DEFAULT_SLIDES
+
+  async function save(next: Slide[], msg?: string) {
+    setData((d) => ({ ...(d ?? {}), nttSlides: next }))
+    try {
+      await site('/api/settings', 'PUT', { nttSlides: next })
+      if (msg) toast(msg)
+    } catch (e) {
+      toast(errMsg(e), 'error')
+      reload()
+    }
+  }
+  async function add() {
+    const files = await pickImages(true)
+    if (!files.length) return
+    const added: Slide[] = []
+    try {
+      for (const f of files) {
+        setBusy(`Uploading ${added.length + 1} of ${files.length}…`)
+        added.push({ title: titleFromFile(f.name), image: await uploadImage(f, 'blog-uploads') })
+      }
+    } catch (e) { toast(errMsg(e), 'error') } finally { setBusy('') }
+    if (added.length) await save([...slides, ...added], `${added.length} poster${added.length === 1 ? '' : 's'} added to the slider`)
+  }
+  const move = (i: number, to: number) => {
+    const next = [...slides]
+    const [it] = next.splice(i, 1)
+    next.splice(to, 0, it)
+    save(next)
+  }
+  const remove = (i: number) => {
+    if (slides.length === 1) return toast('Keep at least one poster in the slider', 'error')
+    if (!confirm(`Remove "${slides[i].title}" from the slider?`)) return
+    save(slides.filter((_, j) => j !== i), 'Poster removed')
+  }
+
+  if (error) return <Problem text={error} retry={reload} />
+  if (!data) return <Loading />
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm opacity-70">The course posters that slide on the Teacher Training page, in this order. The name shows on the button under the slider.</p>
+        <div className="flex gap-2">
+          <a href={`${brand.websiteUrl}/teacher-training`} target="_blank" rel="noreferrer"><Button variant="ghost" icon={ExternalLink}>View page</Button></a>
+          <Button icon={Upload} loading={!!busy} onClick={add}>{busy || 'Upload posters'}</Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+        {slides.map((sl, i) => (
+          <Card key={sl.image + i} className="p-3">
+            <div className="relative">
+              <Thumb src={sl.image} alt={sl.title} contain className="aspect-[4/5]" />
+              <span className="absolute left-2 top-2 rounded-full bg-honey px-2 py-0.5 text-[10px] font-bold">{i + 1}</span>
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-semibold">{sl.title}</p>
+            <div className="mt-1 flex gap-0.5">
+              <Button size="sm" variant="ghost" icon={ChevronLeft} disabled={i === 0} onClick={() => move(i, i - 1)} aria-label="Move earlier" title="Move earlier" className="!px-1.5" />
+              <Button size="sm" variant="ghost" icon={ChevronRight} disabled={i === slides.length - 1} onClick={() => move(i, i + 1)} aria-label="Move later" title="Move later" className="!px-1.5" />
+              <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setRename(i)} aria-label="Rename" title="Rename" className="!px-1.5" />
+              <Button size="sm" variant="ghost" icon={Trash2} onClick={() => remove(i)} aria-label="Remove" title="Remove" className="ml-auto !px-1.5 !text-red-500" />
+            </div>
+          </Card>
+        ))}
+      </div>
+      <FormModal open={rename !== null} onClose={() => setRename(null)} title="Course name" initial={rename !== null ? { title: slides[rename]?.title } : undefined}
+        fields={[{ key: 'title', label: 'Name shown under the slider', required: true, full: true }]}
+        onSubmit={async (v) => { await save(slides.map((sl, j) => (j === rename ? { ...sl, title: String(v.title).trim() } : sl)), 'Name updated') }} />
     </>
   )
 }
