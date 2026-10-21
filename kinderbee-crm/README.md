@@ -44,9 +44,29 @@ fetch('https://YOUR-REF.supabase.co/rest/v1/rpc/submit_lead', {
 
 ## WhatsApp
 
-- **Default:** every send produces wa.me click-to-send links with the message prefilled. This needs no setup.
-- **Automatic sending (WhatsApp Business Cloud API):** run `npx supabase login`, link the project, then `supabase functions deploy send-whatsapp`. In Settings, enter the Phone Number ID and permanent token, and tick "Send automatically". Give each template the name of an approved Meta template; its `{{1}}, {{2}}…` are filled from the placeholders in order.
-- **Delivery status:** run `supabase functions deploy whatsapp-webhook --no-verify-jwt` and `supabase secrets set WHATSAPP_VERIFY_TOKEN=…`, then point Meta's webhook at `https://YOUR-REF.supabase.co/functions/v1/whatsapp-webhook`.
+Settings → WhatsApp → **Sending mode**:
+
+- **Off (default):** every send produces wa.me click-to-send links with the message prefilled. This needs no setup.
+- **Mock:** messages are recorded in the CRM and marked SIMULATED, but nothing reaches WhatsApp. The Inbox gets a **Simulate** button that feeds a fake incoming message through the same processing as a real webhook. Use it to test before Meta is connected.
+- **Live:** sends through the WhatsApp Business Cloud API.
+
+Setup for Mock and Live:
+
+1. Run `supabase/migrations/0007_whatsapp_inbox.sql` in the SQL Editor. It only adds tables and columns.
+2. Deploy the functions with `npx supabase login`, then `npx supabase link --project-ref YOUR-REF`, then:
+   - `npx supabase functions deploy send-whatsapp`
+   - `npx supabase functions deploy whatsapp-webhook --no-verify-jwt`
+3. **Live only:** in Settings, enter the WhatsApp Business Account ID, Phone Number ID, permanent System User token, Meta **app secret** and a **verify token** you make up. Secrets are write-only. Each can be overridden with a function secret of the same name in upper case, for example `npx supabase secrets set WHATSAPP_APP_SECRET=…`.
+4. **Live only:** in Meta → WhatsApp → Configuration, set the callback URL to `https://YOUR-REF.supabase.co/functions/v1/whatsapp-webhook` (Settings shows it), use the same verify token, and subscribe to **messages**.
+
+How it behaves:
+
+- **Signatures:** the webhook rejects any POST without a valid `X-Hub-Signature-256`. Without the app secret it rejects everything.
+- **Duplicates:** repeated Meta deliveries are ignored, keyed by message ID and status in `wa_webhook_events`.
+- **Delivery status:** statuses never go backwards, so a late "delivered" can't overwrite "read".
+- **Opt-out:** a contact who sends STOP or UNSUBSCRIBE is opted out and no further messages go to them. START opts them back in.
+- **24-hour window:** free-text messages and replies only go to contacts who messaged in the last 24 hours. Anyone else needs a template with an approved Meta template name; its `{{1}}, {{2}}…` are filled from the placeholders in order.
+- **Inbox:** shows one conversation per number, linked to a matching website enquiry or student. Staff can assign, reply and resolve. A staff reply pauses AI on that conversation, ready for phase 3.
 
 ## White-label
 
@@ -54,4 +74,4 @@ Edit `src/config/brand.ts` (name, school, contact, colours, login domain) and dr
 
 ## Tests
 
-`npm test` runs the fee, phone and template maths. The SQL was checked in PGlite and on the live project: logins, RLS denials, the audit trail, team functions and lead intake.
+`npm test` runs the fee, phone and template maths, plus the WhatsApp signature and 24-hour window checks. `npm run test:sql` runs every migration in PGlite and checks the WhatsApp webhook processing: duplicates, status order, opt-out, access rules and the audit trail. The SQL was checked in PGlite and on the live project: logins, RLS denials, the audit trail, team functions and lead intake.

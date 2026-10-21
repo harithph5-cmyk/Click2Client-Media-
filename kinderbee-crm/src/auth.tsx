@@ -22,14 +22,17 @@ export type Settings = {
   programs: string[]
   holidays: { date: string; name: string }[]
   academic_year: string
-  whatsapp: { phone_number_id: string; enabled: boolean }
+  // off = wa.me links, mock = simulated sends (nothing leaves the CRM), live = Cloud API
+  whatsapp: { phone_number_id: string; enabled?: boolean; mode?: 'off' | 'mock' | 'live'; business_account_id?: string }
 }
+
+export const waMode = (s: Settings) => s.whatsapp.mode ?? (s.whatsapp.enabled ? 'live' : 'off')
 
 const defaults: Settings = {
   programs: ['Playgroup', 'Nursery', 'Junior KG / LKG', 'Senior KG / UKG', 'Daycare & Extended Care'],
   holidays: [],
   academic_year: '2026-27',
-  whatsapp: { phone_number_id: '', enabled: false },
+  whatsapp: { phone_number_id: '', mode: 'off' },
 }
 
 type Auth = {

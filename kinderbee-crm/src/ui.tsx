@@ -207,6 +207,8 @@ const PILL: Record<string, string> = {
   sent: 'bg-sky text-sky-ink', delivered: 'bg-mint text-mint-ink', read: 'bg-mint text-mint-ink',
   failed: 'bg-rose text-rose-ink', link: 'bg-leaf text-leaf-ink', queued: 'bg-honey/30 text-amber-800',
   Overdue: 'bg-rose text-rose-ink', Paid: 'bg-mint text-mint-ink', Due: 'bg-honey/30 text-amber-800',
+  open: 'bg-sky text-sky-ink', resolved: 'bg-charcoal/10 text-charcoal/60', received: 'bg-lav text-lav-ink',
+  SIMULATED: 'bg-peach text-peach-ink', 'Opted out': 'bg-rose text-rose-ink',
 }
 export const Pill = ({ s, className }: { s: string; className?: string }) => (
   <span className={cx('inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold', PILL[s] ?? 'bg-charcoal/10', className)}>{s}</span>

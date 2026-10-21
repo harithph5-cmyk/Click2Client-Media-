@@ -42,6 +42,16 @@ export type WaMessage = {
   vars: Record<string, unknown>
   template: { name: string; body: string; meta_template?: string | null; lang?: string }
 }
+export type WaResult = { phone: string; status: string; error: string | null; simulated?: boolean }
+
+/** Manual inbox reply. `key` stops a double-click from sending twice. Throws if it wasn't sent. */
+export async function replyWhatsApp(phone: string, body: string, key: string) {
+  const res = await callFn<{ configured: boolean; results?: WaResult[] }>('send-whatsapp', { messages: [{ phone, body, key, reply: true }] })
+  if (!res.configured) throw new Error('WhatsApp sending is off. Choose Mock or Live in Settings.')
+  const r = res.results![0]
+  if (r.status !== 'sent' && r.status !== 'duplicate') throw new Error(r.error ?? 'Not sent')
+  return r
+}
 
 /**
  * Sends WhatsApp messages through the Cloud API edge function.
@@ -56,7 +66,7 @@ export async function sendWhatsApp(messages: WaMessage[]) {
     lang: m.template.lang,
     params: placeholders(m.template.body).map((k) => String(m.vars[k] ?? '')),
   }))
-  let res: { configured: boolean; results?: { phone: string; status: string; error: string | null }[] }
+  let res: { configured: boolean; results?: WaResult[] }
   try {
     res = await callFn('send-whatsapp', { messages: payload })
   } catch {

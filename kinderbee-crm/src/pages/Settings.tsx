@@ -3,7 +3,14 @@ import { CalendarOff, Code2, GraduationCap, MessageCircle, Plus, Save, Settings 
 import { useAuth } from '../auth'
 import { must, supabase } from '../lib/supabase'
 import { fmtDate } from '../lib/util'
-import { Button, Card, inputCls, Label, PageHeader, toast } from '../ui'
+import { Button, Card, inputCls, Label, PageHeader, Select, toast } from '../ui'
+
+// Write-only secrets read by the edge functions (an env var of the same name in upper case wins)
+const SECRETS = [
+  ['whatsapp_token', 'Permanent access token', 'EAAG…'],
+  ['whatsapp_app_secret', 'Meta app secret (checks webhook signatures)', 'App settings → Basic'],
+  ['whatsapp_verify_token', 'Webhook verify token', 'Any long random string'],
+] as const
 
 export default function Settings() {
   const { profile, isCeo, settings, reloadSettings, setProfile } = useAuth()
@@ -14,11 +21,14 @@ export default function Settings() {
   const [hol, setHol] = useState({ date: '', name: '' })
   const [year, setYear] = useState(settings.academic_year)
   const [wa, setWa] = useState(settings.whatsapp)
-  const [token, setToken] = useState('')
-  const [hasToken, setHasToken] = useState(false)
+  const [secrets, setSecrets] = useState<Record<string, string>>({})
+  const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState('')
 
-  useEffect(() => { if (isCeo) supabase.rpc('has_secret', { k: 'whatsapp_token' }).then(({ data }) => setHasToken(!!data)) }, [isCeo])
+  useEffect(() => {
+    if (isCeo) Promise.all(SECRETS.map(([k]) => supabase.rpc('has_secret', { k }).then(({ data }) => [k, !!data] as const)))
+      .then((r) => setSaved(Object.fromEntries(r)))
+  }, [isCeo])
 
   async function save(key: string, value: unknown) {
     setBusy(key)
@@ -30,12 +40,13 @@ export default function Settings() {
   }
 
   async function saveWhatsApp() {
-    if (token) {
-      const { error } = await supabase.rpc('set_secret', { k: 'whatsapp_token', v: token.trim() })
+    for (const [k, v] of Object.entries(secrets)) {
+      if (!v.trim()) continue
+      const { error } = await supabase.rpc('set_secret', { k, v: v.trim() })
       if (error) return toast(error.message, 'error')
-      setHasToken(true)
-      setToken('')
+      setSaved((s) => ({ ...s, [k]: true }))
     }
+    setSecrets({})
     await save('whatsapp', wa)
   }
 
@@ -123,19 +134,36 @@ export default function Settings() {
           <Card>
             <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><MessageCircle className="h-5 w-5 text-leaf-ink" />WhatsApp Business API</h2>
             <p className="mb-3 text-sm opacity-60">
-              From Meta Business → WhatsApp → API setup. Without these, messages open as click-to-send wa.me links instead.
+              From Meta Business → WhatsApp → API setup. Secrets are write-only: once saved they're never shown again.
             </p>
             <div className="space-y-3">
+              <Label label="Sending mode">
+                <Select value={wa.mode ?? (wa.enabled ? 'live' : 'off')} onChange={(v) => setWa({ ...wa, mode: v as 'off' | 'mock' | 'live', enabled: v === 'live' })}
+                  options={[
+                    { value: 'off', label: 'Off: tap-to-send wa.me links' },
+                    { value: 'mock', label: 'Mock: simulated, nothing is sent (for testing)' },
+                    { value: 'live', label: 'Live: send through the Cloud API' },
+                  ]} />
+              </Label>
+              <Label label="WhatsApp Business Account ID">
+                <input className={inputCls} value={wa.business_account_id ?? ''} onChange={(e) => setWa({ ...wa, business_account_id: e.target.value.trim() })} />
+              </Label>
               <Label label="Phone number ID">
-                <input className={inputCls} value={wa.phone_number_id} onChange={(e) => setWa({ ...wa, phone_number_id: e.target.value })} />
+                <input className={inputCls} value={wa.phone_number_id} onChange={(e) => setWa({ ...wa, phone_number_id: e.target.value.trim() })} />
               </Label>
-              <Label label={`Permanent access token ${hasToken ? '(saved — leave blank to keep)' : ''}`}>
-                <input type="password" className={inputCls} value={token} onChange={(e) => setToken(e.target.value)} placeholder={hasToken ? '••••••••' : 'EAAG…'} autoComplete="off" />
-              </Label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="h-4 w-4 accent-honey" checked={wa.enabled} onChange={(e) => setWa({ ...wa, enabled: e.target.checked })} />
-                Send automatically through the API
-              </label>
+              {SECRETS.map(([k, label, ph]) => (
+                <Label key={k} label={`${label} ${saved[k] ? '(saved; leave blank to keep)' : ''}`}>
+                  <input type="password" className={inputCls} value={secrets[k] ?? ''} onChange={(e) => setSecrets({ ...secrets, [k]: e.target.value })}
+                    placeholder={saved[k] ? '••••••••' : ph} autoComplete="off" />
+                </Label>
+              ))}
+              <p className="text-xs opacity-60">
+                Webhook callback URL for Meta: <code className="break-all">{import.meta.env.VITE_SUPABASE_URL ?? 'https://YOUR-PROJECT.supabase.co'}/functions/v1/whatsapp-webhook</code>.
+                Subscribe it to the <b>messages</b> field, using the verify token above.
+              </p>
+              {wa.mode === 'live' && (!saved.whatsapp_token || !wa.phone_number_id) && (
+                <p className="text-xs text-rose-ink">Live mode needs the phone number ID and access token. Until then sends fall back to wa.me links.</p>
+              )}
               <Button icon={Save} loading={busy === 'whatsapp'} onClick={saveWhatsApp}>Save WhatsApp settings</Button>
             </div>
           </Card>

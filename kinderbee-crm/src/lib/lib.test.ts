@@ -1,6 +1,8 @@
 // Run: npm test
 import assert from 'node:assert/strict'
+import { createHmac } from 'node:crypto'
 import { allDues, fillTemplate, fmtDate, monthsDue, normPhone, placeholders, studentDues } from './util.ts'
+import { graphError, inWindow, validSignature } from '../../supabase/functions/_shared/meta.ts'
 
 assert.equal(normPhone('98450 12345'), '+919845012345')
 assert.equal(normPhone('+91-98450-12345'), '+919845012345')
@@ -44,5 +46,19 @@ assert.equal(all[1].due, 0) // no structure for UKG
 const books = { id: 'b', program: 'LKG', academic_year: '2026-27', name: 'Books (optional)', amount: 2500, due_date: null, monthly: false, sort: 9, optional: true }
 assert.equal(studentDues([books], [], '2026-10-15').balance, 0) // not bought → nothing owed
 assert.equal(studentDues([books], [{ id: 'x', student_id: 's1', component_id: 'b', amount: 2500 } as any], '2026-10-15').paid, 2500)
+
+// WhatsApp webhook signature and the 24-hour window
+const body = '{"object":"whatsapp_business_account"}'
+const sig = 'sha256=' + createHmac('sha256', 'app-secret').update(body).digest('hex')
+assert.equal(await validSignature(body, sig, 'app-secret'), true)
+assert.equal(await validSignature(body + ' ', sig, 'app-secret'), false) // body tampered
+assert.equal(await validSignature(body, sig, 'other-secret'), false)
+assert.equal(await validSignature(body, null, 'app-secret'), false)
+assert.equal(await validSignature(body, sig, ''), false)
+const now = Date.parse('2026-10-21T12:00:00Z')
+assert.equal(inWindow('2026-10-20T12:30:00Z', now), true)
+assert.equal(inWindow('2026-10-20T11:59:00Z', now), false)
+assert.equal(inWindow(null, now), false)
+assert.equal(graphError({ code: 190 }, 401), 'WhatsApp access token expired or invalid. Update it in Settings.')
 
 console.log('lib.test.ts: all passed')

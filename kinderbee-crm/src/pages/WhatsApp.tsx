@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, ExternalLink, FileSpreadsheet, MessageCircle, Plus, Send, Wallet } from 'lucide-react'
-import { useAuth } from '../auth'
-import { must, sendWhatsApp, supabase } from '../lib/supabase'
+import { useAuth, waMode } from '../auth'
+import { must, replyWhatsApp, sendWhatsApp, supabase, type WaResult } from '../lib/supabase'
 import { importExcel } from '../lib/excel'
 import { allDues, fillTemplate, fmtDate, inr, normPhone, type FeeComponent } from '../lib/util'
-import { Button, Card, cx, Empty, FormModal, Label, Loading, PageHeader, Pill, Select, Table, Tabs, toast, useRows } from '../ui'
+import { Button, Card, cx, Empty, FormModal, inputCls, Label, Loading, PageHeader, Pill, Select, Table, Tabs, toast, useRows } from '../ui'
 
 type Template = { id: string; name: string; body: string; meta_template: string | null; lang: string }
 type Recipient = { phone: string | null; raw: string; vars: Record<string, string> }
-type Log = { id: string; phone: string; template: string | null; body: string | null; status: string; error: string | null; created_at: string }
-type Result = { mode: 'api'; results: { phone: string; status: string; error: string | null }[] } | { mode: 'links'; links: { phone: string; body: string; url: string }[] }
+type Log = { id: string; phone: string; template: string | null; body: string | null; status: string; error: string | null; simulated?: boolean; created_at: string }
+type Result = { mode: 'api'; results: WaResult[] } | { mode: 'links'; links: { phone: string; body: string; url: string }[] }
 
 const UPLOAD_COLS = [
   { key: 'student_name', label: 'Student Name' }, { key: 'parent_name', label: 'Parent Name' },
@@ -19,14 +19,168 @@ const UPLOAD_COLS = [
 ]
 
 export default function WhatsApp() {
-  const [tab, setTab] = useState<'send' | 'templates' | 'log'>('send')
+  const { settings } = useAuth()
+  const [tab, setTab] = useState<'inbox' | 'send' | 'templates' | 'log'>('inbox')
   const templates = useRows<Template>(() => supabase.from('message_templates').select('*').order('name'))
+  const mode = waMode(settings)
   return (
     <>
-      <PageHeader icon={MessageCircle} accent="whatsapp" title="WhatsApp Centre" subtitle="Personalised bulk reminders, sent automatically or with one tap" />
-      <Tabs value={tab} onChange={setTab} tabs={[{ key: 'send', label: 'Bulk reminders' }, { key: 'templates', label: 'Templates' }, { key: 'log', label: 'Message log' }]} />
-      {tab === 'send' ? <Bulk templates={templates.rows} /> : tab === 'templates' ? <Templates {...templates} /> : <MessageLog />}
+      <PageHeader icon={MessageCircle} accent="whatsapp" title="WhatsApp Centre" subtitle="Conversations with parents, plus personalised bulk reminders"
+        actions={mode === 'mock' ? <Pill s="SIMULATED" className="!text-sm" /> : undefined} />
+      {mode === 'mock' && (
+        <p className="mb-3 rounded-2xl bg-peach/60 p-3 text-sm text-peach-ink">
+          Mock mode: messages are recorded in the CRM but nothing is sent to WhatsApp. Switch to Live in Settings once Meta is connected.
+        </p>
+      )}
+      <Tabs value={tab} onChange={setTab} tabs={[
+        { key: 'inbox', label: 'Inbox' }, { key: 'send', label: 'Bulk reminders' }, { key: 'templates', label: 'Templates' }, { key: 'log', label: 'Message log' },
+      ]} />
+      {tab === 'inbox' ? <Inbox /> : tab === 'send' ? <Bulk templates={templates.rows} /> : tab === 'templates' ? <Templates {...templates} /> : <MessageLog />}
     </>
+  )
+}
+
+type Contact = {
+  id: string; phone: string; name: string | null; status: 'open' | 'resolved'; assigned_to: string | null; ai_paused: boolean
+  unread: number; last_message_at: string | null; last_message: string | null; last_inbound_at: string | null
+  opted_in: boolean; opted_out_at: string | null; lead_id: string | null; student_id: string | null
+}
+type WaMsg = {
+  id: string; direction: 'in' | 'out'; sender: string; kind: string; body: string | null; status: string
+  error: string | null; simulated: boolean; created_at: string
+}
+const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''
+const inWindow = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000
+
+function Inbox() {
+  const { profile, settings } = useAuth()
+  const [filter, setFilter] = useState<'open' | 'mine' | 'resolved'>('open')
+  const [sel, setSel] = useState<string | null>(null)
+  const [sim, setSim] = useState(false)
+  const contacts = useRows<Contact>(() => {
+    let q = supabase.from('wa_contacts').select('*').order('last_message_at', { ascending: false, nullsFirst: false }).limit(200)
+    q = filter === 'mine' ? q.eq('status', 'open').eq('assigned_to', profile!.id) : q.eq('status', filter)
+    return q
+  }, [filter])
+  const { rows: team } = useRows<{ id: string; full_name: string }>(() => supabase.from('profiles').select('id, full_name').eq('active', true))
+  // ponytail: polling; switch to Supabase Realtime if 15s feels slow
+  useEffect(() => { const t = setInterval(contacts.reload, 15000); return () => clearInterval(t) }, [contacts.reload])
+  const current = contacts.rows.find((c) => c.id === sel) ?? null
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <Card className={cx('space-y-3', current && 'hidden lg:block')}>
+        <div className="flex items-center gap-2">
+          <Select value={filter} onChange={(v) => setFilter(v as typeof filter)} className="flex-1"
+            options={[{ value: 'open', label: 'Open' }, { value: 'mine', label: 'Assigned to me' }, { value: 'resolved', label: 'Resolved' }]} />
+          {waMode(settings) === 'mock' && <Button size="sm" variant="soft" icon={Plus} onClick={() => setSim(true)}>Simulate</Button>}
+        </div>
+        {contacts.loading && !contacts.rows.length ? <Loading /> : !contacts.rows.length ? (
+          <Empty title="No conversations" text="Messages parents send to your WhatsApp number appear here." />
+        ) : (
+          <ul className="space-y-1">
+            {contacts.rows.map((c) => (
+              <li key={c.id}>
+                <button onClick={() => setSel(c.id)}
+                  className={cx('w-full rounded-2xl p-3 text-left transition', sel === c.id ? 'bg-honey/25' : 'hover:bg-charcoal/5 dark:hover:bg-white/5')}>
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate font-semibold">{c.name || c.phone}</p>
+                    {c.unread > 0 && <span className="rounded-full bg-[#25D366] px-2 text-xs font-bold text-white">{c.unread}</span>}
+                  </div>
+                  <p className="truncate text-xs opacity-60">{c.last_message ?? '—'}</p>
+                  <p className="text-[11px] opacity-40">{when(c.last_message_at)}{c.assigned_to && ` · ${team.find((t) => t.id === c.assigned_to)?.full_name ?? ''}`}</p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      <Card className={cx('lg:col-span-2', !current && 'hidden lg:block')}>
+        {current ? <Thread key={current.id} c={current} team={team} onBack={() => setSel(null)} onChange={contacts.reload} />
+          : <Empty title="Pick a conversation" text="Choose one on the left to read and reply." />}
+      </Card>
+      <FormModal open={sim} onClose={() => setSim(false)} title="Simulate an incoming message" initial={{ phone: '9845012345', name: 'Test Parent' }}
+        fields={[
+          { key: 'phone', label: 'From (WhatsApp number)', type: 'tel', required: true },
+          { key: 'name', label: 'Profile name' },
+          { key: 'text', label: 'Message', type: 'textarea', required: true },
+        ]}
+        submitLabel="Simulate"
+        onSubmit={async (v) => {
+          await must(supabase.rpc('wa_simulate_inbound', { p_phone: v.phone, p_name: v.name ?? '', p_text: v.text }))
+          setFilter('open')
+          contacts.reload()
+        }}>
+        <p className="mt-2 text-xs opacity-60">Only in mock mode. It goes through the same processing as a real webhook. Send STOP to test opting out.</p>
+      </FormModal>
+    </div>
+  )
+}
+
+function Thread({ c, team, onBack, onChange }: { c: Contact; team: { id: string; full_name: string }[]; onBack: () => void; onChange: () => void }) {
+  const msgs = useRows<WaMsg>(() => supabase.from('wa_messages').select('*').eq('contact_id', c.id).order('created_at').limit(500), [c.id])
+  const [text, setText] = useState('')
+  const [key, setKey] = useState(() => crypto.randomUUID())
+  const [sending, setSending] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  useEffect(() => { const t = setInterval(msgs.reload, 10000); return () => clearInterval(t) }, [msgs.reload])
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.rows.length])
+  useEffect(() => { if (c.unread) supabase.from('wa_contacts').update({ unread: 0 }).eq('id', c.id).then(onChange) }, [c.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const canText = inWindow(c.last_inbound_at) && !c.opted_out_at
+  const update = async (patch: Partial<Contact>) => {
+    try { await must(supabase.from('wa_contacts').update(patch).eq('id', c.id)); onChange() } catch (e: any) { toast(e.message, 'error') }
+  }
+  async function send() {
+    if (!text.trim()) return
+    setSending(true)
+    try {
+      const r = await replyWhatsApp(c.phone, text.trim(), key)
+      if (r.simulated) toast('Recorded (simulated, not sent to WhatsApp)')
+      setText(''); setKey(crypto.randomUUID())
+      msgs.reload(); onChange()
+    } catch (e: any) { toast(e.message, 'error') } finally { setSending(false) }
+  }
+
+  return (
+    <div className="flex h-[70vh] flex-col">
+      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-charcoal/5 pb-3 dark:border-white/5">
+        <button onClick={onBack} className="rounded-xl px-2 py-1 text-sm font-semibold lg:hidden">← Back</button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display text-lg">{c.name || c.phone}</p>
+          <p className="text-xs opacity-60">{c.phone}{c.student_id && ' · parent of a student'}{c.lead_id && ' · has a website enquiry'}</p>
+        </div>
+        {c.opted_out_at && <Pill s="Opted out" />}
+        <Select value={c.assigned_to ?? ''} onChange={(v) => update({ assigned_to: v || null })} placeholder="Unassigned" className="!w-40"
+          options={team.map((t) => ({ value: t.id, label: t.full_name }))} />
+        <Button size="sm" variant="soft" onClick={() => update({ status: c.status === 'open' ? 'resolved' : 'open' })}>
+          {c.status === 'open' ? 'Mark resolved' : 'Reopen'}
+        </Button>
+      </div>
+      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
+        {msgs.loading && !msgs.rows.length ? <Loading /> : msgs.rows.map((m) => (
+          <div key={m.id} className={cx('flex', m.direction === 'out' && 'justify-end')}>
+            <div className={cx('max-w-[80%] rounded-2xl px-3 py-2 text-sm', m.direction === 'out' ? 'bg-leaf/60 dark:bg-leaf/15' : 'bg-charcoal/5 dark:bg-white/5')}>
+              <p className="whitespace-pre-wrap">{m.body}</p>
+              <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] opacity-60">
+                {when(m.created_at)}
+                {m.direction === 'out' && <> · {m.sender} · <span title={m.error ?? undefined}>{m.status}</span></>}
+                {m.simulated && <Pill s="SIMULATED" className="!px-1.5 !py-0 !text-[10px]" />}
+              </p>
+              {m.status === 'failed' && m.error && <p className="text-xs text-rose-ink">{m.error}</p>}
+            </div>
+          </div>
+        ))}
+        <div ref={endRef} />
+      </div>
+      <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); send() }}>
+        <textarea className={inputCls + ' min-h-[44px] flex-1 resize-none'} rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={4000}
+          disabled={!canText} placeholder={c.opted_out_at ? 'This contact opted out of WhatsApp messages'
+            : canText ? 'Type a reply…' : 'More than 24 hours since their last message. Only an approved template can be sent.'}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
+        <Button type="submit" icon={Send} loading={sending} disabled={!canText || !text.trim()}>Send</Button>
+      </form>
+    </div>
   )
 }
 
@@ -81,7 +235,9 @@ function Bulk({ templates }: { templates: Template[] }) {
       const res = await sendWhatsApp(toSend.map((r) => ({ phone: r.phone!, vars: r.vars, template: tpl })))
       setResult(res)
       setOpened(new Set())
-      toast(res.mode === 'api' ? `Sent ${res.results.filter((x) => x.status === 'sent').length} of ${res.results.length}` : 'API not configured — tap each link to send')
+      toast(res.mode === 'api'
+        ? `${res.results[0]?.simulated ? 'Simulated' : 'Sent'} ${res.results.filter((x) => x.status === 'sent').length} of ${res.results.length}`
+        : 'API not configured — tap each link to send')
     } catch (e: any) { toast(e.message, 'error') } finally { setSending(false) }
   }
 
@@ -117,7 +273,8 @@ function Bulk({ templates }: { templates: Template[] }) {
           <Select value={tpl?.id ?? ''} onChange={setTid} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
           <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-leaf/50 p-3 text-sm dark:bg-leaf/10">{tpl?.body}</p>
           {tpl?.meta_template && <p className="mt-1 text-xs opacity-60">Sends as approved Meta template “{tpl.meta_template}”.</p>}
-          {!settings.whatsapp.enabled && <p className="mt-2 text-xs opacity-60">API is off — you'll get tap-to-send wa.me links.</p>}
+          {waMode(settings) === 'off' && <p className="mt-2 text-xs opacity-60">API is off — you'll get tap-to-send wa.me links.</p>}
+          {waMode(settings) !== 'off' && !tpl?.meta_template && <p className="mt-2 text-xs text-rose-ink">No approved Meta template set: only parents who messaged you in the last 24 hours will receive this.</p>}
         </div>
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-wide opacity-60">3 · Check & send</p>
@@ -139,7 +296,7 @@ function Bulk({ templates }: { templates: Template[] }) {
             </div>
             {result.mode === 'api' ? (
               <Table rows={result.results} rowKey={(r) => r.phone} cols={[
-                { label: 'Number', render: (r) => r.phone }, { label: 'Status', render: (r) => <Pill s={r.status} /> },
+                { label: 'Number', render: (r) => r.phone }, { label: 'Status', render: (r) => <><Pill s={r.status} />{r.simulated && <Pill s="SIMULATED" className="ml-1" />}</> },
                 { label: 'Error', render: (r) => <span className="text-xs text-rose-ink">{r.error}</span> },
               ]} />
             ) : (
@@ -243,7 +400,7 @@ function MessageLog() {
           { label: 'Number', render: (r) => r.phone },
           { label: 'Template', render: (r) => r.template ?? '—' },
           { label: 'Message', render: (r) => <p className="max-w-sm truncate text-xs opacity-70" title={r.body ?? ''}>{r.body}</p> },
-          { label: 'Status', render: (r) => <span title={r.error ?? undefined}><Pill s={r.status === 'link' ? 'link' : r.status} /></span> },
+          { label: 'Status', render: (r) => <span title={r.error ?? undefined}><Pill s={r.status} />{r.simulated && <Pill s="SIMULATED" className="ml-1" />}</span> },
         ]} />
       )}
     </Card>
