@@ -89,6 +89,30 @@ How it works:
 - **Website consent:** forms can send `whatsapp_opt_in: true` to record consent. Website and Meta leads are never messaged automatically yet. That needs an approved template and arrives with campaigns (phase 4).
 - **AI activity** (outcome, intent, tokens, errors; no message text) is listed on the AI Assistant tab.
 
+### Campaigns
+
+The campaign flow:
+
+1. Templates are tracked against Meta's approval. Submit them from **Templates**; approval arrives by webhook or **Sync from Meta**. Any edit sends a template back to draft.
+2. A campaign picks a type, an approved template of the matching category, and an audience:
+   - guardians, filtered by class and by overdue or upcoming fees,
+   - enquiries, filtered by type, status and date,
+   - or every contact with consent.
+3. **Build recipients** applies the rules: consent, opt-out, valid number, one message per number (siblings merged), and required values. It shows the counts, the reasons for skips, and real previews.
+4. The CEO approves and schedules it, or sends it now. pg_cron runs `wa-worker` every minute, which sends within the per-minute and daily limits.
+
+While sending:
+
+- Each recipient is re-checked just before sending. Fees already paid are skipped.
+- Throttling errors retry with backoff; permanent errors fail with the reason.
+- Pause, resume (CEO) and cancel stop anything not yet sent.
+- The delivery report counts come from Meta's status webhooks.
+- A dry run builds and processes without sending.
+
+With the API on, bulk sends go only through campaigns. The send function accepts at most 20 messages per call. Tap-to-send wa.me reminders remain while the API is off.
+
+Full setup, go-live checklist, operations and rollback: [docs/whatsapp-deployment.md](docs/whatsapp-deployment.md).
+
 ## White-label
 
 Edit `src/config/brand.ts` (name, school, contact, colours, login domain) and drop the logo at `public/logo.png`.

@@ -223,3 +223,102 @@ await asCeo()
 await db.query(`insert into kb_articles (title, topic, body) values ('Timings', 'timings', 'Mon–Sat 9am–6pm')`)
 
 console.log('0008 PGlite checks: all passed')
+
+// ═════════════ 0009: templates, consent, campaigns, queue ═════════════
+const oldTpl = await one(`select id from message_templates where name = 'Fee reminder'`)
+await migrate('0009_campaigns')
+await asCeo()
+assert.equal((await one(`select meta_status from message_templates where id = $1`, [oldTpl.id])).meta_status, 'draft') // never assumed approved
+
+// Staff can't approve a template themselves; the server can; editing sends it back to draft
+await db.exec(`update message_templates set meta_template = 'fee_reminder_v1', category = 'utility' where id = '${oldTpl.id}'`)
+await assert.rejects(db.query(`update message_templates set meta_status = 'approved' where id = $1`, [oldTpl.id]), /approval comes from Meta/)
+await db.exec(`reset role; set test.uid = ''`) // the server (service role) has no auth.uid()
+await db.query(`select wa_template_status('fee_reminder_v1', 'en', 'APPROVED', '123', 'NONE')`)
+assert.equal((await one(`select meta_status, meta_template_id, meta_reason from message_templates where id = $1`, [oldTpl.id])).meta_status, 'approved')
+await asCeo()
+await db.query(`update message_templates set body = body || ' ' where id = $1`, [oldTpl.id])
+assert.equal((await one(`select meta_status from message_templates where id = $1`, [oldTpl.id])).meta_status, 'draft')
+await db.exec(`set test.uid = ''`)
+await db.query(`select wa_template_status('fee_reminder_v1', 'en', 'APPROVED', '123', null)`)
+await asCeo()
+const mkt = await one(`insert into message_templates (name, body, meta_template, category) values ('Admission offer', 'Hi {name}!', 'adm_offer', 'marketing') returning id`)
+
+// Consent: CEO only, with a source; coordinators can't
+await assert.rejects(db.query(`select record_consent(array['9845099999'], '')`), /where the consent came from/)
+const rc = await one(`select record_consent(array['9845099999', '12', '+91 98450 88888'], 'Admission form 2026-27') r`)
+assert.deepEqual(rc.r, { updated: 2, invalid: 1 })
+assert.equal((await one(`select opted_in_source from wa_contacts where phone = '+919845099999'`)).opted_in_source, 'Admission form 2026-27')
+await db.exec(`set test.uid = '${coord}'; set role authenticated`)
+await assert.rejects(db.query(`select record_consent(array['9845077777'], 'x')`), /Only the CEO/)
+// Coordinators draft campaigns but can't approve them or mark them scheduled directly
+const camp = await one(`insert into campaigns (name, kind, template_id, audience) values ('Oct fees', 'fee_reminder', $1, '{"source":"students","fee":"overdue"}') returning id`, [oldTpl.id])
+await assert.rejects(db.query(`insert into campaigns (name, kind, template_id, status) values ('sneaky', 'holiday', $1, 'running')`, [oldTpl.id]))
+await assert.rejects(db.query(`select campaign_schedule($1)`, [camp.id]), /Only the CEO/)
+await assert.rejects(db.query(`update campaigns set status = 'running' where id = $1`, [camp.id]), /row-level security/)
+assert.equal((await one(`select status from campaigns where id = $1`, [camp.id])).status, 'draft')
+await asCeo()
+
+// Scheduling needs a built list, an approved template of the right category and sending switched on
+await assert.rejects(db.query(`select campaign_schedule($1)`, [camp.id]), /Build the recipient list first/)
+const addRecipients = async (cid, rows) => { for (const [phone, status] of rows) await db.query(`insert into campaign_recipients (campaign_id, phone, status, vars) values ($1, $2, $3, '{"parent_name":"A"}')`, [cid, phone, status]) }
+await db.query(`update campaigns set built_at = now() where id = $1`, [camp.id])
+await addRecipients(camp.id, [['+919845099999', 'pending'], ['+919845088888', 'pending'], ['+919800000000', 'skipped']])
+await assert.rejects(db.query(`insert into campaign_recipients (campaign_id, phone) values ($1, '+919845099999')`, [camp.id])) // one per number
+await db.exec(`update settings set value = value || '{"mode":"off"}' where key = 'whatsapp'`)
+await assert.rejects(db.query(`select campaign_schedule($1)`, [camp.id]), /sending is off/)
+await db.exec(`update settings set value = value || '{"mode":"mock"}' where key = 'whatsapp'`)
+const wrong = await one(`insert into campaigns (name, kind, template_id, built_at) values ('Disguised', 'fee_reminder', $1, now()) returning id`, [mkt.id])
+await db.exec(`set test.uid = ''`); await db.query(`select wa_template_status('adm_offer', 'en', 'APPROVED', '9', null)`); await asCeo()
+await addRecipients(wrong.id, [['+919845099999', 'pending']])
+await assert.rejects(db.query(`select campaign_schedule($1)`, [wrong.id]), /must use a utility template/)
+await db.query(`update message_templates set approval_simulated = true where id = $1`, [oldTpl.id]).catch(() => {}) // staff can't touch approval
+await db.exec(`set test.uid = ''`); await db.query(`update message_templates set approval_simulated = true where id = $1`, [oldTpl.id]); await asCeo()
+await db.exec(`update settings set value = value || '{"mode":"live"}' where key = 'whatsapp'`)
+await assert.rejects(db.query(`select campaign_schedule($1)`, [camp.id]), /only approved in mock mode/)
+await db.exec(`update settings set value = value || '{"mode":"mock"}' where key = 'whatsapp'`)
+
+// Future schedule → scheduled; the queue starts it once due and claims each pending row exactly once
+await db.query(`select campaign_schedule($1, now() + interval '1 hour')`, [camp.id])
+const sc = await one(`select status, approved_by from campaigns where id = $1`, [camp.id])
+assert.equal(sc.status, 'scheduled'); assert.equal(sc.approved_by, ceo)
+assert.equal((await db.query(`select * from wa_campaign_claim(10)`)).rows.length, 0) // not due yet
+await db.query(`update campaigns set scheduled_at = now() - interval '1 minute' where id = $1`, [camp.id])
+const b1 = (await db.query(`select * from wa_campaign_claim(1)`)).rows
+assert.equal(b1.length, 1); assert.equal(b1[0].status, 'sending'); assert.equal(b1[0].attempts, 1)
+assert.equal((await one(`select status from campaigns where id = $1`, [camp.id])).status, 'running')
+const b2 = (await db.query(`select * from wa_campaign_claim(10)`)).rows
+assert.equal(b2.length, 1); assert.notEqual(b2[0].id, b1[0].id) // never the same row twice
+assert.equal((await db.query(`select * from wa_campaign_claim(10)`)).rows.length, 0)
+
+// Pause stops claiming; cancel stops everything not yet sent
+await db.query(`update campaign_recipients set status = 'pending' where id = $1`, [b2[0].id])
+await db.query(`select campaign_control($1, 'pause')`, [camp.id])
+assert.equal((await db.query(`select * from wa_campaign_claim(10)`)).rows.length, 0)
+await db.query(`select campaign_control($1, 'cancel')`, [camp.id])
+assert.equal((await one(`select status from campaign_recipients where id = $1`, [b2[0].id])).status, 'cancelled')
+await assert.rejects(db.query(`select campaign_control($1, 'resume')`, [camp.id]), /Cannot resume a cancelled/)
+
+// Sends interrupted mid-flight are failed, never resent; finished campaigns complete
+const c2 = await one(`insert into campaigns (name, kind, template_id, built_at) values ('Holiday', 'holiday', $1, now()) returning id`, [oldTpl.id])
+await addRecipients(c2.id, [['+919845099999', 'pending']])
+await db.query(`select campaign_schedule($1)`, [c2.id])
+const b3 = (await db.query(`select * from wa_campaign_claim(10)`)).rows
+assert.equal(b3.length, 1)
+await db.query(`update campaign_recipients set updated_at = now() - interval '20 minutes' where id = $1`, [b3[0].id])
+await db.query(`select * from wa_campaign_claim(10)`)
+assert.match((await one(`select status, reason from campaign_recipients where id = $1`, [b3[0].id])).reason, /not retried/)
+assert.equal((await one(`select wa_campaign_finish() n`)).n, 1)
+assert.equal((await one(`select status from campaigns where id = $1`, [c2.id])).status, 'completed')
+
+// Server-only functions; overview works for WhatsApp staff and counts real rows
+for (const fn of ['wa_campaign_claim(integer)', 'wa_campaign_finish()', 'wa_sent_today()', 'wa_template_status(text, text, text, text, text)', 'wa_kick_worker()', 'wa_retention()'])
+  assert.equal((await one(`select has_function_privilege('authenticated', '${fn}', 'execute') ok`)).ok, false, fn)
+const ov = (await one(`select wa_overview(now() - interval '1 day', now() + interval '1 minute') o`)).o
+assert.equal(ov.new_enquiries, await count(`select 1 from leads where created_at >= now() - interval '1 day'`))
+assert.equal(ov.campaigns.completed, 1)
+assert.ok(ov.awaiting_follow_up >= 1)
+const ret = (await one(`select wa_retention() r`)).r
+assert.equal(typeof ret.webhook_events, 'number')
+
+console.log('0009 PGlite checks: all passed')

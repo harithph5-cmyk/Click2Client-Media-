@@ -23,11 +23,12 @@ export type Settings = {
   holidays: { date: string; name: string }[]
   academic_year: string
   // off = wa.me links, mock = simulated sends (nothing leaves the CRM), live = Cloud API
-  whatsapp: { phone_number_id: string; enabled?: boolean; mode?: 'off' | 'mock' | 'live'; business_account_id?: string }
+  whatsapp: { phone_number_id: string; enabled?: boolean; mode?: 'off' | 'mock' | 'live'; business_account_id?: string; functions_url?: string }
   lead_statuses: string[]
   ai: { enabled: boolean; model: string; reply_when: 'always' | 'after_hours'; hours: { start: string; end: string; days: number[] } }
   lead_routing: { default_assignee: string | null; by_category: Record<string, string>; sla_hours: number; manager: string | null }
   meta_forms: Record<string, string>
+  campaign_limits: { per_minute: number; daily_max: number; max_attempts: number }
 }
 
 export const waMode = (s: Settings) => s.whatsapp.mode ?? (s.whatsapp.enabled ? 'live' : 'off')
@@ -41,6 +42,7 @@ const defaults: Settings = {
   ai: { enabled: false, model: 'claude-haiku-5-5', reply_when: 'always', hours: { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5, 6] } },
   lead_routing: { default_assignee: null, by_category: {}, sla_hours: 4, manager: null },
   meta_forms: {},
+  campaign_limits: { per_minute: 60, daily_max: 1000, max_attempts: 5 },
 }
 
 /** Statuses after which a lead needs no more follow-up */

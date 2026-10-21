@@ -5,9 +5,9 @@ import { must, replyWhatsApp, runAi, sendWhatsApp, supabase, type WaResult } fro
 import { importExcel } from '../lib/excel'
 import { allDues, fillTemplate, fmtDate, inr, LEAD_CATEGORIES, normPhone, type FeeComponent } from '../lib/util'
 import { Assistant, FollowUps } from './WhatsAppAssistant'
+import { Campaigns, Contacts, Overview, Templates, type Template } from './WhatsAppCampaigns'
 import { Button, Card, cx, Empty, FormModal, inputCls, Label, Loading, PageHeader, Pill, Select, Table, Tabs, toast, useRows } from '../ui'
 
-type Template = { id: string; name: string; body: string; meta_template: string | null; lang: string }
 type Recipient = { phone: string | null; raw: string; vars: Record<string, string> }
 type Log = { id: string; phone: string; template: string | null; body: string | null; status: string; error: string | null; simulated?: boolean; created_at: string }
 type Result = { mode: 'api'; results: WaResult[] } | { mode: 'links'; links: { phone: string; body: string; url: string }[] }
@@ -19,11 +19,11 @@ const UPLOAD_COLS = [
   { key: 'due_date', label: 'Due Date' },
 ]
 
-type Tab = 'inbox' | 'followups' | 'ai' | 'send' | 'templates' | 'log'
+type Tab = 'overview' | 'inbox' | 'followups' | 'contacts' | 'templates' | 'campaigns' | 'log' | 'ai' | 'send'
 
 export default function WhatsApp() {
   const { settings } = useAuth()
-  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(location.search).get('tab') as Tab) || 'inbox')
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(location.search).get('tab') as Tab) || 'overview')
   const [chat, setChat] = useState<string | null>(null)
   const templates = useRows<Template>(() => supabase.from('message_templates').select('*').order('name'))
   const mode = waMode(settings)
@@ -37,13 +37,20 @@ export default function WhatsApp() {
         </p>
       )}
       <Tabs value={tab} onChange={setTab} tabs={[
-        { key: 'inbox', label: 'Inbox' }, { key: 'followups', label: 'Follow-ups' }, { key: 'ai', label: 'AI Assistant' },
-        { key: 'send', label: 'Bulk reminders' }, { key: 'templates', label: 'Templates' }, { key: 'log', label: 'Message log' },
+        { key: 'overview', label: 'Overview' }, { key: 'inbox', label: 'Inbox' }, { key: 'followups', label: 'Follow-ups' },
+        { key: 'contacts', label: 'Contacts' }, { key: 'templates', label: 'Templates' }, { key: 'campaigns', label: 'Campaigns' },
+        { key: 'log', label: 'Delivery log' }, { key: 'ai', label: 'AI Assistant' },
+        // wa.me links need a person to tap each one, so they stay for when the API is off
+        ...(mode === 'off' ? [{ key: 'send' as const, label: 'Tap-to-send reminders' }] : []),
       ]} />
-      {tab === 'inbox' ? <Inbox initial={chat} />
+      {tab === 'overview' ? <Overview />
+        : tab === 'inbox' ? <Inbox initial={chat} />
         : tab === 'followups' ? <FollowUps onOpenChat={(id) => { setChat(id); setTab('inbox') }} />
+        : tab === 'contacts' ? <Contacts />
+        : tab === 'templates' ? <Templates {...templates} />
+        : tab === 'campaigns' ? <Campaigns templates={templates.rows} />
         : tab === 'ai' ? <Assistant />
-        : tab === 'send' ? <Bulk templates={templates.rows} /> : tab === 'templates' ? <Templates {...templates} /> : <MessageLog />}
+        : tab === 'send' && mode === 'off' ? <Bulk templates={templates.rows} /> : <MessageLog />}
     </>
   )
 }
@@ -418,46 +425,6 @@ function Bulk({ templates }: { templates: Template[] }) {
         )}
       </Card>
     </div>
-  )
-}
-
-function Templates({ rows, loading, reload }: { rows: Template[]; loading: boolean; reload: () => void }) {
-  const [editing, setEditing] = useState<Template | 'new' | null>(null)
-  const current = editing && editing !== 'new' ? editing : null
-  if (loading) return <Loading />
-  return (
-    <Card>
-      <div className="mb-3 flex justify-between gap-2">
-        <p className="text-sm opacity-60">Placeholders: {'{parent_name} {student_name} {amount} {due_date} {class}'} — payment receipts use {'{name} {amount} {service} {date} {ref}'}.</p>
-        <Button icon={Plus} onClick={() => setEditing('new')}>New template</Button>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {rows.map((t) => (
-          <button key={t.id} onClick={() => setEditing(t)} className="rounded-3xl bg-leaf/40 p-4 text-left transition hover:-translate-y-0.5 dark:bg-leaf/10">
-            <p className="font-display text-lg">{t.name}</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm opacity-80">{t.body}</p>
-            {t.meta_template && <p className="mt-2 text-xs opacity-60">Meta template: {t.meta_template} ({t.lang})</p>}
-          </button>
-        ))}
-        {!rows.length && <Empty title="No templates yet" />}
-      </div>
-      <FormModal open={!!editing} onClose={() => setEditing(null)} title={current ? `Edit ${current.name}` : 'New template'} wide
-        initial={current ?? { lang: 'en' }}
-        fields={[
-          { key: 'name', label: 'Name', required: true },
-          { key: 'meta_template', label: 'Approved Meta template name (for API sending)', placeholder: 'fee_reminder' },
-          { key: 'lang', label: 'Template language code', placeholder: 'en' },
-          { key: 'body', label: 'Message', type: 'textarea', required: true },
-        ]}
-        onSubmit={async (v) => {
-          const row = { name: v.name, body: v.body, meta_template: v.meta_template || null, lang: v.lang || 'en' }
-          if (current) await must(supabase.from('message_templates').update(row).eq('id', current.id))
-          else await must(supabase.from('message_templates').insert(row))
-          reload()
-        }}>
-        <p className="mt-2 text-xs opacity-60">With the API on, a Meta template's {'{{1}}, {{2}}…'} are filled with this message's placeholders in the order they appear.</p>
-      </FormModal>
-    </Card>
   )
 }
 

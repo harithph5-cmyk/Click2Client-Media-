@@ -27,6 +27,15 @@ Deno.serve(async (req) => {
   try { body = JSON.parse(raw) } catch { return new Response('bad json', { status: 400 }) }
   if (body?.object !== 'whatsapp_business_account') return new Response('ignored')
 
+  // Template approvals and rejections from Meta
+  for (const entry of body.entry ?? [])
+    for (const ch of entry.changes ?? [])
+      if (ch.field === 'message_template_status_update' && ch.value?.message_template_name)
+        await db.rpc('wa_template_status', {
+          p_name: ch.value.message_template_name, p_lang: ch.value.message_template_language ?? 'en', p_event: ch.value.event ?? '',
+          p_id: ch.value.message_template_id ? String(ch.value.message_template_id) : null, p_reason: ch.value.reason ?? null,
+        })
+
   const { data, error } = await db.rpc('wa_ingest_webhook', { p: body })
   if (error) {
     // Nothing was saved (the function is one transaction), so Meta's retry will be processed cleanly.

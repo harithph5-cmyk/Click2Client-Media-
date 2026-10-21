@@ -4,7 +4,7 @@
 // `key` makes a send idempotent; `reply: true` marks a manual inbox reply (pauses AI, assigns the conversation).
 import { admin, caller, cors, json } from '../_shared/util.ts'
 import { inWindow } from '../_shared/meta.ts'
-import { deliver, waConfig } from '../_shared/wa.ts'
+import { approvedTemplate, deliver, waConfig } from '../_shared/wa.ts'
 
 type Msg = {
   phone: string; body: string; template?: string; meta_template?: string; lang?: string; params?: string[]
@@ -23,10 +23,10 @@ Deno.serve(async (req) => {
   const simulated = cfg.mode === 'mock'
 
   const { messages } = (await req.json()) as { messages: Msg[] }
-  if (!Array.isArray(messages) || messages.length > 1000) return json({ error: 'messages[] (max 1000) required' }, 400)
+  // Bulk sends go through campaigns (queued, rate-limited, CEO-approved), never one long request.
+  if (!Array.isArray(messages) || !messages.length || messages.length > 20) return json({ error: 'messages[] (1–20) required. Use Campaigns for bulk sends.' }, 400)
   if (messages.some((m) => m.reply) && !(me.role === 'ceo' || me.modules.includes('whatsapp'))) return json({ error: 'Not allowed' }, 403)
 
-  // ponytail: sequential sends inside the request; bulk campaigns move to the wa_jobs queue in phase 4
   const results: { phone: string; status: string; error: string | null; simulated: boolean }[] = []
   for (const m of messages) {
     const done = (status: string, error: string | null) => { results.push({ phone: m.phone, status, error, simulated }); return status }
@@ -35,7 +35,8 @@ Deno.serve(async (req) => {
     if (cErr) { done('failed', 'Invalid number'); continue }
     const { data: c } = await db.from('wa_contacts').select('opted_out_at, last_inbound_at, assigned_to').eq('id', cid).single()
     const blocked = c?.opted_out_at ? 'Opted out of WhatsApp'
-      : !m.meta_template && !inWindow(c?.last_inbound_at) ? 'Outside the 24-hour window. Use an approved template.' : null
+      : m.meta_template ? await approvedTemplate(db, cfg, m.meta_template, m.lang)
+      : !inWindow(c?.last_inbound_at) ? 'Outside the 24-hour window. Use an approved template.' : null
 
     // Claim the send first: a repeated key finds the existing row and stops here
     const { data: claimed } = await db.from('wa_messages').upsert({

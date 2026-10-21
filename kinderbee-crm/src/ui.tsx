@@ -212,6 +212,11 @@ const PILL: Record<string, string> = {
   'AI Replied': 'bg-lav text-lav-ink', 'Follow-up Pending': 'bg-peach text-peach-ink', 'Contacted by Team': 'bg-lav text-lav-ink',
   Qualified: 'bg-mint text-mint-ink', Unreachable: 'bg-charcoal/10 text-charcoal/60', Escalated: 'bg-rose text-rose-ink',
   'Opted Out': 'bg-rose text-rose-ink', 'High priority': 'bg-rose text-rose-ink',
+  // templates, campaigns, recipients
+  draft: 'bg-charcoal/10 text-charcoal/60', pending: 'bg-honey/30 text-amber-800', approved: 'bg-mint text-mint-ink', rejected: 'bg-rose text-rose-ink',
+  paused: 'bg-peach text-peach-ink', disabled: 'bg-charcoal/10 text-charcoal/60', scheduled: 'bg-sky text-sky-ink', running: 'bg-lav text-lav-ink',
+  completed: 'bg-mint text-mint-ink', cancelled: 'bg-charcoal/10 text-charcoal/60', skipped: 'bg-charcoal/10 text-charcoal/60',
+  sending: 'bg-honey/30 text-amber-800', dry_run: 'bg-peach text-peach-ink', 'opted in': 'bg-mint text-mint-ink',
 }
 export const Pill = ({ s, className }: { s: string; className?: string }) => (
   <span className={cx('inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-bold', PILL[s] ?? 'bg-charcoal/10', className)}>{s}</span>

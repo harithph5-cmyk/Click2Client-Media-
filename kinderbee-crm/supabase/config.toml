@@ -7,3 +7,6 @@ verify_jwt = false
 
 [functions.meta-leads]
 verify_jwt = false
+
+[functions.wa-worker]
+verify_jwt = false # called by pg_cron with x-worker-secret; CEO calls are checked in the function

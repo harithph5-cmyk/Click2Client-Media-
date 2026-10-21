@@ -23,6 +23,7 @@ export default function Settings() {
   const [hol, setHol] = useState({ date: '', name: '' })
   const [year, setYear] = useState(settings.academic_year)
   const [wa, setWa] = useState(settings.whatsapp)
+  const [limits, setLimits] = useState(settings.campaign_limits)
   const [secrets, setSecrets] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState('')
@@ -49,7 +50,9 @@ export default function Settings() {
       setSaved((s) => ({ ...s, [k]: true }))
     }
     setSecrets({})
-    await save('whatsapp', wa)
+    // The campaign queue (pg_cron → wa-worker) calls the functions at this address
+    await save('whatsapp', { ...wa, functions_url: `${import.meta.env.VITE_SUPABASE_URL ?? ''}/functions/v1` })
+    await save('campaign_limits', limits)
   }
 
   const intakeUrl = `${import.meta.env.VITE_SUPABASE_URL ?? 'https://YOUR-PROJECT.supabase.co'}/rest/v1/rpc/submit_lead`
@@ -167,6 +170,11 @@ export default function Settings() {
               {wa.mode === 'live' && (!saved.whatsapp_token || !wa.phone_number_id) && (
                 <p className="text-xs text-rose-ink">Live mode needs the phone number ID and access token. Until then sends fall back to wa.me links.</p>
               )}
+              <div className="grid grid-cols-2 gap-2">
+                <Label label="Campaign messages per minute"><input type="number" min={1} max={500} className={inputCls} value={limits.per_minute} onChange={(e) => setLimits({ ...limits, per_minute: Number(e.target.value) || 1 })} /></Label>
+                <Label label="Campaign messages per day"><input type="number" min={1} className={inputCls} value={limits.daily_max} onChange={(e) => setLimits({ ...limits, daily_max: Number(e.target.value) || 1 })} /></Label>
+              </div>
+              <p className="text-xs opacity-60">Keep these within your number's Meta messaging limit tier; new numbers start low.</p>
               <Button icon={Save} loading={busy === 'whatsapp'} onClick={saveWhatsApp}>Save WhatsApp settings</Button>
             </div>
           </Card>

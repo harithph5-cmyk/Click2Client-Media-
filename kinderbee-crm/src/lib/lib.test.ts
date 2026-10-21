@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createHmac } from 'node:crypto'
 import { allDues, fillTemplate, fmtDate, monthsDue, normPhone, placeholders, studentDues } from './util.ts'
 import { graphError, inWindow, validSignature } from '../../supabase/functions/_shared/meta.ts'
+import { backoffSeconds, e164, ineligible, istDate, mergeByPhone, retryable, toMetaBody } from '../../supabase/functions/_shared/campaign-core.ts'
 import { HANDOFF_REPLY, inHours, mockAssistant, parseAiResult, systemPrompt, transcript } from '../../supabase/functions/_shared/assistant-core.ts'
 
 assert.equal(normPhone('98450 12345'), '+919845012345')
@@ -85,5 +86,29 @@ const tx = transcript([{ direction: 'in', sender: 'contact', body: 'Hi' }, { dir
 assert.ok(tx.includes('Child age: 4') && !tx.includes('Preferred centre') && tx.includes('KinderBee (assistant): Hello!'))
 assert.ok(systemPrompt([]).includes('knowledge base is empty'))
 assert.ok(systemPrompt([{ title: 'Timings', topic: 'timings', body: '9 to 6' }]).includes('### Timings [timings]\n9 to 6'))
+
+// Campaign rules
+assert.equal(toMetaBody('Hi {parent_name}, ₹{amount} for {student_name}. Thanks {parent_name}'), 'Hi {{1}}, ₹{{2}} for {{3}}. Thanks {{1}}')
+assert.equal(e164('98450 12345'), '+919845012345')
+assert.equal(e164('+44 7911 123456'), '+447911123456')
+assert.equal(e164('123'), null)
+assert.equal(retryable(429), true); assert.equal(retryable(500), true); assert.equal(retryable(null), true)
+assert.equal(retryable(400, 130429), true) // Meta throughput limit
+assert.equal(retryable(400, 131026), false) // not on WhatsApp: permanent
+assert.equal(retryable(401, 190), false) // bad token: permanent
+assert.deepEqual([1, 2, 3, 7, 10].map(backoffSeconds), [60, 120, 240, 3600, 3600])
+assert.equal(istDate(new Date('2026-10-21T20:00:00Z')), '2026-10-22') // 01:30 IST next day
+const merged = mergeByPhone([
+  { phone: '+919845012345', name: 'Asha', vars: { student_name: 'Kiran', class: 'LKG', amount: '3,000', _amount: '3000', _due: '2026-07-05', due_date: '05-07-2026' }, student_ids: ['s1'] },
+  { phone: '+919845012345', name: 'Asha', vars: { student_name: 'Meera', class: 'Nursery', amount: '2,000', _amount: '2000', _due: '2026-06-05', due_date: '05-06-2026' }, student_ids: ['s2'] },
+  { phone: null, name: 'No number', vars: {} },
+])
+assert.equal(merged.length, 1)
+assert.equal(merged[0].vars.student_name, 'Kiran & Meera'); assert.equal(merged[0].vars.amount, '5,000'); assert.equal(merged[0].vars.due_date, '05-06-2026')
+assert.deepEqual(merged[0].student_ids, ['s1', 's2'])
+assert.equal(ineligible(undefined, 'Hi', {}), 'No WhatsApp consent recorded')
+assert.equal(ineligible({ opted_in: true, opted_out_at: '2026-10-01' }, 'Hi', {}), 'Opted out')
+assert.equal(ineligible({ opted_in: true }, 'Reopens {reopening_date}', {}), 'Missing value for {reopening_date}')
+assert.equal(ineligible({ opted_in: true }, 'Reopens {reopening_date}', { reopening_date: '2 June' }), null)
 
 console.log('lib.test.ts: all passed')
