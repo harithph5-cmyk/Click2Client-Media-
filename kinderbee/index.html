@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kinderbee International Preschool | Bengaluru</title>
+<meta name="description" content="Kinderbee International Preschool – play-based early years programmes, daycare, teacher training and zero-royalty preschool partnerships in Bengaluru.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;1,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--pink:#e1007a;--pink-soft:rgba(225,0,122,.08);--gold:#f5b942;--ink:#1c1917;--ink-2:#44403c;--muted:#78716c;--bg:#faf9f6;--card:#fff;--line:#e7e5e4;--dark:#0f0d0c;--r:20px}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:"Plus Jakarta Sans",sans-serif;background:var(--bg);color:var(--ink);line-height:1.6}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{font-family:Outfit,sans-serif;line-height:1.15;color:var(--ink)}
+.wrap{max-width:1200px;margin:auto;padding:0 20px}
+section{padding:96px 0}
+.eyebrow{display:inline-flex;gap:8px;align-items:center;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pink);background:var(--pink-soft);border:1px solid rgba(225,0,122,.2);padding:6px 14px;border-radius:99px}
+.head{text-align:center;max-width:720px;margin:0 auto 56px}
+.head h2{font-size:clamp(32px,5vw,48px);margin:16px 0 14px}
+.head p{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;padding:14px 26px;border-radius:12px;border:0;cursor:pointer;transition:.2s}
+.btn-pink{background:var(--pink);color:#fff}.btn-pink:hover{background:#c0006a;transform:translateY(-2px)}
+.btn-dark{background:var(--ink);color:#fff}.btn-ghost{background:rgba(41,37,36,.8);color:#fff;border:1px solid #57534e}
+.btn-light{background:#f5f5f4;color:var(--ink)}.btn-light:hover{background:var(--pink-soft);color:var(--pink)}
+
+/* header */
+header{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;height:72px}
+.logo{font-family:Outfit;font-weight:700;font-size:24px}.logo b{color:var(--pink)}.logo i{color:var(--gold);font-style:normal}
+.menu{display:flex;gap:4px;list-style:none}
+.menu a{font-size:13px;font-weight:500;padding:8px 14px;border-radius:12px;color:var(--ink-2)}
+.menu a:hover,.menu a.on{background:var(--pink-soft);color:var(--pink)}
+.burger{display:none;background:none;border:0;font-size:26px;cursor:pointer}
+
+/* hero */
+.hero{position:relative;background:var(--dark) center/cover;color:#fff;text-align:center;padding:140px 0 150px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(225,0,122,.25),transparent 60%),linear-gradient(rgba(12,10,9,.55),rgba(12,10,9,.85))}
+.hero .wrap{position:relative}
+.hero .eyebrow{color:var(--gold);background:rgba(0,0,0,.5);border-color:rgba(245,185,66,.4)}
+.hero h1{font-family:"Playfair Display",serif;color:#fff;font-size:clamp(42px,7vw,76px);margin:26px 0 22px}
+.hero h1 em{display:block;font-weight:500;background:linear-gradient(90deg,#f5b942,#f472b6);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{max-width:640px;margin:0 auto 36px;font-size:18px;color:#d6d3d1}
+.hero .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* programmes */
+.grid{display:grid;gap:24px}
+.g3{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.g5{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:30px;transition:.25s}
+.card:hover{transform:translateY(-4px);box-shadow:0 20px 40px -20px rgba(28,25,23,.18)}
+.prog{display:flex;flex-direction:column}
+.age{font-size:12px;font-weight:700;color:var(--pink)}
+.prog h3{font-size:20px;margin:8px 0 10px}
+.prog p{color:var(--muted);font-size:14px}
+.prog ul{list-style:none;margin:18px 0 24px;display:grid;gap:8px;font-size:14px;color:var(--ink-2)}
+.prog li::before{content:"✓";color:var(--pink);font-weight:700;margin-right:8px}
+.prog .btn{margin-top:auto;justify-content:center;font-size:13px}
+
+/* why */
+.split{display:grid;grid-template-columns:1fr 1.4fr;gap:56px;align-items:start}
+.split h2{font-size:clamp(32px,5vw,48px);margin:16px 0}
+.split>div:first-child p{color:var(--muted);margin-bottom:28px}
+.ico{width:48px;height:48px;border-radius:14px;background:var(--pink-soft);display:grid;place-items:center;font-size:22px;margin-bottom:16px}
+.card h3{font-size:18px;margin-bottom:8px}.card p{font-size:14px;color:var(--muted)}
+
+/* holistic */
+.alt{background:#fff;border-block:1px solid var(--line)}
+.pill{text-align:center;padding:26px 20px}.pill .ico{margin:0 auto 14px}.pill h3{font-size:16px}
+
+/* campus */
+.spaces{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+.space{position:relative;aspect-ratio:3/4;border-radius:var(--r);overflow:hidden;display:flex;align-items:flex-end;padding:22px;color:#fff}
+.space::after{content:"";position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.75))}
+.space div{position:relative;z-index:1}.space h3{color:#fff;font-size:20px}.space span{font-size:13px;opacity:.85}
+.s1{background:linear-gradient(135deg,#d6b48a,#8b6a46)}.s2{background:linear-gradient(135deg,#f472b6,#a855f7)}.s3{background:linear-gradient(135deg,#34d399,#0e7490)}.s4{background:linear-gradient(135deg,#fbbf24,#ea580c)}
+.center{text-align:center;margin-top:36px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+
+/* testimonials */
+.tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:36px}
+.tabs button{font:600 13px "Plus Jakarta Sans";padding:9px 18px;border-radius:99px;border:1px solid var(--line);background:#fff;cursor:pointer}
+.tabs button.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.marquee{overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.track{display:flex;gap:24px;width:max-content;animation:slide 60s linear infinite}
+.marquee:hover .track{animation-play-state:paused}
+@keyframes slide{to{transform:translateX(-50%)}}
+.quote{width:360px;flex-shrink:0}
+.tag{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--pink)}
+.quote h3{font-size:17px;margin:10px 0}
+.quote blockquote{font-size:14px;color:var(--ink-2);font-style:italic;margin-bottom:20px}
+.who{display:flex;gap:12px;align-items:center;font-size:13px}.who b{display:block}
+.av{width:40px;height:40px;border-radius:50%;background:var(--pink);color:#fff;display:grid;place-items:center;font-weight:700}
+
+/* banners */
+.banner{border-radius:28px;padding:56px;color:#fff;position:relative;overflow:hidden}
+.banner h2{color:#fff;font-size:clamp(28px,4vw,40px);margin:16px 0}
+.banner p{color:#e7e5e4;max-width:720px;margin-bottom:28px}
+.b-train{background:linear-gradient(120deg,#1c1917,#4a044e)}
+.b-part{background:var(--card);color:var(--ink);border:1px solid var(--line);display:grid;grid-template-columns:1.3fr 1fr;gap:40px;align-items:center}
+.b-part h2{color:var(--ink)}.b-part p{color:var(--muted)}
+.b-part h4{font-family:Outfit;font-size:20px;color:var(--ink-2);margin-bottom:10px}
+.feats{display:grid;gap:12px}
+.feats div{background:var(--pink-soft);border-radius:14px;padding:16px 18px;font-weight:600;font-size:15px}
+.feats div::before{content:"🐝 ";}
+
+/* articles */
+.row{display:flex;justify-content:space-between;align-items:end;gap:20px;flex-wrap:wrap;margin-bottom:36px}
+.row h2{font-size:clamp(30px,4vw,44px);margin-top:14px}
+.row a{color:var(--pink);font-weight:700}
+.post .thumb{aspect-ratio:16/9;border-radius:14px;background:linear-gradient(135deg,#fde68a,#f9a8d4);margin-bottom:20px}
+.meta{font-size:12px;color:var(--muted);display:flex;gap:12px}.meta b{color:var(--pink)}
+.post h3{font-size:19px;margin:10px 0}.post a.more{display:inline-block;margin-top:14px;color:var(--pink);font-weight:700;font-size:14px}
+
+/* contact */
+.contact{display:grid;grid-template-columns:1fr 1.2fr;gap:48px}
+.contact h2{font-size:clamp(32px,5vw,48px);margin:16px 0}
+.contact>div>p{color:var(--muted);margin-bottom:28px}
+.info{display:grid;gap:16px}.info div{display:flex;gap:14px;align-items:flex-start;font-size:15px}
+form{display:grid;gap:16px}
+label{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-2);display:grid;gap:6px}
+input,select,textarea{font:inherit;font-size:15px;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg);width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--pink);border-color:transparent}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.check{display:flex;gap:10px;font-size:13px;font-weight:400;letter-spacing:0;color:var(--muted)}.check input{width:auto}
+
+/* faq */
+.faq{max-width:820px;margin:auto}
+details{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 24px;margin-bottom:12px}
+summary{font-family:Outfit;font-weight:600;font-size:17px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::after{content:"+";color:var(--pink);font-size:22px;line-height:1}
+details[open] summary::after{content:"–"}
+details p{color:var(--muted);margin-top:12px;font-size:15px}
+
+/* footer */
+footer{background:var(--dark);color:#a8a29e;padding:64px 0 28px;font-size:14px}
+.fgrid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.3fr;gap:40px;margin-bottom:40px}
+footer h4{color:#fff;font-family:Outfit;margin-bottom:16px}
+footer ul{list-style:none;display:grid;gap:8px}footer a:hover{color:#fff}
+.copy{border-top:1px solid #292524;padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+
+/* floating */
+.float{position:fixed;right:20px;bottom:20px;display:grid;gap:12px;z-index:40;justify-items:end}
+.float .adm{background:var(--pink);color:#fff;font-weight:700;font-size:12px;padding:10px 18px;border-radius:99px;box-shadow:0 10px 30px rgba(225,0,122,.4)}
+.fab{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:22px;box-shadow:0 10px 25px rgba(0,0,0,.2)}
+
+@media(max-width:900px){
+  .menu{display:none;position:absolute;top:72px;left:0;right:0;background:#fff;flex-direction:column;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .menu.open{display:flex}.burger{display:block}.nav>.btn{display:none}
+  .split,.contact,.b-part,.fgrid{grid-template-columns:1fr}
+  section{padding:64px 0}.banner{padding:32px 24px}.two{grid-template-columns:1fr}
+  .wrap{padding:0 16px}.quote{width:290px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="wrap nav">
+    <a href="#" class="logo"><b>Kinder</b><i>bee</i></a>
+    <button class="burger" aria-label="Menu" onclick="document.querySelector('.menu').classList.toggle('open')">☰</button>
+    <ul class="menu">
+      <li><a href="#" class="on">Home</a></li>
+      <li><a href="#about">About Us</a></li>
+      <li><a href="#partner">Franchise</a></li>
+      <li><a href="#training">Teacher Training</a></li>
+      <li><a href="#partner">Partner with us</a></li>
+      <li><a href="#blog">Blog</a></li>
+      <li><a href="#contact">Contact Us</a></li>
+    </ul>
+    <a href="#contact" class="btn btn-pink" style="font-size:13px;padding:10px 18px">Speak to an Advisor →</a>
+  </nav>
+</header>
+
+<!-- HERO: set style="background-image:url(...)" to the client's campus photo -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">✦ The future of education starts here</span>
+    <h1>Reimagine Education.<em>Transform Tomorrow.</em></h1>
+    <p>A future-ready early learning ecosystem that equips schools, teachers and young children to grow through play, innovation and care.</p>
+    <div class="cta">
+      <a href="#programmes" class="btn btn-pink">Explore KIPS →</a>
+      <a href="#contact" class="btn btn-ghost">Talk to Our Experts</a>
+    </div>
+  </div>
+</section>
+
+<!-- PROGRAMMES -->
+<section id="programmes">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">🎓 Early childhood development pathways</span>
+      <h2>Our Preschool Programmes</h2>
+      <p>Each stage matches how children grow — building curiosity, emotional confidence and early literacy and numeracy step by step.</p>
+    </div>
+    <div class="grid g3">
+      <article class="card prog"><span class="age">Ages 1.5 – 2.5 Years</span><h3>Playgroup (Toddler Explorers)</h3>
+        <p>A soft, happy first step from home into school, built around the senses, movement and bonding.</p>
+        <ul><li>Sand, water and sensory play</li><li>Gentle settling-in routines</li><li>Rhymes, sounds and story circles</li></ul>
+        <a href="#contact" class="btn btn-light">Enquire for Playgroup</a></article>
+      <article class="card prog"><span class="age">Ages 2.5 – 3.5 Years</span><h3>Nursery (Curious Discoverers)</h3>
+        <p>Growing talk, early sound awareness, hands-on creativity and everyday independence.</p>
+        <ul><li>Painting, clay and messy art</li><li>Early phonics, songs and new words</li><li>Sharing and playing together</li></ul>
+        <a href="#contact" class="btn btn-light">Enquire for Nursery</a></article>
+      <article class="card prog"><span class="age">Ages 3.5 – 4.5 Years</span><h3>Junior KG / LKG (Young Thinkers)</h3>
+        <p>First steps in reading, number sense, sequencing and working with friends.</p>
+        <ul><li>Jolly Phonics and pre-writing skills</li><li>Counting, sorting and patterns</li><li>Nature walks and “why” questions</li></ul>
+        <a href="#contact" class="btn btn-light">Enquire for Junior KG</a></article>
+      <article class="card prog"><span class="age">Ages 4.5 – 5.5 Years</span><h3>Senior KG / UKG (Future Achievers)</h3>
+        <p>Getting confident, expressive children ready for Grade 1 through reading, inquiry and problem-solving.</p>
+        <ul><li>Reading on their own and building sentences</li><li>Early addition, subtraction and logic</li><li>Smooth NEP 2020 primary transition</li></ul>
+        <a href="#contact" class="btn btn-light">Enquire for Senior KG</a></article>
+      <article class="card prog"><span class="age">Ages 1.5 – 8 Years</span><h3>Daycare &amp; Extended Care</h3>
+        <p>A safe, caring second home for working families — rest, meals, hobbies and attentive caregivers.</p>
+        <ul><li>Healthy meals and CCTV-monitored nap areas</li><li>Evening crafts and hobby corners</li><li>Trained, caring early-years staff</li></ul>
+        <a href="#contact" class="btn btn-light">Enquire for Daycare</a></article>
+    </div>
+  </div>
+</section>
+
+<!-- WHY -->
+<section id="about" class="alt">
+  <div class="wrap split">
+    <div>
+      <span class="eyebrow">💛 The Kinderbee difference</span>
+      <h2>Why Parents Choose Kinderbee</h2>
+      <p>Global early learning standards, delivered with genuine warmth — a joyful second home where every child can flourish.</p>
+      <a href="#contact" class="btn btn-dark">Schedule a Campus Walkthrough →</a>
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+      <div class="card"><div class="ico">🌲</div><h3>Nordic Play Pedagogy</h3><p>Learning by exploring, asking and doing — not memorising — so thinking skills grow deep.</p></div>
+      <div class="card"><div class="ico">🛡️</div><h3>Uncompromising Safety</h3><p>Rounded wooden furniture, live CCTV for parents, biometric entry and verified, certified staff.</p></div>
+      <div class="card"><div class="ico">🎓</div><h3>FWA-Trained Educators</h3><p>Teachers are certified by FinnishWay Academy in child psychology, observation and positive guidance.</p></div>
+      <div class="card"><div class="ico">🤝</div><h3>Active Parent Partnership</h3><p>Daily updates, learning portfolios, weekend workshops and an open door to every teacher.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOLISTIC -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">🌱 Whole-child pedagogy</span>
+      <h2>Our Holistic Learning Approach</h2>
+      <p>Every day blends thinking, language, feelings and movement through balanced, playful exploration.</p>
+    </div>
+    <div class="grid g5">
+      <div class="card pill"><div class="ico">🧩</div><h3>Cognitive &amp; STEM</h3><p>Patterns, block building, simple science and early maths reasoning.</p></div>
+      <div class="card pill"><div class="ico">📖</div><h3>Language &amp; Phonics</h3><p>Sound awareness, story circles, many-language vocabulary and listening.</p></div>
+      <div class="card pill"><div class="ico">💗</div><h3>Social &amp; Emotional</h3><p>Self-control, empathy, solving disagreements and teamwork.</p></div>
+      <div class="card pill"><div class="ico">🤸</div><h3>Physical Agility</h3><p>Fine motor (puzzles, threading) and gross motor (climbing, balancing).</p></div>
+      <div class="card pill"><div class="ico">🎨</div><h3>Creative Arts &amp; Music</h3><p>Painting, puppet play, rhythm instruments and free imagination.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- CAMPUS: replace gradient classes with background-image:url(...) client photos -->
+<section class="alt">
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">🏫 Campus &amp; learning architecture</span>
+      <h2>Safe, Inspiring &amp; Child-Centred Spaces</h2>
+      <p>Designed as the “Third Teacher” — every corner invites discovery, calm focus and complete safety.</p>
+    </div>
+    <div class="spaces">
+      <div class="space s1"><div><h3>Nordic Classrooms</h3><span>Natural wood &amp; ergonomic seating</span></div></div>
+      <div class="space s2"><div><h3>Sensory &amp; Art Studio</h3><span>Tactile colours &amp; clay creation</span></div></div>
+      <div class="space s3"><div><h3>Discovery Labs</h3><span>STEM puzzles &amp; natural inquiry</span></div></div>
+      <div class="space s4"><div><h3>Reading Nook</h3><span>Storybooks &amp; cosy cushions</span></div></div>
+    </div>
+    <div class="center"><a href="#contact" class="btn btn-pink">Book Campus Tour</a><a href="#" class="btn btn-light">Explore Campus Gallery</a></div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS: paste the client's approved quotes into the TESTIMONIALS array below -->
+<section>
+  <div class="wrap">
+    <div class="head">
+      <span class="eyebrow">💬 Community voices &amp; testimonials</span>
+      <h2>What Our Community Says About KinderBee</h2>
+      <p>Reflections from our franchise partners, teacher-training graduates and parent community.</p>
+    </div>
+    <div class="tabs">
+      <button class="on" data-f="all">All Voices</button><button data-f="Franchise">Franchise</button><button data-f="Teacher Training">Teacher Training</button><button data-f="Parents">Parents</button>
+    </div>
+  </div>
+  <div class="marquee"><div class="track" id="track"></div></div>
+  <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:18px">Hover or touch any card to pause</p>
+</section>
+
+<!-- TEACHER TRAINING -->
+<section id="training" style="padding-top:0">
+  <div class="wrap">
+    <div class="banner b-train">
+      <span class="eyebrow" style="color:var(--gold);background:rgba(0,0,0,.3);border-color:rgba(245,185,66,.4)">FinnishWay Academy • Teacher development</span>
+      <h2>Advanced Diploma in Early Childhood Care &amp; Education (NTT)</h2>
+      <p>Grow your teaching career with accredited, Nordic-inspired training in play-based teaching, child psychology, classroom leadership and the NEP 2020 framework.</p>
+      <a href="#contact" class="btn btn-pink">Explore Teacher Training →</a>
+    </div>
+  </div>
+</section>
+
+<!-- PARTNERSHIP -->
+<section id="partner" style="padding-top:0">
+  <div class="wrap">
+    <div class="banner b-part">
+      <div>
+        <span class="eyebrow">KIPS • Zero royalty model</span>
+        <h2>Partner With Kinderbee</h2>
+        <h4>Zero-royalty preschool partnership with 360° support</h4>
+        <p>We help edupreneurs and school owners launch world-class preschools. You keep 100% of tuition fees and get our full curriculum, teacher training, campus design and admissions marketing.</p>
+        <div class="cta" style="display:flex;gap:12px;flex-wrap:wrap">
+          <a href="#contact" class="btn btn-pink">Learn About Partnership</a>
+          <a href="#contact" class="btn btn-light">Book Franchise Consultation</a>
+        </div>
+      </div>
+      <div class="feats">
+        <div>0% Recurring Royalty on Tuition</div>
+        <div>Turnkey Setup &amp; Toy Kits</div>
+        <div>Continuous Teacher Development</div>
+        <div>Local Lead Generation Assistance</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLOG -->
+<section id="blog" class="alt">
+  <div class="wrap">
+    <div class="row">
+      <div><span class="eyebrow">📰 Developmental guides &amp; news</span><h2>Latest Articles &amp; School Activities</h2></div>
+      <a href="#">View All Articles →</a>
+    </div>
+    <div class="grid g3">
+      <article class="card post"><div class="thumb"></div><div class="meta"><b>Pedagogy &amp; Curriculum</b><span>2026-09-18</span></div>
+        <h3>Engaging Parents: Taking Parents Along in Their Child's Learning Journey at the Preschool</h3>
+        <p>Why involving families matters in the early years, with practical ways to make it happen.</p><a href="#" class="more">Read Full Article →</a></article>
+      <article class="card post"><div class="thumb" style="background:linear-gradient(135deg,#a7f3d0,#93c5fd)"></div><div class="meta"><b>Parenting Guide</b><span>2026-09-18</span></div>
+        <h3>Positive Talk – Parenting Guide: Early Childhood Education</h3>
+        <p>How positive conversations and supportive surroundings shape lifelong learning and wellbeing.</p><a href="#" class="more">Read Full Article →</a></article>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="wrap contact">
+    <div>
+      <span class="eyebrow">📍 Get in touch</span>
+      <h2>Send an Enquiry</h2>
+      <p>Planning preschool admission, joining teacher training, or exploring a preschool partnership? We're happy to help.</p>
+      <div class="info">
+        <div><span class="ico" style="margin:0">📍</span><span>No. 1, Old UCO Bank Road, Opp. Vijay Bakery, Rajarajeshwari Layout, Ramamurthy Nagar, Bengaluru – 560016</span></div>
+        <div><span class="ico" style="margin:0">📞</span><a href="tel:+918122344040" style="align-self:center">81223 44040</a></div>
+        <div><span class="ico" style="margin:0">✉️</span><a href="mailto:kinderbeeschools@gmail.com" style="align-self:center">kinderbeeschools@gmail.com</a></div>
+      </div>
+    </div>
+    <form class="card" onsubmit="event.preventDefault();this.innerHTML='<h3>Thank you! 🐝</h3><p>Our team will reach out shortly.</p>'">
+      <div class="two">
+        <label>YOUR NAME *<input required name="name" autocomplete="name"></label>
+        <label>PHONE NUMBER *<input required name="phone" type="tel" autocomplete="tel" pattern="[0-9+ ]{10,15}"></label>
+      </div>
+      <label>EMAIL ADDRESS *<input required name="email" type="email" autocomplete="email"></label>
+      <label>ENQUIRY FOR *<select required name="type">
+        <option>Preschool Admission (Playgroup – UKG)</option><option>Daycare &amp; Extended Care</option>
+        <option>Teacher Training (Advanced Diploma ECCE ₹4,999)</option><option>Preschool Partnership (Zero Royalty)</option></select></label>
+      <label>MESSAGE / QUESTIONS (OPTIONAL)<textarea name="message" rows="4"></textarea></label>
+      <label class="check"><input type="checkbox" required> I have reviewed the details and agree to the Cancellation and No-Refund Policy, Terms and Conditions, and Privacy Policy.</label>
+      <button class="btn btn-pink" style="justify-content:center">Send an Enquiry →</button>
+    </form>
+  </div>
+</section>
+
+<!-- FAQ: answers are drafts — have the client confirm wording -->
+<section class="alt">
+  <div class="wrap">
+    <div class="head"><h2>Frequently Asked Questions</h2><p>Common questions about admissions, teacher training and partnerships.</p></div>
+    <div class="faq">
+      <details open><summary>1. What is the Kinderbee Integrated Partnership System (KIPS)?</summary><p>KIPS is Kinderbee's partnership system that gives schools complete academic, operational, branding and teacher-training support.</p></details>
+      <details><summary>2. Why choose the Kinderbee Preschool Franchise?</summary><p>Zero recurring royalty on tuition, a proven Nordic-inspired curriculum, turnkey setup and ongoing teacher and marketing support.</p></details>
+      <details><summary>3. What is the process for starting a Kinderbee Preschool?</summary><p>Book a consultation, finalise your site, and our team handles campus design, kits, staff training and admissions launch with you.</p></details>
+      <details><summary>4. Who can become a Kinderbee Preschool Partner?</summary><p>Edupreneurs, existing school owners and anyone passionate about quality early childhood education.</p></details>
+      <details><summary>5. What makes the Kinderbee curriculum distinctive?</summary><p>It's play-based and Nordic-inspired, focusing on inquiry, hands-on discovery and whole-child development rather than rote learning.</p></details>
+      <details><summary>6. What ongoing support does Kinderbee provide to its partners?</summary><p>Curriculum updates, continuous teacher development, operational guidance and local lead-generation assistance.</p></details>
+      <details><summary>7. How does the Kinderbee curriculum align with NEP 2020?</summary><p>It follows NEP 2020's foundational-stage goals — play-based learning, early literacy and numeracy, and a smooth move into Grade 1.</p></details>
+      <details><summary>8. What is FinnishWay Academy?</summary><p>Kinderbee's teacher-development partner, offering Nordic-inspired early childhood training and certification.</p></details>
+      <details><summary>9. Is prior experience in education required to become a Kinderbee partner?</summary><p>No. Our training and setup support are built to guide first-time edupreneurs at every step.</p></details>
+      <details><summary>10. Can I rebrand my existing preschool with Kinderbee?</summary><p>Yes. Existing preschools can convert to Kinderbee and adopt our curriculum, training and branding.</p></details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="fgrid">
+      <div><a class="logo" style="color:#fff"><b>Kinder</b><i>bee</i></a><p style="margin-top:14px">Kinderbee International Preschool — nurturing joyful learners for life.</p></div>
+      <div><h4>Explore</h4><ul><li><a href="#about">About Us</a></li><li><a href="#programmes">Programmes</a></li><li><a href="#blog">Blog</a></li><li><a href="#contact">Contact</a></li></ul></div>
+      <div><h4>Partner</h4><ul><li><a href="#partner">Franchise</a></li><li><a href="#training">Teacher Training</a></li><li><a href="#partner">KIPS</a></li></ul></div>
+      <div><h4>Contact</h4><ul><li>Ramamurthy Nagar, Bengaluru – 560016</li><li><a href="tel:+918122344040">81223 44040</a></li><li><a href="mailto:kinderbeeschools@gmail.com">kinderbeeschools@gmail.com</a></li></ul></div>
+    </div>
+    <div class="copy"><span>© 2026 Kinderbee International Preschool. All rights reserved.</span><span><a href="#">Privacy Policy</a> · <a href="#">Terms</a> · <a href="#">Refund Policy</a></span></div>
+  </div>
+</footer>
+
+<div class="float">
+  <a href="#contact" class="adm">🎒 ADMISSIONS OPEN</a>
+  <a href="tel:+918122344040" class="fab" style="background:var(--pink)" aria-label="Call">📞</a>
+  <a href="https://wa.me/918122344040" class="fab" style="background:#22c55e" aria-label="WhatsApp">💬</a>
+</div>
+
+<script>
+// Paste client-approved testimonials here. cat: Franchise | Teacher Training | Parents
+const TESTIMONIALS = [
+  {cat:"Franchise", tag:"Franchise Partner", title:"[Headline]", quote:"[Partner testimonial — paste approved quote]", name:"[Name, City]", role:"KinderBee Preschool Franchise Partner"},
+  {cat:"Teacher Training", tag:"Teacher Training", title:"[Headline]", quote:"[Trainee testimonial — paste approved quote]", name:"[Name]", role:"Teacher Training Programme Participant"},
+  {cat:"Parents", tag:"Preschool Parent", title:"[Headline]", quote:"[Parent testimonial — paste approved quote]", name:"[Parent names]", role:"Parents of [Child] (Nursery)"},
+  {cat:"Parents", tag:"Daycare Parent", title:"[Headline]", quote:"[Daycare parent testimonial — paste approved quote]", name:"[Parent names]", role:"Parents of [Child] (Daycare)"}
+];
+const track = document.getElementById('track');
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function render(f){
+  const list = TESTIMONIALS.filter(t => f === 'all' || t.cat === f);
+  const html = list.map(t => `<div class="card quote"><span class="tag">${esc(t.tag)}</span><h3>${esc(t.title)}</h3><blockquote>“${esc(t.quote)}”</blockquote><div class="who"><span class="av">${esc(t.name[0]==='['?'K':t.name[0])}</span><div><b>${esc(t.name)}</b>${esc(t.role)}</div></div></div>`).join('');
+  track.innerHTML = html + html; // duplicated for seamless loop
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelector('.tabs .on').classList.remove('on'); b.classList.add('on'); render(b.dataset.f);
+});
+render('all');
+</script>
+</body>
+</html>

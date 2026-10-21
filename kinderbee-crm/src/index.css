@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-honey: var(--brand-primary);
+  --color-charcoal: var(--brand-charcoal);
+  --color-cream: var(--brand-cream);
+  --color-night: #181714;
+  --color-card: #23211d;
+  --color-mint: #d7f5e3;
+  --color-mint-ink: #1d7a4a;
+  --color-lav: #e7e0ff;
+  --color-lav-ink: #5b43c4;
+  --color-peach: #ffe3d3;
+  --color-peach-ink: #b5521d;
+  --color-sky: #daeeff;
+  --color-sky-ink: #1f67a8;
+  --color-rose: #ffdde6;
+  --color-rose-ink: #b42a55;
+  --color-leaf: #dcf8c6;
+  --color-leaf-ink: #2f7a12;
+  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fredoka", "Nunito", ui-sans-serif, sans-serif;
+}
+
+body {
+  @apply bg-cream text-charcoal antialiased dark:bg-night dark:text-cream;
+}
+
+/* Subtle honeycomb wallpaper */
+.honeycomb {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='98' viewBox='0 0 56 98'%3E%3Cpath d='M28 66 0 50V16L28 0l28 16v34L28 66Zm0 32L0 82V66l28 16 28-16v16L28 98Z' fill='none' stroke='%23FFC107' stroke-opacity='.18' stroke-width='1.5'/%3E%3C/svg%3E");
+}
+
+.hex {
+  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%);
+}
+
+input[type="date"], input[type="time"] { min-height: 2.75rem; }
