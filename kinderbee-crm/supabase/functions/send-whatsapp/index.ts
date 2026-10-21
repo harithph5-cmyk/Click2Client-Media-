@@ -2,8 +2,9 @@
 // Sends through the WhatsApp Business Cloud API (mode "live") or simulates it (mode "mock"), and records each
 // message on the contact's conversation. Returns { configured: false } in mode "off" so the app falls back to wa.me links.
 // `key` makes a send idempotent; `reply: true` marks a manual inbox reply (pauses AI, assigns the conversation).
-import { admin, caller, cors, json, secret } from '../_shared/util.ts'
-import { graphError, inWindow } from '../_shared/meta.ts'
+import { admin, caller, cors, json } from '../_shared/util.ts'
+import { inWindow } from '../_shared/meta.ts'
+import { deliver, waConfig } from '../_shared/wa.ts'
 
 type Msg = {
   phone: string; body: string; template?: string; meta_template?: string; lang?: string; params?: string[]
@@ -17,19 +18,16 @@ Deno.serve(async (req) => {
   if (!allowed) return json({ error: 'Not allowed' }, 403)
 
   const db = admin()
-  const { data: cfg } = await db.from('settings').select('value').eq('key', 'whatsapp').single()
-  const mode: string = cfg?.value?.mode ?? (cfg?.value?.enabled ? 'live' : 'off')
-  const token = await secret(db, 'whatsapp_token')
-  const phoneId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? cfg?.value?.phone_number_id
-  if (mode === 'off' || (mode === 'live' && (!token || !phoneId))) return json({ configured: false })
-  const simulated = mode === 'mock'
+  const cfg = await waConfig(db)
+  if (cfg.mode === 'off') return json({ configured: false })
+  const simulated = cfg.mode === 'mock'
 
   const { messages } = (await req.json()) as { messages: Msg[] }
   if (!Array.isArray(messages) || messages.length > 1000) return json({ error: 'messages[] (max 1000) required' }, 400)
   if (messages.some((m) => m.reply) && !(me.role === 'ceo' || me.modules.includes('whatsapp'))) return json({ error: 'Not allowed' }, 403)
 
   // ponytail: sequential sends inside the request; bulk campaigns move to the wa_jobs queue in phase 4
-  const results = []
+  const results: { phone: string; status: string; error: string | null; simulated: boolean }[] = []
   for (const m of messages) {
     const done = (status: string, error: string | null) => { results.push({ phone: m.phone, status, error, simulated }); return status }
 
@@ -48,32 +46,7 @@ Deno.serve(async (req) => {
     if (!claimed?.length) { done('duplicate', 'Already sent'); continue }
     if (blocked) { done('failed', blocked); continue }
 
-    let status = 'sent', error: string | null = null, wamid: string | null = null
-    if (simulated) wamid = `mock.${crypto.randomUUID()}`
-    else {
-      const to = m.phone.replace(/\D/g, '')
-      const payload = m.meta_template
-        ? {
-            messaging_product: 'whatsapp', to, type: 'template',
-            template: {
-              name: m.meta_template, language: { code: m.lang ?? 'en' },
-              components: m.params?.length ? [{ type: 'body', parameters: m.params.map((text) => ({ type: 'text', text })) }] : [],
-            },
-          }
-        : { messaging_product: 'whatsapp', to, type: 'text', text: { body: m.body } }
-      try {
-        const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-        const out = await r.json().catch(() => ({}))
-        if (!r.ok) { status = 'failed'; error = graphError(out?.error, r.status) }
-        else wamid = out?.messages?.[0]?.id ?? null
-      } catch (e) {
-        status = 'failed'; error = String(e)
-      }
-    }
+    const { status, error, wamid } = await deliver(cfg, m)
     done(status, error)
     await db.from('wa_messages').update({ status, error, wamid }).eq('id', claimed[0].id)
     if (status === 'sent') {
@@ -86,5 +59,5 @@ Deno.serve(async (req) => {
       phone: m.phone, template: m.template, body: m.body, status, error, provider_id: wamid, created_by: me.id, contact_id: cid, simulated,
     })
   }
-  return json({ configured: true, mode, results })
+  return json({ configured: true, mode: cfg.mode, results })
 })

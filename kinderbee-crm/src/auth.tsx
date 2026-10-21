@@ -24,6 +24,10 @@ export type Settings = {
   academic_year: string
   // off = wa.me links, mock = simulated sends (nothing leaves the CRM), live = Cloud API
   whatsapp: { phone_number_id: string; enabled?: boolean; mode?: 'off' | 'mock' | 'live'; business_account_id?: string }
+  lead_statuses: string[]
+  ai: { enabled: boolean; model: string; reply_when: 'always' | 'after_hours'; hours: { start: string; end: string; days: number[] } }
+  lead_routing: { default_assignee: string | null; by_category: Record<string, string>; sla_hours: number; manager: string | null }
+  meta_forms: Record<string, string>
 }
 
 export const waMode = (s: Settings) => s.whatsapp.mode ?? (s.whatsapp.enabled ? 'live' : 'off')
@@ -33,7 +37,14 @@ const defaults: Settings = {
   holidays: [],
   academic_year: '2026-27',
   whatsapp: { phone_number_id: '', mode: 'off' },
+  lead_statuses: ['New', 'AI Replied', 'Follow-up Pending', 'Contacted by Team', 'Qualified', 'Converted', 'Closed', 'Unreachable', 'Not Interested', 'Escalated', 'Opted Out'],
+  ai: { enabled: false, model: 'claude-haiku-5-5', reply_when: 'always', hours: { start: '09:00', end: '18:00', days: [1, 2, 3, 4, 5, 6] } },
+  lead_routing: { default_assignee: null, by_category: {}, sla_hours: 4, manager: null },
+  meta_forms: {},
 }
+
+/** Statuses after which a lead needs no more follow-up */
+export const CLOSED_STATUSES = ['Converted', 'Closed', 'Not Interested', 'Opted Out']
 
 type Auth = {
   session: Session | null

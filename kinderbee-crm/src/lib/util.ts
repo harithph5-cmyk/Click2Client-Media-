@@ -93,6 +93,7 @@ export const LEAD_CATEGORIES = [
   { key: 'cbse', label: 'CBSE School', extra: [['grade', 'Grade seeking'], ['current_school', 'Current school']] },
   { key: 'degree', label: 'Degree College', extra: [['course', 'Course interested'], ['qualification', 'Last qualification']] },
   { key: 'jv', label: 'Joint Ventures', extra: [['organisation', 'Organisation'], ['proposal', 'Proposal type']] },
+  { key: 'general', label: 'General', extra: [['topic', 'Topic']] },
 ] as const
 
 export const SERVICES = ['Franchise', 'NTT Teacher Training', 'One-on-One Consultation', 'Joint Ventures', 'CBSE School', 'Degree College', 'Other']

@@ -10,6 +10,8 @@ const SECRETS = [
   ['whatsapp_token', 'Permanent access token', 'EAAG…'],
   ['whatsapp_app_secret', 'Meta app secret (checks webhook signatures)', 'App settings → Basic'],
   ['whatsapp_verify_token', 'Webhook verify token', 'Any long random string'],
+  ['meta_page_token', 'Facebook Page access token (Meta Lead Ads)', 'Page token with leads_retrieval'],
+  ['anthropic_api_key', 'Anthropic API key (AI assistant)', 'sk-ant-…'],
 ] as const
 
 export default function Settings() {
@@ -160,6 +162,7 @@ export default function Settings() {
               <p className="text-xs opacity-60">
                 Webhook callback URL for Meta: <code className="break-all">{import.meta.env.VITE_SUPABASE_URL ?? 'https://YOUR-PROJECT.supabase.co'}/functions/v1/whatsapp-webhook</code>.
                 Subscribe it to the <b>messages</b> field, using the verify token above.
+                For Meta Lead Ads, subscribe your Facebook Page's <b>leadgen</b> field to <code className="break-all">{import.meta.env.VITE_SUPABASE_URL ?? 'https://YOUR-PROJECT.supabase.co'}/functions/v1/meta-leads</code> with the same verify token.
               </p>
               {wa.mode === 'live' && (!saved.whatsapp_token || !wa.phone_number_id) && (
                 <p className="text-xs text-rose-ink">Live mode needs the phone number ID and access token. Until then sends fall back to wa.me links.</p>
@@ -173,7 +176,7 @@ export default function Settings() {
           <Card className="lg:col-span-2">
             <h2 className="mb-3 flex items-center gap-2 font-display text-lg"><Code2 className="h-5 w-5 text-lav-ink" />Website lead endpoint</h2>
             <p className="mb-2 text-sm opacity-60">
-              Point your website forms here. <code>category</code> is one of ntt, consultation, franchise, cbse, degree, jv. Any extra fields (e.g. investment_budget) are saved too.
+              Point your website forms here. <code>category</code> is one of admission, ntt, consultation, franchise, cbse, degree, jv, general. Send <code>whatsapp_opt_in: true</code> only when the visitor ticked a WhatsApp consent box. Any extra fields (e.g. investment_budget) are saved too.
             </p>
             <pre className="overflow-x-auto rounded-2xl bg-charcoal p-4 text-xs text-cream">{`fetch('${intakeUrl}', {
   method: 'POST',

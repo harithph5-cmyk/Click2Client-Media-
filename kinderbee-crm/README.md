@@ -40,7 +40,7 @@ fetch('https://YOUR-REF.supabase.co/rest/v1/rpc/submit_lead', {
 })
 ```
 
-`category` is one of `ntt`, `consultation`, `franchise`, `cbse`, `degree`, `jv`. Any other fields are stored with the lead. A non-empty `website` field is treated as a bot (honeypot). Settings shows the snippet with your real URL and key.
+`category` is one of `admission`, `ntt`, `consultation`, `franchise`, `cbse`, `degree`, `jv`, `general`. Add `whatsapp_opt_in: true` when the visitor ticked a WhatsApp consent box. Any other fields (e.g. `utm_campaign`) are stored with the lead. A non-empty `website` field is treated as a bot (honeypot). Settings shows the snippet with your real URL and key.
 
 ## WhatsApp
 
@@ -66,7 +66,28 @@ How it behaves:
 - **Delivery status:** statuses never go backwards, so a late "delivered" can't overwrite "read".
 - **Opt-out:** a contact who sends STOP or UNSUBSCRIBE is opted out and no further messages go to them. START opts them back in.
 - **24-hour window:** free-text messages and replies only go to contacts who messaged in the last 24 hours. Anyone else needs a template with an approved Meta template name; its `{{1}}, {{2}}…` are filled from the placeholders in order.
-- **Inbox:** shows one conversation per number, linked to a matching website enquiry or student. Staff can assign, reply and resolve. A staff reply pauses AI on that conversation, ready for phase 3.
+- **Inbox:** shows one conversation per number, linked to a matching enquiry or student. Staff can assign, reply, add internal notes, create follow-ups, pause or resume the AI, change the lead status and resolve. A staff reply pauses the AI on that conversation.
+
+### AI assistant and lead follow-up
+
+Setup:
+
+1. Run `supabase/migrations/0008_ai_assistant.sql` in the SQL Editor. It renames two lead statuses (Contacted → Contacted by Team, Follow-up → Follow-up Pending) and adds the rest. It also schedules the SLA check with pg_cron; if pg_cron is off, enable it under Database → Extensions and run the `cron.schedule` line printed in the notice.
+2. Deploy the functions: `npx supabase functions deploy wa-ai`, `npx supabase functions deploy whatsapp-webhook --no-verify-jwt` (again, as it now runs the AI) and, for Meta Lead Ads, `npx supabase functions deploy meta-leads --no-verify-jwt`.
+3. In Settings → WhatsApp, save the **Anthropic API key**. Without it, a rule-based mock acknowledges every message and hands it to the team. Its activity is logged with model `mock`.
+4. In WhatsApp → **AI Assistant**:
+   - add the knowledge-base articles (verified facts only),
+   - set lead routing and the follow-up SLA,
+   - map Meta lead form IDs to enquiry types,
+   - then tick "Reply to WhatsApp enquiries automatically".
+
+How it works:
+
+- **Every new enquiry** (website form, Meta Lead Ads, WhatsApp, or added by hand) is assigned by category, gets a follow-up task due within the SLA, and the assignee is notified (bell icon). Imported leads are left alone. If the task isn't done in time, the CEO and the manager set in routing are alerted, once. Marking a task done records that the team contacted the lead.
+- **The AI** (Claude Haiku 5.5 by default) sees only active knowledge-base articles and the last 30 messages. It replies in English, Tamil or Tanglish and classifies the enquiry. It creates or updates the WhatsApp Organic lead: one per open need, and a returning contact with a different need gets a new one. Anything it isn't sure of, complaints and requests for a person are acknowledged and handed off: the AI pauses on that conversation, the lead becomes Escalated and the owner is notified.
+- **What the AI can't do:** it never confirms admissions, fees, visits or payments, and never claims the team has called. It can only send one reply to the contact it is answering (`wa_claim_ai_reply`, which also stops it replying twice or after a staff reply) and update that contact's enquiry (`wa_apply_ai`). It has no SQL or other tools.
+- **Website consent:** forms can send `whatsapp_opt_in: true` to record consent. Website and Meta leads are never messaged automatically yet. That needs an approved template and arrives with campaigns (phase 4).
+- **AI activity** (outcome, intent, tokens, errors; no message text) is listed on the AI Assistant tab.
 
 ## White-label
 

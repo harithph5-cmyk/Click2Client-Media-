@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ExternalLink, FileSpreadsheet, MessageCircle, Plus, Send, Wallet } from 'lucide-react'
+import { Bot, CalendarPlus, CheckCircle2, ExternalLink, FileSpreadsheet, MessageCircle, Plus, Send, StickyNote, Wallet } from 'lucide-react'
 import { useAuth, waMode } from '../auth'
-import { must, replyWhatsApp, sendWhatsApp, supabase, type WaResult } from '../lib/supabase'
+import { must, replyWhatsApp, runAi, sendWhatsApp, supabase, type WaResult } from '../lib/supabase'
 import { importExcel } from '../lib/excel'
-import { allDues, fillTemplate, fmtDate, inr, normPhone, type FeeComponent } from '../lib/util'
+import { allDues, fillTemplate, fmtDate, inr, LEAD_CATEGORIES, normPhone, type FeeComponent } from '../lib/util'
+import { Assistant, FollowUps } from './WhatsAppAssistant'
 import { Button, Card, cx, Empty, FormModal, inputCls, Label, Loading, PageHeader, Pill, Select, Table, Tabs, toast, useRows } from '../ui'
 
 type Template = { id: string; name: string; body: string; meta_template: string | null; lang: string }
@@ -18,14 +19,17 @@ const UPLOAD_COLS = [
   { key: 'due_date', label: 'Due Date' },
 ]
 
+type Tab = 'inbox' | 'followups' | 'ai' | 'send' | 'templates' | 'log'
+
 export default function WhatsApp() {
   const { settings } = useAuth()
-  const [tab, setTab] = useState<'inbox' | 'send' | 'templates' | 'log'>('inbox')
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(location.search).get('tab') as Tab) || 'inbox')
+  const [chat, setChat] = useState<string | null>(null)
   const templates = useRows<Template>(() => supabase.from('message_templates').select('*').order('name'))
   const mode = waMode(settings)
   return (
     <>
-      <PageHeader icon={MessageCircle} accent="whatsapp" title="WhatsApp Centre" subtitle="Conversations with parents, plus personalised bulk reminders"
+      <PageHeader icon={MessageCircle} accent="whatsapp" title="WhatsApp Centre" subtitle="Conversations with parents, the AI assistant, follow-ups and bulk reminders"
         actions={mode === 'mock' ? <Pill s="SIMULATED" className="!text-sm" /> : undefined} />
       {mode === 'mock' && (
         <p className="mb-3 rounded-2xl bg-peach/60 p-3 text-sm text-peach-ink">
@@ -33,9 +37,13 @@ export default function WhatsApp() {
         </p>
       )}
       <Tabs value={tab} onChange={setTab} tabs={[
-        { key: 'inbox', label: 'Inbox' }, { key: 'send', label: 'Bulk reminders' }, { key: 'templates', label: 'Templates' }, { key: 'log', label: 'Message log' },
+        { key: 'inbox', label: 'Inbox' }, { key: 'followups', label: 'Follow-ups' }, { key: 'ai', label: 'AI Assistant' },
+        { key: 'send', label: 'Bulk reminders' }, { key: 'templates', label: 'Templates' }, { key: 'log', label: 'Message log' },
       ]} />
-      {tab === 'inbox' ? <Inbox /> : tab === 'send' ? <Bulk templates={templates.rows} /> : tab === 'templates' ? <Templates {...templates} /> : <MessageLog />}
+      {tab === 'inbox' ? <Inbox initial={chat} />
+        : tab === 'followups' ? <FollowUps onOpenChat={(id) => { setChat(id); setTab('inbox') }} />
+        : tab === 'ai' ? <Assistant />
+        : tab === 'send' ? <Bulk templates={templates.rows} /> : tab === 'templates' ? <Templates {...templates} /> : <MessageLog />}
     </>
   )
 }
@@ -46,26 +54,34 @@ type Contact = {
   opted_in: boolean; opted_out_at: string | null; lead_id: string | null; student_id: string | null
 }
 type WaMsg = {
-  id: string; direction: 'in' | 'out'; sender: string; kind: string; body: string | null; status: string
-  error: string | null; simulated: boolean; created_at: string
+  id: string; direction: 'in' | 'out' | 'note'; sender: string; kind: string; body: string | null; status: string
+  error: string | null; simulated: boolean; created_at: string; sent_by: string | null
 }
+type ThreadLead = { id: string; name: string; category: string; status: string; priority: string; intent: string | null; ai_summary: string | null; source: string | null }
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : ''
 const inWindow = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 24 * 3600 * 1000
+const SENDER: Record<string, string> = { ai: 'AI', staff: 'Team', system: 'System' }
 
-function Inbox() {
+function Inbox({ initial }: { initial: string | null }) {
   const { profile, settings } = useAuth()
   const [filter, setFilter] = useState<'open' | 'mine' | 'resolved'>('open')
-  const [sel, setSel] = useState<string | null>(null)
+  const [sel, setSel] = useState<string | null>(initial)
   const [sim, setSim] = useState(false)
   const contacts = useRows<Contact>(() => {
     let q = supabase.from('wa_contacts').select('*').order('last_message_at', { ascending: false, nullsFirst: false }).limit(200)
     q = filter === 'mine' ? q.eq('status', 'open').eq('assigned_to', profile!.id) : q.eq('status', filter)
     return q
   }, [filter])
+  // A conversation opened from elsewhere (e.g. Follow-ups) may not be in the current filter
+  const [outside, setOutside] = useState<Contact | null>(null)
+  useEffect(() => {
+    if (sel && !contacts.loading && !contacts.rows.some((c) => c.id === sel))
+      supabase.from('wa_contacts').select('*').eq('id', sel).single().then(({ data }) => setOutside(data))
+  }, [sel, contacts.loading, contacts.rows])
   const { rows: team } = useRows<{ id: string; full_name: string }>(() => supabase.from('profiles').select('id, full_name').eq('active', true))
   // ponytail: polling; switch to Supabase Realtime if 15s feels slow
   useEffect(() => { const t = setInterval(contacts.reload, 15000); return () => clearInterval(t) }, [contacts.reload])
-  const current = contacts.rows.find((c) => c.id === sel) ?? null
+  const current = contacts.rows.find((c) => c.id === sel) ?? (outside?.id === sel ? outside : null)
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -85,6 +101,7 @@ function Inbox() {
                   className={cx('w-full rounded-2xl p-3 text-left transition', sel === c.id ? 'bg-honey/25' : 'hover:bg-charcoal/5 dark:hover:bg-white/5')}>
                   <div className="flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate font-semibold">{c.name || c.phone}</p>
+                    {c.ai_paused && <span className="text-[10px] font-bold uppercase opacity-50">human</span>}
                     {c.unread > 0 && <span className="rounded-full bg-[#25D366] px-2 text-xs font-bold text-white">{c.unread}</span>}
                   </div>
                   <p className="truncate text-xs opacity-60">{c.last_message ?? '—'}</p>
@@ -107,21 +124,34 @@ function Inbox() {
         ]}
         submitLabel="Simulate"
         onSubmit={async (v) => {
-          await must(supabase.rpc('wa_simulate_inbound', { p_phone: v.phone, p_name: v.name ?? '', p_text: v.text }))
+          const r = await must(supabase.rpc('wa_simulate_inbound', { p_phone: v.phone, p_name: v.name ?? '', p_text: v.text }))
           setFilter('open')
           contacts.reload()
+          if (settings.ai.enabled && r.inbound?.length) {
+            try {
+              const ai = await runAi(r.inbound)
+              toast(`AI: ${ai.results.map((x) => x.outcome).join(', ')}`)
+            } catch (e: any) { toast(`AI did not run: ${e.message}`, 'error') }
+            contacts.reload()
+          }
         }}>
-        <p className="mt-2 text-xs opacity-60">Only in mock mode. It goes through the same processing as a real webhook. Send STOP to test opting out.</p>
+        <p className="mt-2 text-xs opacity-60">Only in mock mode. It goes through the same processing as a real webhook, then the AI assistant (if it's on). Send STOP to test opting out.</p>
       </FormModal>
     </div>
   )
 }
 
 function Thread({ c, team, onBack, onChange }: { c: Contact; team: { id: string; full_name: string }[]; onBack: () => void; onChange: () => void }) {
+  const { profile, settings } = useAuth()
   const msgs = useRows<WaMsg>(() => supabase.from('wa_messages').select('*').eq('contact_id', c.id).order('created_at').limit(500), [c.id])
+  const lead = useRows<ThreadLead>(() => c.lead_id
+    ? supabase.from('leads').select('id, name, category, status, priority, intent, ai_summary, source').eq('id', c.lead_id)
+    : Promise.resolve({ data: [], error: null }), [c.lead_id]).rows[0]
   const [text, setText] = useState('')
+  const [note, setNote] = useState(false)
   const [key, setKey] = useState(() => crypto.randomUUID())
   const [sending, setSending] = useState(false)
+  const [task, setTask] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
   useEffect(() => { const t = setInterval(msgs.reload, 10000); return () => clearInterval(t) }, [msgs.reload])
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [msgs.rows.length])
@@ -135,36 +165,66 @@ function Thread({ c, team, onBack, onChange }: { c: Contact; team: { id: string;
     if (!text.trim()) return
     setSending(true)
     try {
-      const r = await replyWhatsApp(c.phone, text.trim(), key)
-      if (r.simulated) toast('Recorded (simulated, not sent to WhatsApp)')
-      setText(''); setKey(crypto.randomUUID())
+      if (note) {
+        await must(supabase.from('wa_messages').insert({ contact_id: c.id, direction: 'note', sender: 'staff', sent_by: profile!.id, kind: 'note', body: text.trim(), status: 'received' }))
+      } else {
+        const r = await replyWhatsApp(c.phone, text.trim(), key)
+        if (r.simulated) toast('Recorded (simulated, not sent to WhatsApp)')
+        setKey(crypto.randomUUID())
+      }
+      setText('')
       msgs.reload(); onChange()
     } catch (e: any) { toast(e.message, 'error') } finally { setSending(false) }
   }
 
   return (
-    <div className="flex h-[70vh] flex-col">
-      <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-charcoal/5 pb-3 dark:border-white/5">
+    <div className="flex h-[75vh] flex-col">
+      <div className="mb-2 flex flex-wrap items-center gap-2 border-b border-charcoal/5 pb-3 dark:border-white/5">
         <button onClick={onBack} className="rounded-xl px-2 py-1 text-sm font-semibold lg:hidden">← Back</button>
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-lg">{c.name || c.phone}</p>
-          <p className="text-xs opacity-60">{c.phone}{c.student_id && ' · parent of a student'}{c.lead_id && ' · has a website enquiry'}</p>
+          <p className="text-xs opacity-60">{c.phone}{c.student_id && ' · parent of a student'}{c.opted_in && ' · opted in'}</p>
         </div>
         {c.opted_out_at && <Pill s="Opted out" />}
+        {settings.ai.enabled && (
+          <Button size="sm" variant={c.ai_paused ? 'soft' : 'ghost'} icon={Bot} onClick={() => update({ ai_paused: !c.ai_paused })}
+            title={c.ai_paused ? 'A person is handling this conversation' : 'The AI answers new messages here'}>
+            {c.ai_paused ? 'Resume AI' : 'Pause AI'}
+          </Button>
+        )}
         <Select value={c.assigned_to ?? ''} onChange={(v) => update({ assigned_to: v || null })} placeholder="Unassigned" className="!w-40"
           options={team.map((t) => ({ value: t.id, label: t.full_name }))} />
+        <Button size="sm" variant="ghost" icon={CalendarPlus} onClick={() => setTask(true)}>Follow-up</Button>
         <Button size="sm" variant="soft" onClick={() => update({ status: c.status === 'open' ? 'resolved' : 'open' })}>
           {c.status === 'open' ? 'Mark resolved' : 'Reopen'}
         </Button>
       </div>
+      {lead && (
+        <div className="mb-2 flex flex-wrap items-center gap-2 rounded-2xl bg-sky/30 px-3 py-2 text-sm dark:bg-sky/10">
+          <span className="font-semibold">{LEAD_CATEGORIES.find((x) => x.key === lead.category)?.label ?? lead.category} enquiry</span>
+          <span className="opacity-60">· {lead.source}</span>
+          {lead.priority === 'high' && <Pill s="High priority" />}
+          <Select value={lead.status} options={settings.lead_statuses} className="!w-44 !rounded-full !py-1 text-sm" onChange={async (s) => {
+            const { error } = await supabase.from('leads').update({ status: s }).eq('id', lead.id)
+            if (error) toast(error.message, 'error'); else toast(`Lead marked ${s}`)
+          }} />
+          {lead.ai_summary && <p className="w-full text-xs opacity-70">AI summary: {lead.ai_summary}</p>}
+        </div>
+      )}
       <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-        {msgs.loading && !msgs.rows.length ? <Loading /> : msgs.rows.map((m) => (
+        {msgs.loading && !msgs.rows.length ? <Loading /> : msgs.rows.map((m) => m.direction === 'note' ? (
+          <div key={m.id} className="mx-auto max-w-[85%] rounded-2xl border border-dashed border-honey bg-honey/10 px-3 py-2 text-sm">
+            <p className="text-[11px] font-bold uppercase opacity-60">Internal note · {team.find((t) => t.id === m.sent_by)?.full_name ?? 'Team'} · {when(m.created_at)}</p>
+            <p className="whitespace-pre-wrap">{m.body}</p>
+          </div>
+        ) : (
           <div key={m.id} className={cx('flex', m.direction === 'out' && 'justify-end')}>
-            <div className={cx('max-w-[80%] rounded-2xl px-3 py-2 text-sm', m.direction === 'out' ? 'bg-leaf/60 dark:bg-leaf/15' : 'bg-charcoal/5 dark:bg-white/5')}>
+            <div className={cx('max-w-[80%] rounded-2xl px-3 py-2 text-sm',
+              m.direction === 'in' ? 'bg-charcoal/5 dark:bg-white/5' : m.sender === 'ai' ? 'bg-lav/60 dark:bg-lav/15' : 'bg-leaf/60 dark:bg-leaf/15')}>
               <p className="whitespace-pre-wrap">{m.body}</p>
               <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] opacity-60">
                 {when(m.created_at)}
-                {m.direction === 'out' && <> · {m.sender} · <span title={m.error ?? undefined}>{m.status}</span></>}
+                {m.direction === 'out' && <> · {SENDER[m.sender] ?? m.sender} · <span title={m.error ?? undefined}>{m.status}</span></>}
                 {m.simulated && <Pill s="SIMULATED" className="!px-1.5 !py-0 !text-[10px]" />}
               </p>
               {m.status === 'failed' && m.error && <p className="text-xs text-rose-ink">{m.error}</p>}
@@ -173,13 +233,30 @@ function Thread({ c, team, onBack, onChange }: { c: Contact; team: { id: string;
         ))}
         <div ref={endRef} />
       </div>
-      <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); send() }}>
+      <div className="mt-3 flex gap-1 text-xs font-semibold">
+        {(['Reply', 'Internal note'] as const).map((l, i) => (
+          <button key={l} onClick={() => setNote(i === 1)} className={cx('rounded-full px-3 py-1', note === (i === 1) ? 'bg-honey text-charcoal' : 'bg-charcoal/5 dark:bg-white/5')}>{l}</button>
+        ))}
+        {!note && c.ai_paused === false && settings.ai.enabled && <span className="ml-auto self-center opacity-50">Replying pauses the AI on this conversation</span>}
+      </div>
+      <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); send() }}>
         <textarea className={inputCls + ' min-h-[44px] flex-1 resize-none'} rows={2} value={text} onChange={(e) => setText(e.target.value)} maxLength={4000}
-          disabled={!canText} placeholder={c.opted_out_at ? 'This contact opted out of WhatsApp messages'
+          disabled={!note && !canText} placeholder={note ? 'Note for the team. The contact never sees it.' : c.opted_out_at ? 'This contact opted out of WhatsApp messages'
             : canText ? 'Type a reply…' : 'More than 24 hours since their last message. Only an approved template can be sent.'}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }} />
-        <Button type="submit" icon={Send} loading={sending} disabled={!canText || !text.trim()}>Send</Button>
+        <Button type="submit" icon={note ? StickyNote : Send} loading={sending} disabled={(!note && !canText) || !text.trim()}>{note ? 'Add note' : 'Send'}</Button>
       </form>
+      <FormModal open={task} onClose={() => setTask(false)} title="New follow-up" submitLabel="Create"
+        initial={{ title: `Call ${c.name || c.phone}`, hours: String(settings.lead_routing.sla_hours), assignee: c.assigned_to ?? profile!.id }}
+        fields={[
+          { key: 'title', label: 'Task', required: true },
+          { key: 'hours', label: 'Due within (hours)', type: 'number', required: true },
+          { key: 'assignee', label: 'Assign to', type: 'select', required: true, options: team.map((t) => ({ value: t.id, label: t.full_name })) },
+        ]}
+        onSubmit={async (v) => {
+          await must(supabase.rpc('add_follow_up', { p_lead: c.lead_id, p_contact: c.id, p_assignee: v.assignee, p_title: v.title, p_hours: Number(v.hours) }))
+          toast('Follow-up created (or an open one already exists)')
+        }} />
     </div>
   )
 }

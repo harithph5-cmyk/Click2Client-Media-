@@ -4,3 +4,6 @@ enable_signup = false
 
 [functions.whatsapp-webhook]
 verify_jwt = false
+
+[functions.meta-leads]
+verify_jwt = false

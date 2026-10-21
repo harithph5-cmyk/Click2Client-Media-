@@ -44,6 +44,10 @@ export type WaMessage = {
 }
 export type WaResult = { phone: string; status: string; error: string | null; simulated?: boolean }
 
+/** Runs the AI assistant on inbound messages (simulated ones, or a retry). */
+export const runAi = (message_ids: string[]) =>
+  callFn<{ results: { outcome: string; error?: string | null }[] }>('wa-ai', { message_ids })
+
 /** Manual inbox reply. `key` stops a double-click from sending twice. Throws if it wasn't sent. */
 export async function replyWhatsApp(phone: string, body: string, key: string) {
   const res = await callFn<{ configured: boolean; results?: WaResult[] }>('send-whatsapp', { messages: [{ phone, body, key, reply: true }] })

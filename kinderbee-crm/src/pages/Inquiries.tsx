@@ -1,18 +1,18 @@
 import { useRef, useState } from 'react'
 import { BellRing, Download, Globe, Plus, Upload } from 'lucide-react'
-import { useAuth } from '../auth'
+import { CLOSED_STATUSES, useAuth } from '../auth'
 import { must, supabase } from '../lib/supabase'
 import { Services, Verify, type ServicePayment } from './Payments'
 import { exportExcel, importExcel } from '../lib/excel'
 import { fmtDate, LEAD_CATEGORIES, normPhone, today } from '../lib/util'
-import { Button, Card, clean, cx, Empty, FormModal, inputCls, Loading, PageHeader, Select, Table, Tabs, toast, useRows, type Field } from '../ui'
+import { Button, Card, clean, cx, Empty, FormModal, inputCls, Loading, PageHeader, Pill, Select, Table, Tabs, toast, useRows, type Field } from '../ui'
 
-const STATUS = ['New', 'Contacted', 'Follow-up', 'Converted', 'Closed']
+
 type Cat = (typeof LEAD_CATEGORIES)[number]['key']
 type Lead = {
   id: string; category: Cat; name: string; phone: string | null; email: string | null; city: string | null; message: string | null
   source: string | null; assigned_to: string | null; follow_up: string | null; notes: string | null; status: string
-  extra: Record<string, string | null>; created_at: string
+  extra: Record<string, string | null>; created_at: string; priority: string; ai_summary: string | null; intent: string | null
 }
 const COMMON = ['name', 'phone', 'email', 'city', 'message', 'source', 'assigned_to', 'follow_up', 'notes', 'status']
 
@@ -39,6 +39,8 @@ export default function Website() {
 }
 
 function Leads() {
+  const { settings } = useAuth()
+  const STATUS = settings.lead_statuses
   const [cat, setCat] = useState<Cat>(LEAD_CATEGORIES[0].key)
   const [status, setStatus] = useState('')
   const [q, setQ] = useState('')
@@ -55,7 +57,7 @@ function Leads() {
     { key: 'email', label: 'Email', type: 'email' },
     { key: 'city', label: 'City' },
     ...def.extra.map(([key, label]) => ({ key: `x_${key}`, label })),
-    { key: 'source', label: 'Source', type: 'select', options: ['website', 'call', 'walk-in', 'referral', 'social media', 'event'] },
+    { key: 'source', label: 'Source', type: 'select', options: ['website', 'Meta Lead Ads', 'WhatsApp Organic', 'Franchise Campaign', 'Teacher Training Campaign', 'call', 'walk-in', 'referral', 'social media', 'event'] },
     { key: 'status', label: 'Status', type: 'select', options: STATUS },
     { key: 'assigned_to', label: 'Assigned coordinator', type: 'select', options: team.map((p) => ({ value: p.id, label: p.full_name })) },
     { key: 'follow_up', label: 'Follow-up date', type: 'date' },
@@ -109,12 +111,12 @@ function Leads() {
           <Table rows={shown} rowKey={(r) => r.id} onRow={setEditing}
             empty={<Empty title={`No ${def.label} leads yet`} text="Enquiries submitted on the website land here automatically." />}
             cols={[
-              { label: 'Lead', render: (r) => <><p className="font-semibold">{r.name}</p><p className="text-xs opacity-60">{[r.phone, r.city].filter(Boolean).join(' · ')}</p></> },
+              { label: 'Lead', render: (r) => <><p className="font-semibold">{r.name}{r.priority === 'high' && <Pill s="High priority" className="ml-1" />}</p><p className="text-xs opacity-60">{[r.phone, r.city, r.source].filter(Boolean).join(' · ')}</p>{r.ai_summary && <p className="max-w-xs text-xs opacity-60" title={r.ai_summary}>AI: {r.ai_summary}</p>}</> },
               { label: def.extra[0][1], render: (r) => r.extra?.[def.extra[0][0]] ?? '—' },
               { label: 'Assigned', render: (r) => team.find((p) => p.id === r.assigned_to)?.full_name ?? <span className="opacity-40">Unassigned</span> },
               { label: 'Follow-up', render: (r) => r.follow_up ? (
-                <span className={cx('inline-flex items-center gap-1', r.follow_up <= t && !['Converted', 'Closed'].includes(r.status) && 'font-bold text-rose-ink')}>
-                  {r.follow_up <= t && !['Converted', 'Closed'].includes(r.status) && <BellRing className="h-3.5 w-3.5" />}{fmtDate(r.follow_up)}
+                <span className={cx('inline-flex items-center gap-1', r.follow_up <= t && !CLOSED_STATUSES.includes(r.status) && 'font-bold text-rose-ink')}>
+                  {r.follow_up <= t && !CLOSED_STATUSES.includes(r.status) && <BellRing className="h-3.5 w-3.5" />}{fmtDate(r.follow_up)}
                 </span>
               ) : '—' },
               { label: 'Received', render: (r) => fmtDate(r.created_at) },

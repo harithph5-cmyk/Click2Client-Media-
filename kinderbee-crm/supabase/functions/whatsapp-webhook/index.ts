@@ -2,6 +2,7 @@
 // The signature is checked here; everything else happens in wa_ingest_webhook() so duplicates are dropped atomically.
 import { admin, secret } from '../_shared/util.ts'
 import { validSignature } from '../_shared/meta.ts'
+import { runAssistant } from '../_shared/assistant.ts'
 
 Deno.serve(async (req) => {
   const url = new URL(req.url)
@@ -33,6 +34,13 @@ Deno.serve(async (req) => {
     await db.from('wa_webhook_events').insert({ event_key: `err:${crypto.randomUUID()}`, kind: 'error', error: error.message, payload: body })
     return new Response('retry', { status: 500 })
   }
-  console.log('whatsapp-webhook', JSON.stringify(data)) // counts only, no message content
+  const { inbound = [], ...counts } = data ?? {}
+  console.log('whatsapp-webhook', JSON.stringify(counts)) // counts only, no message content
+  // Answer Meta at once; the AI runs after the response (one message at a time, oldest first).
+  if (inbound.length) {
+    const work = (async () => { for (const id of inbound) await runAssistant(db, id).catch((e) => console.error('assistant', String(e))) })()
+    // @ts-ignore EdgeRuntime is a Supabase global
+    typeof EdgeRuntime !== 'undefined' ? EdgeRuntime.waitUntil(work) : await work
+  }
   return new Response('ok')
 })

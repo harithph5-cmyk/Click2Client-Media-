@@ -1,8 +1,9 @@
-import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Component, lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { supabase } from './lib/supabase'
 import {
-  CalendarCheck, Contact, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
+  Bell, CalendarCheck, Contact, CreditCard, GraduationCap, Globe, LayoutDashboard, LogOut, Menu, MessageCircle, Moon,
   Settings as SettingsIcon, Sun, Users, Wallet, X, Lock, Image as ImageIcon, type LucideIcon,
 } from 'lucide-react'
 import { brand } from './config/brand'
@@ -68,6 +69,60 @@ function Guard({ m, ceo, children }: { m?: ModuleKey; ceo?: boolean; children: R
   if ((m && !can(m)) || (ceo && !isCeo))
     return <Empty title="This hive is locked" text="You don't have access to this module. Ask the CEO to enable it for you." />
   return <>{children}</>
+}
+
+type Note = { id: number; title: string; body: string | null; link: string | null; read_at: string | null; created_at: string }
+
+// Follow-up tasks, escalations and AI hand-offs land here. ponytail: polls every minute; Realtime if that feels slow
+function Notifications() {
+  const { profile } = useAuth()
+  const nav = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [rows, setRows] = useState<Note[]>([])
+  const load = useCallback(() => {
+    supabase.from('notifications').select('*').eq('user_id', profile!.id).order('created_at', { ascending: false }).limit(30)
+      .then(({ data }) => setRows(data ?? []))
+  }, [profile])
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t) }, [load])
+  const unread = rows.filter((r) => !r.read_at)
+  async function go(n: Note) {
+    setOpen(false)
+    if (!n.read_at) await supabase.from('notifications').update({ read_at: new Date().toISOString() }).eq('id', n.id)
+    load()
+    if (n.link) nav(n.link)
+  }
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className="relative rounded-xl p-2 hover:bg-charcoal/5 dark:hover:bg-white/10" aria-label={`Notifications (${unread.length} unread)`}>
+        <Bell className="h-5 w-5" />
+        {unread.length > 0 && <span className="absolute right-1 top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unread.length}</span>}
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-3xl border border-charcoal/10 bg-white p-2 shadow-lg dark:border-white/10 dark:bg-card">
+          <div className="flex items-center justify-between px-2 py-1">
+            <p className="font-display">Notifications</p>
+            {unread.length > 0 && (
+              <button className="text-xs font-semibold opacity-60" onClick={async () => {
+                await supabase.from('notifications').update({ read_at: new Date().toISOString() }).in('id', unread.map((n) => n.id)); load()
+              }}>Mark all read</button>
+            )}
+          </div>
+          <ul className="max-h-96 overflow-y-auto">
+            {rows.map((n) => (
+              <li key={n.id}>
+                <button onClick={() => go(n)} className={cx('w-full rounded-2xl p-2 text-left text-sm hover:bg-charcoal/5 dark:hover:bg-white/5', !n.read_at && 'font-semibold')}>
+                  <p>{n.title}</p>
+                  {n.body && <p className="text-xs font-normal opacity-60">{n.body}</p>}
+                  <p className="text-[11px] font-normal opacity-40">{new Date(n.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>
+                </button>
+              </li>
+            ))}
+            {!rows.length && <li className="p-3 text-sm opacity-50">Nothing yet.</li>}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Shell() {
@@ -136,15 +191,17 @@ function Shell() {
 
       <header className="sticky top-0 z-20 flex items-center gap-2 border-b border-charcoal/5 bg-cream/80 px-4 py-3 backdrop-blur sm:px-6 dark:border-white/5 dark:bg-night/80">
         <button onClick={() => setOpen(true)} className="rounded-xl p-2 lg:hidden" aria-label="Open menu"><Menu /></button>
-        <button onClick={toggleTheme} className="ml-auto rounded-xl p-2 hover:bg-charcoal/5 dark:hover:bg-white/10" aria-label="Toggle dark mode">
+        <div className="ml-auto" />
+        <Notifications />
+        <button onClick={toggleTheme} className="rounded-xl p-2 hover:bg-charcoal/5 dark:hover:bg-white/10" aria-label="Toggle dark mode">
           {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         <Suspense fallback={<Splash />}>
-          <motion.div key={loc.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            <Boundary key={loc.pathname}>
+          <motion.div key={loc.pathname + loc.search} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+            <Boundary key={loc.pathname + loc.search}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/admissions" element={<Guard m="admissions"><Admissions /></Guard>} />
