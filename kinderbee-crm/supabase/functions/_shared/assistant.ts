@@ -56,7 +56,7 @@ export async function runAssistant(db: Db, messageId: string) {
       const ask = (m: string) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
         method: 'POST',
         headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(45_000),
+        signal: AbortSignal.timeout(25_000),
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
@@ -64,9 +64,9 @@ export async function runAssistant(db: Db, messageId: string) {
           generationConfig: { maxOutputTokens: 6000, responseMimeType: 'application/json', responseJsonSchema: RESULT_SCHEMA },
         }),
       })
-      let res = await ask(model)
-      // Free tier is often "high demand" (503) or rate-limited (429): fall back to the lighter model once
-      if (res.status === 503 || res.status === 429) res = await ask(GEMINI_FALLBACK)
+      // Free tier is often slow, "high demand" (503) or rate-limited (429): fall back to the lighter model once
+      let res = await ask(model).catch(() => null)
+      if (!res || res.status === 503 || res.status === 429) res = await ask(GEMINI_FALLBACK)
       const out = await res.json().catch(() => ({}))
       const cand = out?.candidates?.[0]
       usage = { input_tokens: out?.usageMetadata?.promptTokenCount, output_tokens: out?.usageMetadata?.candidatesTokenCount }
@@ -135,6 +135,9 @@ export async function runAssistant(db: Db, messageId: string) {
       replied, name: r.name, child_age: r.child_age, preferred_centre: r.preferred_centre,
     },
   })
+  // A technical failure (AI timeout/outage) still alerts the team, but must not silence the bot for this
+  // contact's next messages; only a real hand-off (complaint, "talk to a person", unanswerable) pauses it.
+  if (error && !c.ai_paused) await db.from('wa_contacts').update({ ai_paused: false }).eq('id', c.id)
   return log({
     lead_id: leadId ?? null, model, intent: r.intent, category: r.category, priority: r.priority,
     confident: r.confident, needs_human: r.needs_human,

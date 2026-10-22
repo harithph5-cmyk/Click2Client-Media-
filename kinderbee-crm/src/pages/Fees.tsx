@@ -155,7 +155,10 @@ function Structure({ comps, students, reload }: Data) {
   const list = comps.filter((c) => c.program === program && c.academic_year === year).sort((a, b) => a.sort - b.sort)
   const current = editing && editing !== 'new' ? editing : null
   const years = [...new Set([settings.academic_year, ...comps.map((c) => c.academic_year)])].sort()
-  const total = list.reduce((s, c) => s + Number(c.amount) * (c.monthly ? 12 : 1), 0)
+  // Optional items are only owed once bought (see studentDues), so they stay out of the required total
+  const yearly = (c: (typeof list)[number]) => Number(c.amount) * (c.monthly ? 12 : 1)
+  const total = list.filter((c) => !c.optional).reduce((s, c) => s + yearly(c), 0)
+  const extras = list.filter((c) => c.optional).reduce((s, c) => s + yearly(c), 0)
 
   return (
     <Card>
@@ -194,7 +197,7 @@ function Structure({ comps, students, reload }: Data) {
             </span>
           ) },
         ]} />
-      {!!list.length && <p className="mt-3 text-right text-sm">Yearly total per student: <b>{inr(total)}</b> · {students.filter((s) => s.program === program && s.academic_year === year).length} students</p>}
+      {!!list.length && <p className="mt-3 text-right text-sm">Yearly total per student: <b>{inr(total)}</b>{extras > 0 && <span className="opacity-60"> + {inr(extras)} optional</span>} ·{students.filter((s) => s.program === program && s.academic_year === year).length} students</p>}
       <FormModal open={!!editing} onClose={() => setEditing(null)} title={current ? `Edit ${current.name}` : 'New fee component'}
         initial={current ?? { sort: list.length + 1 }}
         fields={[

@@ -29,6 +29,10 @@ export default function Settings() {
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState('')
 
+  // Settings are loaded at login; a long-open tab must not save stale values (e.g. Mock over Live), so refresh on open
+  useEffect(() => { reloadSettings() }, [reloadSettings])
+  useEffect(() => { setWa(settings.whatsapp); setLimits(settings.campaign_limits) }, [settings.whatsapp, settings.campaign_limits])
+
   useEffect(() => {
     if (isCeo) Promise.all(SECRETS.map(([k]) => supabase.rpc('has_secret', { k }).then(({ data }) => [k, !!data] as const)))
       .then((r) => setSaved(Object.fromEntries(r)))

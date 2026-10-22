@@ -106,6 +106,9 @@ export function Assistant() {
   const [editing, setEditing] = useState<Article | 'new' | null>(null)
   const kb = useRows<Article>(() => supabase.from('kb_articles').select('*').order('topic').order('title'))
   const logs = useRows<AiLog>(() => supabase.from('ai_logs').select('*').order('created_at', { ascending: false }).limit(100))
+  // Settings are loaded at login: refresh on open so saving a long-open tab can't revert newer values
+  useEffect(() => { reloadSettings() }, [reloadSettings])
+  useEffect(() => { setAi(settings.ai); setRouting(settings.lead_routing) }, [settings.ai, settings.lead_routing])
   const keyName = ai.model.startsWith('gemini') ? 'gemini_api_key' : 'anthropic_api_key'
   useEffect(() => { if (isCeo) supabase.rpc('has_secret', { k: keyName }).then(({ data }) => setHasKey(!!data)) }, [isCeo, keyName])
   const ro = !isCeo
