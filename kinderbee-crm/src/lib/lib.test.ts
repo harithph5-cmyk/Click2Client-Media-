@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto'
 import { allDues, fillTemplate, fmtDate, monthsDue, normPhone, placeholders, studentDues } from './util.ts'
 import { graphError, inWindow, validSignature } from '../../supabase/functions/_shared/meta.ts'
 import { backoffSeconds, e164, ineligible, istDate, mergeByPhone, retryable, toMetaBody } from '../../supabase/functions/_shared/campaign-core.ts'
-import { HANDOFF_REPLY, inHours, mockAssistant, parseAiResult, systemPrompt, transcript } from '../../supabase/functions/_shared/assistant-core.ts'
+import { HANDOFF_REPLY, inHours, mockAssistant, parseAiResult, systemPrompt, transcript, withWelcome } from '../../supabase/functions/_shared/assistant-core.ts'
 
 assert.equal(normPhone('98450 12345'), '+919845012345')
 assert.equal(normPhone('+91-98450-12345'), '+919845012345')
@@ -84,6 +84,14 @@ assert.equal(inHours(new Date('2026-10-25T05:00:00Z'), hrs), false) // Sunday
 const tx = transcript([{ direction: 'in', sender: 'contact', body: 'Hi' }, { direction: 'out', sender: 'ai', body: 'Hello!' }, { direction: 'in', sender: 'contact', body: null }],
   { 'Child age': '4', 'Preferred centre': null })
 assert.ok(tx.includes('Child age: 4') && !tx.includes('Preferred centre') && tx.includes('KinderBee (assistant): Hello!'))
+assert.equal(withWelcome('Fees are on request.', 'Hi! We help.', true), 'Hi! We help.\n\nFees are on request.') // new contact: welcome first
+assert.equal(withWelcome('', 'Hi! We help.', true), 'Hi! We help.') // greeting only: just the welcome
+assert.equal(withWelcome('Sure.', 'Hi! We help.', false), 'Sure.') // returning contact: no welcome
+assert.equal(withWelcome('Sure.', '', true), 'Sure.') // welcome switched off
+assert.ok(withWelcome('', undefined, true).startsWith('Greetings from KinderBee')) // never saved: built-in default
+assert.equal(mockAssistant('CBSE school setup cost').category, 'cbse')
+assert.equal(mockAssistant('joint venture on my land').intent, 'general')
+assert.ok(transcript([{ direction: 'in', sender: 'contact', body: 'hello' }], {}, 'Welcome!').includes('only a greeting'))
 assert.ok(systemPrompt([]).includes('knowledge base is empty'))
 assert.ok(systemPrompt([{ title: 'Timings', topic: 'timings', body: '9 to 6' }]).includes('### Timings [timings]\n9 to 6'))
 

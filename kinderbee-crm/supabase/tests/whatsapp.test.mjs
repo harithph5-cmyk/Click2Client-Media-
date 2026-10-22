@@ -322,3 +322,10 @@ const ret = (await one(`select wa_retention() r`)).r
 assert.equal(typeof ret.webhook_events, 'number')
 
 console.log('0009 PGlite checks: all passed')
+
+// Business-enquiry knowledge base seed: loads every article once, and re-running adds nothing
+const seed = readFileSync(fileURLToPath(new URL('../seed_business_kb.sql', import.meta.url)), 'utf8')
+const kbBefore = Number((await one(`select count(*) n from kb_articles`)).n)
+await db.exec(seed); await db.exec(seed)
+assert.equal(Number((await one(`select count(*) n from kb_articles`)).n) - kbBefore, 10)
+console.log('KB seed PGlite checks: all passed')

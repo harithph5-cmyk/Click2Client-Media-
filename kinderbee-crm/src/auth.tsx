@@ -25,7 +25,8 @@ export type Settings = {
   // off = wa.me links, mock = simulated sends (nothing leaves the CRM), live = Cloud API
   whatsapp: { phone_number_id: string; enabled?: boolean; mode?: 'off' | 'mock' | 'live'; business_account_id?: string; functions_url?: string }
   lead_statuses: string[]
-  ai: { enabled: boolean; model: string; reply_when: 'always' | 'after_hours'; hours: { start: string; end: string; days: number[] } }
+  // welcome/handoff unset = the built-in defaults in assistant-core.ts; welcome '' = no welcome message
+  ai: { enabled: boolean; model: string; reply_when: 'always' | 'after_hours'; hours: { start: string; end: string; days: number[] }; welcome?: string; handoff?: string }
   lead_routing: { default_assignee: string | null; by_category: Record<string, string>; sla_hours: number; manager: string | null }
   meta_forms: Record<string, string>
   campaign_limits: { per_minute: number; daily_max: number; max_attempts: number }

@@ -11,7 +11,8 @@ const SECRETS = [
   ['whatsapp_app_secret', 'Meta app secret (checks webhook signatures)', 'App settings → Basic'],
   ['whatsapp_verify_token', 'Webhook verify token', 'Any long random string'],
   ['meta_page_token', 'Facebook Page access token (Meta Lead Ads)', 'Page token with leads_retrieval'],
-  ['anthropic_api_key', 'Anthropic API key (AI assistant)', 'sk-ant-…'],
+  ['anthropic_api_key', 'Anthropic API key (AI assistant, Claude models)', 'sk-ant-…'],
+  ['gemini_api_key', 'Google Gemini API key (AI assistant, free tier)', 'From aistudio.google.com → Get API key'],
 ] as const
 
 export default function Settings() {

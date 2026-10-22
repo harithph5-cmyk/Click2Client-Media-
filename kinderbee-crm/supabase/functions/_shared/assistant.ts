@@ -4,9 +4,10 @@
 import Anthropic from 'npm:@anthropic-ai/sdk@0.131.0'
 import { admin, secret } from './util.ts'
 import { deliver, waConfig } from './wa.ts'
-import { HANDOFF_REPLY, inHours, mockAssistant, parseAiResult, RESULT_SCHEMA, systemPrompt, transcript, type AiResult } from './assistant-core.ts'
+import { HANDOFF_REPLY, inHours, mockAssistant, parseAiResult, RESULT_SCHEMA, systemPrompt, transcript, withWelcome, type AiResult } from './assistant-core.ts'
 
 type Db = ReturnType<typeof admin>
+const GEMINI_FALLBACK = 'gemini-3.5-flash-lite'
 
 export async function runAssistant(db: Db, messageId: string) {
   const t0 = Date.now()
@@ -32,25 +33,60 @@ export async function runAssistant(db: Db, messageId: string) {
     c.lead_id ? db.from('leads').select('name, child_age, preferred_centre, category').eq('id', c.lead_id).single() : Promise.resolve({ data: null }),
   ])
   const known = {
-    'Name': lead?.name ?? c.name, 'Child age': lead?.child_age, 'Preferred centre': lead?.preferred_centre,
+    'Name': lead?.name ?? c.name, 'Child age': lead?.child_age, 'City / centre': lead?.preferred_centre,
     'Existing KinderBee parent': c.student_id ? 'yes' : null,
   }
+  // A contact we've never written to gets the welcome message first (Default messages in the CRM).
+  const firstContact = !(thread ?? []).some((m) => m.direction === 'out')
+  const welcome = firstContact ? withWelcome('', ai.welcome, true) : ''
+  const handoff = ai.handoff?.trim() || HANDOFF_REPLY
 
-  // ── Ask the model (or the rule-based mock when no key is set) ──
-  const apiKey = await secret(db, 'anthropic_api_key')
+  // ── Ask the model (or the rule-based mock when no key is set). gemini-* models use Google's free-tier key ──
+  const gemini = String(ai.model ?? '').startsWith('gemini')
+  const apiKey = await secret(db, gemini ? 'gemini_api_key' : 'anthropic_api_key')
   const model = apiKey ? (ai.model || 'claude-haiku-5-5') : 'mock'
+  const system = systemPrompt(kb ?? [])
+  const user = transcript((thread ?? []).reverse(), known, welcome)
   let r: AiResult | null = null
   let usage: { input_tokens?: number; output_tokens?: number } = {}
   let error: string | null = null
   if (!apiKey) r = mockAssistant(msg.body ?? '')
-  else {
+  else if (gemini) {
+    try {
+      const ask = (m: string) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST',
+        headers: { 'x-goog-api-key': apiKey, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(45_000),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          // thinking tokens count towards this limit, hence the headroom
+          generationConfig: { maxOutputTokens: 6000, responseMimeType: 'application/json', responseJsonSchema: RESULT_SCHEMA },
+        }),
+      })
+      let res = await ask(model)
+      // Free tier is often "high demand" (503) or rate-limited (429): fall back to the lighter model once
+      if (res.status === 503 || res.status === 429) res = await ask(GEMINI_FALLBACK)
+      const out = await res.json().catch(() => ({}))
+      const cand = out?.candidates?.[0]
+      usage = { input_tokens: out?.usageMetadata?.promptTokenCount, output_tokens: out?.usageMetadata?.candidatesTokenCount }
+      if (!res.ok) error = `Gemini API ${res.status}: ${out?.error?.message ?? 'request failed'}`
+      else if (cand?.finishReason === 'MAX_TOKENS') error = 'Reply was cut off'
+      else {
+        r = parseAiResult(cand?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join('') ?? '')
+        if (!r) error = cand?.finishReason && cand.finishReason !== 'STOP' ? `Gemini stopped: ${cand.finishReason}` : 'Unreadable AI output'
+      }
+    } catch (e) {
+      error = `Gemini API: ${String(e)}`
+    }
+  } else {
     try {
       const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 45_000 })
       const res = await client.messages.create({
         model,
         max_tokens: 2000,
-        system: [{ type: 'text', text: systemPrompt(kb ?? []), cache_control: { type: 'ephemeral' } }],
-        messages: [{ role: 'user', content: transcript((thread ?? []).reverse(), known) }],
+        system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+        messages: [{ role: 'user', content: user }],
         output_config: { effort: 'low', format: { type: 'json_schema', schema: RESULT_SCHEMA as unknown as Record<string, unknown> } },
       })
       usage = res.usage
@@ -70,6 +106,8 @@ export async function runAssistant(db: Db, messageId: string) {
     r = { ...mockAssistant(msg.body ?? ''), summary: 'The AI could not process this message. Please read the conversation.' }
     r.reply = HANDOFF_REPLY
   }
+  if (r.reply === HANDOFF_REPLY) r.reply = handoff
+  r.reply = withWelcome(r.reply, welcome, firstContact)
 
   // ── Reply (unless staff handle working hours, or WhatsApp sending is off) ──
   let replied = false, skip: string | null = null

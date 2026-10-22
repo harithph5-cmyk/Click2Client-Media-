@@ -1,9 +1,10 @@
 // WhatsApp → Follow-ups and AI Assistant tabs.
 import { useEffect, useState } from 'react'
-import { BellRing, BookOpen, Bot, CheckCircle2, Plus, Route, Save, Trash2 } from 'lucide-react'
+import { BellRing, BookOpen, Bot, CheckCircle2, MessageSquareText, Plus, Route, Save, Trash2 } from 'lucide-react'
 import { useAuth, type Settings } from '../auth'
 import { must, supabase } from '../lib/supabase'
 import { LEAD_CATEGORIES } from '../lib/util'
+import { HANDOFF_REPLY, WELCOME_DEFAULT } from '../../supabase/functions/_shared/assistant-core.ts'
 import { Button, Card, cx, Empty, FormModal, inputCls, Label, Loading, Pill, Select, Table, toast, useRows } from '../ui'
 
 const when = (iso: string | null) => iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
@@ -83,8 +84,11 @@ type AiLog = {
   id: number; created_at: string; outcome: string; intent: string | null; category: string | null; priority: string | null
   model: string | null; needs_human: boolean | null; error: string | null; input_tokens: number | null; output_tokens: number | null; ms: number | null
 }
-const TOPICS = ['admissions', 'kips', 'franchise', 'teacher_training', 'curriculum', 'centres', 'fees', 'timings', 'faq', 'escalation', 'general']
+const TOPICS = ['company', 'kips', 'franchise', 'cbse_ib_school', 'degree_college', 'joint_ventures', 'consulting', 'teacher_training',
+  'admissions', 'curriculum', 'centres', 'fees', 'timings', 'faq', 'escalation', 'general']
 const MODELS = [
+  { value: 'gemini-3.5-flash', label: 'Google Gemini 3.5 Flash: free tier (needs Gemini API key)' },
+  { value: 'gemini-3.8-flash', label: 'Google Gemini 3.8 Flash: free tier, newer but often busy' },
   { value: 'claude-haiku-5-5', label: 'Claude Haiku 5.5: fastest, lowest cost' },
   { value: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5: more careful' },
   { value: 'claude-opus-5-5', label: 'Claude Opus 5.5: most capable, highest cost' },
@@ -102,7 +106,8 @@ export function Assistant() {
   const [editing, setEditing] = useState<Article | 'new' | null>(null)
   const kb = useRows<Article>(() => supabase.from('kb_articles').select('*').order('topic').order('title'))
   const logs = useRows<AiLog>(() => supabase.from('ai_logs').select('*').order('created_at', { ascending: false }).limit(100))
-  useEffect(() => { if (isCeo) supabase.rpc('has_secret', { k: 'anthropic_api_key' }).then(({ data }) => setHasKey(!!data)) }, [isCeo])
+  const keyName = ai.model.startsWith('gemini') ? 'gemini_api_key' : 'anthropic_api_key'
+  useEffect(() => { if (isCeo) supabase.rpc('has_secret', { k: keyName }).then(({ data }) => setHasKey(!!data)) }, [isCeo, keyName])
   const ro = !isCeo
 
   async function save<K extends keyof Settings>(key: K, value: Settings[K]) {
@@ -122,7 +127,7 @@ export function Assistant() {
         <p className="text-sm opacity-60">
           The assistant answers only from the knowledge base, never confirms admissions, fees or visits, and hands
           anything it can't answer to a person (pausing itself on that conversation).
-          {isCeo && hasKey === false && <b className="text-rose-ink"> No Anthropic API key is saved (Settings → WhatsApp), so a rule-based mock replies with a hand-off message.</b>}
+          {isCeo && hasKey === false && <b className="text-rose-ink"> No {keyName === 'gemini_api_key' ? 'Gemini' : 'Anthropic'} API key is saved for this model (Settings → WhatsApp), so a rule-based mock replies with a hand-off message.</b>}
         </p>
         <label className="flex items-center gap-2 text-sm font-semibold">
           <input type="checkbox" className="h-4 w-4 accent-honey" disabled={ro} checked={ai.enabled} onChange={(e) => setAi({ ...ai, enabled: e.target.checked })} />
@@ -144,6 +149,18 @@ export function Assistant() {
           ))}
         </div>
         {!ro && <Button icon={Save} loading={busy === 'ai'} onClick={() => save('ai', ai)}>Save</Button>}
+      </Card>
+
+      <Card className="space-y-3">
+        <h2 className="flex items-center gap-2 font-display text-lg"><MessageSquareText className="h-5 w-5 text-honey" />Default messages</h2>
+        <Label label="Welcome message (sent first to every new contact, then the AI answers their question)">
+          <textarea rows={10} className={inputCls} disabled={ro} value={ai.welcome ?? WELCOME_DEFAULT} onChange={(e) => setAi({ ...ai, welcome: e.target.value })} />
+        </Label>
+        <Label label="Hand-off message (when the AI can't answer and passes the chat to your team)">
+          <textarea rows={3} className={inputCls} disabled={ro} value={ai.handoff ?? HANDOFF_REPLY} onChange={(e) => setAi({ ...ai, handoff: e.target.value })} />
+        </Label>
+        <p className="text-xs opacity-60">Leave the welcome message empty to skip it.</p>
+        {!ro && <Button icon={Save} loading={busy === 'ai'} onClick={() => save('ai', ai)}>Save messages</Button>}
       </Card>
 
       <Card className="space-y-3">
