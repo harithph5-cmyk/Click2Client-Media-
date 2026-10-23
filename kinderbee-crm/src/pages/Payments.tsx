@@ -152,14 +152,14 @@ export function Services({ rows, loading, reload }: { rows: ServicePayment[]; lo
             { label: 'Amount', render: (r) => <b>{inr(r.amount)}</b> },
             { label: 'Mode / Ref', render: (r) => <span className="text-sm"><span className="uppercase">{r.mode}</span> · {r.reference ?? '—'}</span> },
             { label: 'Date', render: (r) => fmtDate(r.paid_on) },
-            { label: 'Status', render: (r) => <span title={r.reject_reason ?? undefined}><Pill s={r.status} /></span> },
-            { label: '', render: (r) => <div className="flex gap-1">
-              {r.proof_path && <Button size="sm" variant="ghost" icon={FileText} onClick={() => openFile(r.proof_path!)}>Proof</Button>}
+            { label: 'Status', render: (r) => <div className="flex flex-wrap items-center gap-1">
+              <span title={r.reject_reason ?? undefined}><Pill s={r.status} /></span>
               {canVerify && r.website_payment_id && r.status !== 'Pending' && (
                 <Button size="sm" variant="ghost" icon={RefreshCw} title="Send this decision to the website again" onClick={async () => {
                   if (await syncWebsite(r, r.status === 'Verified' ? 'verified' : 'rejected', r.reject_reason ?? undefined)) toast('Website updated')
                 }}>Sync to website</Button>
               )}
+              {r.proof_path && <Button size="sm" variant="ghost" icon={FileText} onClick={() => openFile(r.proof_path!)}>Proof</Button>}
             </div> },
           ]} />
       )}
