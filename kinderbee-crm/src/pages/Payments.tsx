@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BadgeCheck, CheckCircle2, CreditCard, Download, FileDown, FileText, History, Plus, UserPlus, XCircle } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, CreditCard, Download, FileDown, FileText, History, Plus, RefreshCw, UserPlus, XCircle } from 'lucide-react'
 import { useAuth } from '../auth'
 import { brand } from '../config/brand'
 import { must, openFile, sendWhatsApp, supabase, upload } from '../lib/supabase'
@@ -127,6 +127,7 @@ function Salaries() {
 }
 
 export function Services({ rows, loading, reload }: { rows: ServicePayment[]; loading: boolean; reload: () => void }) {
+  const { canVerify } = useAuth()
   const [adding, setAdding] = useState(false)
   const [service, setService] = useState('')
   const [status, setStatus] = useState('')
@@ -152,7 +153,14 @@ export function Services({ rows, loading, reload }: { rows: ServicePayment[]; lo
             { label: 'Mode / Ref', render: (r) => <span className="text-sm"><span className="uppercase">{r.mode}</span> · {r.reference ?? '—'}</span> },
             { label: 'Date', render: (r) => fmtDate(r.paid_on) },
             { label: 'Status', render: (r) => <span title={r.reject_reason ?? undefined}><Pill s={r.status} /></span> },
-            { label: '', render: (r) => r.proof_path && <Button size="sm" variant="ghost" icon={FileText} onClick={() => openFile(r.proof_path!)}>Proof</Button> },
+            { label: '', render: (r) => <div className="flex gap-1">
+              {r.proof_path && <Button size="sm" variant="ghost" icon={FileText} onClick={() => openFile(r.proof_path!)}>Proof</Button>}
+              {canVerify && r.website_payment_id && r.status !== 'Pending' && (
+                <Button size="sm" variant="ghost" icon={RefreshCw} title="Send this decision to the website again" onClick={async () => {
+                  if (await syncWebsite(r, r.status === 'Verified' ? 'verified' : 'rejected', r.reject_reason ?? undefined)) toast('Website updated')
+                }}>Sync to website</Button>
+              )}
+            </div> },
           ]} />
       )}
       <FormModal open={adding} onClose={() => setAdding(false)} title="Record service payment" submitLabel="Send for verification"
@@ -185,8 +193,8 @@ export function Services({ rows, loading, reload }: { rows: ServicePayment[]; lo
 
 // A payment that came from the website is also marked on the website, which unlocks the course or confirms the
 // consultation booking there. A failure only warns: the CRM record is already verified.
-async function syncWebsite(p: ServicePayment, status: 'verified' | 'rejected', notes?: string) {
-  if (!p.website_payment_id) return
+async function syncWebsite(p: ServicePayment, status: 'verified' | 'rejected', notes?: string): Promise<boolean> {
+  if (!p.website_payment_id) return true
   try {
     const { data } = await supabase.auth.getSession()
     const r = await fetch(`${brand.websiteUrl}/api/payments/${encodeURIComponent(p.website_payment_id)}`, {
@@ -194,9 +202,11 @@ async function syncWebsite(p: ServicePayment, status: 'verified' | 'rejected', n
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token}` },
       body: JSON.stringify(notes ? { status, notes } : { status }),
     })
-    if (!r.ok) throw new Error(`website replied ${r.status}`)
+    if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? `website replied ${r.status}`)
+    return true
   } catch (e: any) {
-    toast(`Saved here, but the website could not be updated (${e.message}). Update it in the website admin too.`, 'error')
+    toast(`Saved here, but the website could not be updated: ${e.message}. Use “Sync to website” on the Payments tab to retry.`, 'error')
+    return false
   }
 }
 
