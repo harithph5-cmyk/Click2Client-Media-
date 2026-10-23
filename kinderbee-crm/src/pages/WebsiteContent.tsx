@@ -120,6 +120,18 @@ function GalleryTab() {
     }
   }
 
+  async function replace(p: Photo) {
+    const [f] = await pickImages()
+    if (!f) return
+    setBusy('Replacing photo…')
+    try {
+      const url = await uploadImage(f, 'gallery')
+      await site(`/api/portal/gallery/${p.id}`, 'PUT', { url })
+      setData((rows) => rows?.map((r) => (r.id === p.id ? { ...r, url } : r)) ?? rows)
+      toast('Photo replaced on the website')
+    } catch (e) { toast(errMsg(e), 'error') } finally { setBusy('') }
+  }
+
   async function remove(p: Photo) {
     if (!confirm(`Delete "${p.title}" from the website gallery?`)) return
     try {
@@ -151,6 +163,7 @@ function GalleryTab() {
               <p className="text-xs opacity-50">{p.date}{p.uploadedBy ? ` · ${p.uploadedBy}` : ''}</p>
               <div className="mt-2 flex gap-1">
                 <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setRename(p)} aria-label="Rename" title="Rename" />
+                <Button size="sm" variant="ghost" icon={ImagePlus} disabled={!!busy} onClick={() => replace(p)} aria-label="Replace photo" title="Replace photo" />
                 {p.status === 'approved'
                   ? <Button size="sm" variant="ghost" icon={EyeOff} onClick={() => update(p, { status: 'rejected' })} aria-label="Hide from website" title="Hide from website" />
                   : <Button size="sm" variant="ghost" icon={Eye} onClick={() => update(p, { status: 'approved' })} aria-label="Show on website" title="Show on website" />}
@@ -392,6 +405,15 @@ function ListingsTab() {
     imgs.splice(to, 0, it)
     save(l, imgs, to === 0 ? 'Cover photo set' : undefined)
   }
+  async function replace(l: Listing, i: number) {
+    const [f] = await pickImages()
+    if (!f) return
+    setBusy(`${l.id}:Replacing photo…`)
+    try {
+      const url = await uploadImage(f, 'opportunities')
+      await save(l, l.images.map((img, j) => (j === i ? { ...img, url } : img)), 'Photo replaced')
+    } catch (e) { toast(errMsg(e), 'error') } finally { setBusy('') }
+  }
   const remove = (l: Listing, i: number) => {
     if (!confirm('Delete this photo from the listing?')) return
     save(l, l.images.filter((_, j) => j !== i), 'Photo deleted')
@@ -439,6 +461,7 @@ function ListingsTab() {
                       <Button size="sm" variant="ghost" icon={ChevronRight} disabled={i === l.images.length - 1} onClick={() => move(l, i, i + 1)} aria-label="Move right" title="Move right" className="!px-1.5" />
                       {i > 0 && <Button size="sm" variant="ghost" icon={Star} onClick={() => move(l, i, 0)} aria-label="Make cover" title="Make cover photo" className="!px-1.5" />}
                       <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEdit({ listing: l, i })} aria-label="Edit caption" title="Edit caption" className="!px-1.5" />
+                      <Button size="sm" variant="ghost" icon={ImagePlus} disabled={!!busy} onClick={() => replace(l, i)} aria-label="Replace photo" title="Replace photo" className="!px-1.5" />
                       <Button size="sm" variant="ghost" icon={Trash2} onClick={() => remove(l, i)} aria-label="Delete" title="Delete" className="ml-auto !px-1.5 !text-red-500" />
                     </div>
                   </div>
