@@ -257,6 +257,7 @@ export function Verify({ rows, reload, loading }: { rows: ServicePayment[]; relo
             <p className="relative font-display text-2xl">{inr(p.amount)}</p>
             <p className="font-semibold">{p.payer_name}</p>
             <p className="text-sm opacity-60">{p.phone} · <span className="uppercase">{p.mode}</span> · {p.reference ?? 'no ref'} · {fmtDate(p.paid_on)}</p>
+            {p.extra?.notes && <p className="mt-1 text-xs opacity-70">{p.extra.notes}</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               {p.proof_path && <Button size="sm" variant="soft" icon={FileText} onClick={() => openFile(p.proof_path!)}>Proof</Button>}
               {canVerify && <>
