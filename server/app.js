@@ -18,9 +18,9 @@ import * as store from './store/db.js';
 import { TIERS, publicTiers, shapeAudit, rateLimited, refreshPricing, savePricing } from './commerce/plans.js';
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
-import { renderPage, renderPost, renderProject, renderTool, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
+import { renderPage, renderPost, renderTool, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
-import * as portfolio from './portfolio.js';
+import * as pages from './pages.js';
 import * as media from './media.js';
 import * as content from './content.js';
 import * as tools from './tools.js';
@@ -328,24 +328,17 @@ admin.put('/settings/qr', h(async (req, res) => {
 }));
 admin.delete('/settings/qr', h(async (req, res) => { await store.setSetting('payment_qr', null); res.json({ ok: true }); }));
 
-// Portfolio CMS (admin only — every route sits behind requireAdmin + CSRF)
+// Admin errors with a status (validation, not found) go back to the browser as-is
 const pfErr = (res, e) => bad(res, 'invalid', e.message, e.status || 400);
 const pf = (fn) => h(async (req, res) => { try { await fn(req, res); } catch (e) { if (!e.status) throw e; pfErr(res, e); } });
-admin.get('/portfolio', pf(async (req, res) => res.json({ projects: await portfolio.listProjects({ publishedOnly: false }), categories: await portfolio.listCategories(), media: media.mediaStatus() })));
-admin.get('/portfolio/projects/:id', pf(async (req, res) => { const p = await portfolio.getProject(req.params.id); if (!p) return bad(res, 'not_found', 'Project not found.', 404); res.json(p); }));
-admin.post('/portfolio/projects', pf(async (req, res) => res.status(201).json(await portfolio.saveProject(null, req.body || {}))));
-admin.put('/portfolio/projects/:id', pf(async (req, res) => res.json(await portfolio.saveProject(req.params.id, req.body || {}))));
-admin.patch('/portfolio/projects/:id', pf(async (req, res) => res.json(await portfolio.setFlags(req.params.id, req.body || {}))));
-admin.post('/portfolio/projects/:id/duplicate', pf(async (req, res) => res.status(201).json(await portfolio.duplicateProject(req.params.id))));
-admin.delete('/portfolio/projects/:id', pf(async (req, res) => { await portfolio.deleteProject(req.params.id); res.json({ ok: true }); }));
-admin.put('/portfolio/order', pf(async (req, res) => { await portfolio.reorder(req.body?.ids); res.json({ ok: true }); }));
-admin.post('/portfolio/categories', pf(async (req, res) => res.status(201).json({ slug: await portfolio.saveCategory(null, req.body || {}) })));
-admin.put('/portfolio/categories/order', pf(async (req, res) => { await portfolio.reorderCategories(req.body?.slugs); res.json({ ok: true }); }));
-admin.put('/portfolio/categories/:slug', pf(async (req, res) => res.json({ slug: await portfolio.saveCategory(req.params.slug, req.body || {}) })));
-admin.delete('/portfolio/categories/:slug', pf(async (req, res) => { await portfolio.deleteCategory(req.params.slug); res.json({ ok: true }); }));
-admin.get('/portfolio/media', pf(async (req, res) => res.json({ ...media.mediaStatus(), files: await media.listMedia({ fresh: req.query.fresh === '1' }) })));
-admin.post('/portfolio/media', pf(async (req, res) => res.status(201).json(await media.uploadMedia(req.body?.folder, req.body?.filename, req.body?.dataUrl))));
-admin.post('/portfolio/media/auto-match', pf(async (req, res) => res.json({ matched: await portfolio.autoMatchCovers(await media.listMedia({ fresh: true })) })));
+
+// Images (Supabase Storage) used by Page Content, Products and Brands
+admin.get('/media', pf(async (req, res) => res.json({ ...media.mediaStatus(), files: await media.listMedia({ fresh: req.query.fresh === '1' }) })));
+admin.post('/media', pf(async (req, res) => res.status(201).json(await media.uploadMedia(req.body?.folder, req.body?.filename, req.body?.dataUrl))));
+
+// Page Content: every heading, paragraph, button and image on the public pages
+admin.get('/pages', pf(async (req, res) => res.json({ pages: pages.fields(), edits: await pages.getEdits(), seo: Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, { title: p.title, description: p.description }])), media: media.mediaStatus() })));
+admin.put('/pages', pf(async (req, res) => res.json({ edits: await pages.saveEdits(req.body?.changes) })));
 
 // Audit prices
 admin.put('/pricing', pf(async (req, res) => res.json({ pricing: await savePricing(req.body || {}) })));
@@ -416,8 +409,6 @@ app.use('/api', ws);
 app.use('/api', (req, res) => bad(res, 'not_found', 'Unknown API route.', 404));
 
 // ═════════════════════════════ PAGES ══════════════════════════════════════
-// First request after start-up: link uploaded Supabase images to projects (once, in the background).
-app.use((req, res, next) => { portfolio.autoMatchOnce(media.listMedia, media.mediaStatus().configured); next(); });
 for (const [id, p] of Object.entries(PAGES)) {
   app.get(p.path, h(async (req, res) => res.type('html').send(await renderPage(id, req))));
 }
@@ -443,19 +434,9 @@ app.get('/seo-tools/:slug', h(async (req, res, next) => {
   res.type('html').send(await renderTool(req, tool));
 }));
 
-// Products moved out of the portfolio
+// The portfolio was retired: old links go to the home page (products to /products)
 app.get('/portfolio/featured', (req, res) => res.redirect(301, '/products'));
-
-// Portfolio project pages (published; admins can preview drafts)
-app.get('/portfolio/:slug', h(async (req, res, next) => {
-  const p = await portfolio.getBySlug(req.params.slug);
-  if (!p) return next();
-  if (!p.published) {
-    if (!(await currentSession(req).catch(() => null))) return next();
-    res.set('x-robots-tag', 'noindex, nofollow');
-  }
-  res.type('html').send(await renderProject(req, p));
-}));
+app.get(['/portfolio', '/portfolio/*rest'], (req, res) => res.redirect(301, '/'));
 
 app.get('/blog/:slug', h(async (req, res, next) => {
   const post = (await blog.publishedPosts()).find((p) => p.id === req.params.slug);

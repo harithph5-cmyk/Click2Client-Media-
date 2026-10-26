@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['portfolio', 'Portfolio'], ['products', 'Products'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['products', 'Products'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, portfolio, products: (v) => contentTab(v, 'product'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, pages: pagesTab, products: (v) => contentTab(v, 'product'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -349,7 +349,7 @@ async function settings(view) {
   if (del) del.onclick = async () => { if (!confirm('Remove the payment QR code?')) return; await api('/admin/settings/qr', { method: 'DELETE' }); toast('QR removed'); settings(view); };
 }
 
-// ── Portfolio (CMS) ──────────────────────────────────────────────────────
+// ── Images (Supabase Storage) ─────────────────────────────────────────────
 // Downscale images in the browser so uploads stay under the 1 MB server limit.
 // crop: keep only the top of very tall screenshots (covers); false keeps the whole image.
 async function shrinkImage(file, { crop = true } = {}) {
@@ -367,129 +367,6 @@ async function shrinkImage(file, { crop = true } = {}) {
 
 const pfState = state.pf ||= { view: 'list', id: null, filter: 'all', search: '', media: null };
 const pfNorm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-const pfSlug = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
-const pfWhen = (iso) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
-const pfThumb = (p, w = 72) => (p.cover_image ? `<img src="${esc(p.cover_image)}" alt="" loading="lazy" style="width:${w}px;height:${Math.round(w * 0.625)}px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line);display:block">` : `<span class="pf-noimg" style="width:${w}px;height:${Math.round(w * 0.625)}px">No image</span>`);
-
-async function portfolio(view) {
-  const data = await api('/admin/portfolio');
-  pfState.data = data;
-  if (pfState.view === 'edit') return pfEditor(view, data);
-  if (pfState.view === 'categories') return pfCategories(view, data);
-  return pfList(view, data);
-}
-
-function pfList(view, { projects, categories, media }) {
-  const cat = (s) => categories.find((c) => c.slug === s);
-  const q = pfNorm(pfState.search);
-  const list = projects.filter((p) => (pfState.filter === 'all' || (pfState.filter === 'featured' ? p.featured : p.category === pfState.filter)) && (!q || pfNorm(`${p.title} ${p.client} ${p.slug} ${p.industry}`).includes(q)));
-  const canDrag = pfState.filter === 'all' && !q;
-  const stat = (n, l, hl) => `<div class="kpi${hl ? ' hl' : ''}"><div class="n">${n}</div><div class="l">${l}</div></div>`;
-  view.innerHTML = `${head('Website', 'Portfolio', `${projects.length} project${projects.length === 1 ? '' : 's'} · ${projects.filter((p) => p.published).length} published on <a href="/portfolio" target="_blank">/portfolio</a>. The order here is the order on the website.`,
-    '<a class="btn ghost sm" href="/portfolio" target="_blank">View portfolio ↗</a><button class="btn sm" data-cats>Manage categories</button><button class="btn sm accent" data-new>+ Add Project</button>')}
-    ${media.configured ? `<div class="pf-note ok"><span>Images: Supabase bucket <b>${esc(media.bucket)}</b> connected.</span><button class="btn sm ghost" data-automatch title="Sets a cover for every project without one, using image file names">Auto-match covers from Supabase</button></div>`
-      : `<div class="pf-note"><span><b>Connect Supabase images.</b> Add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in Hostinger → your Node.js app → Environment variables, then redeploy. Until then you can paste image links by hand.</span></div>`}
-    <div class="kpis pf-kpis">${stat(projects.length, 'Total projects', true)}${stat(projects.filter((p) => p.featured).length, 'On home page')}${categories.map((c) => stat(c.total, esc(c.short_name || c.name))).join('')}</div>
-    <div class="pf-toolbar">
-      <div class="filters" style="margin:0">${[['all', 'All', projects.length], ['featured', '★ Home page', projects.filter((p) => p.featured).length], ...categories.map((c) => [c.slug, c.short_name || c.name, c.total])].map(([k, l, n]) => `<button class="chip ${pfState.filter === k ? 'on' : ''}" data-pff="${esc(k)}">${esc(l)}<span class="n">${n}</span></button>`).join('')}</div>
-      <input class="input" id="pfSearch" type="search" placeholder="Search projects…" value="${esc(pfState.search)}" style="max-width:240px;height:38px">
-    </div>
-    ${list.length ? `<div class="card table-wrap"><table class="t pf-table"><thead><tr><th style="width:34px"></th><th>#</th><th>Project</th><th>Category</th><th title="Shown first in Selected Work on the home page">Home ★</th><th>Status</th><th class="num">Order</th><th>Last updated</th><th>Actions</th></tr></thead><tbody id="pfRows">
-      ${list.map((p) => `<tr data-id="${esc(p.id)}" ${canDrag ? 'draggable="true"' : ''}>
-        <td class="pf-grip" title="${canDrag ? 'Drag to reorder' : 'Show All (no search) to reorder'}">${canDrag ? '⋮⋮' : ''}</td>
-        <td class="mono small">${String(projects.indexOf(p) + 1).padStart(2, '0')}</td>
-        <td><div class="row" style="gap:12px;align-items:center;flex-wrap:nowrap">${pfThumb(p)}<div style="min-width:0"><b>${esc(p.title)}</b><div class="tiny muted break">/portfolio/${esc(p.slug)}</div></div></div></td>
-        <td class="small">${esc(cat(p.category)?.name || p.category)}${p.subcategory && p.subcategory !== cat(p.category)?.name ? `<div class="tiny muted">${esc(p.subcategory)}</div>` : ''}</td>
-        <td><label class="sw" title="Show first on the home page"><input type="checkbox" data-flag="featured" ${p.featured ? 'checked' : ''}><span></span></label></td>
-        <td><label class="sw" title="Published"><input type="checkbox" data-flag="published" ${p.published ? 'checked' : ''}><span></span></label> <span class="tiny ${p.published ? '' : 'muted'}">${p.published ? 'Published' : 'Draft'}</span></td>
-        <td class="num mono small">${p.display_order}</td>
-        <td class="small nowrap">${pfWhen(p.updated_at)}</td>
-        <td class="nowrap"><button class="btn sm ghost" data-edit>Edit</button><a class="btn sm quiet" href="/portfolio/${esc(p.slug)}" target="_blank">Preview</a><button class="btn sm quiet" data-dup>Duplicate</button><button class="btn sm quiet del" data-del>Delete</button>
-          ${canDrag ? '<span class="pf-move"><button class="btn sm quiet" data-up aria-label="Move up">↑</button><button class="btn sm quiet" data-down aria-label="Move down">↓</button></span>' : ''}</td>
-      </tr>`).join('')}</tbody></table></div>`
-    : `<div class="card empty"><h3>No projects found.</h3><p><button class="btn accent sm" data-new>+ Add Project</button></p></div>`}`;
-
-  const reload = () => portfolio(view);
-  const saveOrder = async () => {
-    const ids = [...view.querySelectorAll('#pfRows tr[data-id]')].map((r) => r.dataset.id);
-    try { await api('/admin/portfolio/order', { method: 'PUT', body: { ids } }); toast('Order saved'); reload(); } catch (ex) { toast(ex.message); }
-  };
-  view.onclick = async (e) => {
-    const t = e.target;
-    if (t.closest('[data-new]')) { Object.assign(pfState, { view: 'edit', id: null }); return reload(); }
-    if (t.closest('[data-cats]')) { pfState.view = 'categories'; return reload(); }
-    const f = t.closest('[data-pff]');
-    if (f) { pfState.filter = f.dataset.pff; return pfList(view, pfState.data); }
-    if (t.closest('[data-automatch]')) {
-      try { const { matched } = await api('/admin/portfolio/media/auto-match', { method: 'POST' }); toast(matched.length ? `Cover set for ${matched.length} project${matched.length > 1 ? 's' : ''}` : 'No new matches — pick covers in each project'); reload(); } catch (ex) { toast(ex.message); }
-      return;
-    }
-    const tr = t.closest('tr[data-id]');
-    if (!tr) return;
-    const id = tr.dataset.id;
-    if (t.closest('[data-edit]')) { Object.assign(pfState, { view: 'edit', id }); return reload(); }
-    if (t.closest('[data-dup]')) {
-      try { const p = await api(`/admin/portfolio/projects/${id}/duplicate`, { method: 'POST' }); toast('Duplicated as a draft'); Object.assign(pfState, { view: 'edit', id: p.id }); reload(); } catch (ex) { toast(ex.message); }
-    }
-    if (t.closest('[data-del]')) {
-      if (!confirm(`Delete "${tr.querySelector('b').textContent}"?\n\nIt is removed from the website and its gallery links are removed. The image files stay in Supabase.`)) return;
-      try { await api(`/admin/portfolio/projects/${id}`, { method: 'DELETE' }); toast('Project deleted'); reload(); } catch (ex) { toast(ex.message); }
-    }
-    const dir = t.closest('[data-up]') ? -1 : t.closest('[data-down]') ? 1 : 0;
-    if (dir) {
-      const sib = dir < 0 ? tr.previousElementSibling : tr.nextElementSibling;
-      if (sib) { dir < 0 ? sib.before(tr) : sib.after(tr); saveOrder(); }
-    }
-  };
-  view.onchange = async (e) => {
-    const flag = e.target.dataset?.flag;
-    if (!flag) return;
-    const id = e.target.closest('tr').dataset.id;
-    try { await api(`/admin/portfolio/projects/${id}`, { method: 'PATCH', body: { [flag]: e.target.checked } }); toast(flag === 'featured' ? (e.target.checked ? 'Shown first on the home page' : 'Removed from home page highlights') : (e.target.checked ? 'Published' : 'Moved to drafts')); reload(); } catch (ex) { toast(ex.message); e.target.checked = !e.target.checked; }
-  };
-  const s = view.querySelector('#pfSearch');
-  s.oninput = () => { pfState.search = s.value; const pos = s.selectionStart; pfList(view, pfState.data); const n = view.querySelector('#pfSearch'); n.focus(); n.setSelectionRange(pos, pos); };
-
-  // Drag & drop reordering
-  const body = view.querySelector('#pfRows');
-  if (body && canDrag) {
-    let dragging = null;
-    body.addEventListener('dragstart', (e) => { dragging = e.target.closest('tr'); dragging.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
-    body.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      const over = e.target.closest('tr');
-      if (!over || over === dragging) return;
-      const r = over.getBoundingClientRect();
-      over[e.clientY > r.top + r.height / 2 ? 'after' : 'before'](dragging);
-    });
-    body.addEventListener('dragend', () => { dragging?.classList.remove('dragging'); dragging = null; saveOrder(); });
-  }
-}
-
-// ── Tag input (services / technologies) ──────────────────────────────────
-function tagBox(name, values, suggestions) {
-  return `<div class="tagbox" data-tags="${name}">${values.map((v) => `<span class="tag">${esc(v)}<button type="button" aria-label="Remove ${esc(v)}">×</button></span>`).join('')}
-    <input list="dl-${name}" placeholder="Type and press Enter"><datalist id="dl-${name}">${suggestions.filter((s) => !values.includes(s)).map((s) => `<option value="${esc(s)}">`).join('')}</datalist></div>`;
-}
-const readTags = (root, name) => [...root.querySelectorAll(`[data-tags="${name}"] .tag`)].map((t) => t.firstChild.textContent);
-function bindTags(root, onChange) {
-  root.querySelectorAll('.tagbox').forEach((box) => {
-    const input = box.querySelector('input');
-    const add = () => {
-      const vals = input.value.split(',').map((v) => v.trim()).filter(Boolean);
-      for (const v of vals) if (!readTags(root, box.dataset.tags).includes(v)) input.insertAdjacentHTML('beforebegin', `<span class="tag">${esc(v)}<button type="button" aria-label="Remove ${esc(v)}">×</button></span>`);
-      input.value = '';
-      onChange();
-    };
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); }
-      if (e.key === 'Backspace' && !input.value) { box.querySelector('.tag:last-of-type')?.remove(); onChange(); }
-    });
-    input.addEventListener('change', () => { if (input.value && [...box.querySelectorAll('option')].some((o) => o.value === input.value)) add(); });
-    input.addEventListener('blur', () => input.value && add());
-    box.addEventListener('click', (e) => { if (e.target.matches('.tag button')) { e.target.parentElement.remove(); onChange(); } else input.focus(); });
-  });
-}
 
 // ── Media picker (Supabase Storage) ──────────────────────────────────────
 const FOLDER_GUESS = { websites: 'Websites', seo: 'SEO', 'social-media': 'SMM', 'ads-campaigns': 'Paid Ads' };
@@ -528,7 +405,7 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {}, 
             try {
               for (const file of e.target.files) {
                 toast(`Uploading ${file.name}…`);
-                const r = await api('/admin/portfolio/media', { method: 'POST', body: { folder: target, filename: file.name, dataUrl: await shrinkImage(file, { crop: false }) } });
+                const r = await api('/admin/media', { method: 'POST', body: { folder: target, filename: file.name, dataUrl: await shrinkImage(file, { crop: false }) } });
                 picked.push(r.url);
               }
               toast('Uploaded to Supabase');
@@ -539,7 +416,7 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {}, 
         };
         const urlForm = () => `<form class="row" id="mpUrl" style="margin-top:10px;gap:8px"><input class="input" name="u" placeholder="https://…" style="flex:1"><button class="btn sm accent">Use link</button></form>`;
         const load = async (fresh) => {
-          try { const r = await api(`/admin/portfolio/media${fresh ? '?fresh=1' : ''}`); status = r; files = r.files; pfState.media = r; }
+          try { const r = await api(`/admin/media${fresh ? '?fresh=1' : ''}`); status = r; files = r.files; pfState.media = r; }
           catch (ex) { status = { configured: ex.status !== 503 ? true : false, bucket: '' }; files = []; if (ex.status !== 503) toast(ex.message); }
           render();
         };
@@ -569,219 +446,6 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {}, 
     obs.observe(document.body, { childList: true });
     void close;
   });
-}
-
-// Label / value rows (project details, results)
-const pairRow = (x = {}, ph = '') => `<div class="row pf-pair" style="gap:8px;flex-wrap:nowrap"><input class="input" data-pk="label" placeholder="${esc(ph || 'Label')}" value="${esc(x.label || '')}" style="flex:1;min-width:0"><input class="input" data-pk="value" placeholder="Value" value="${esc(x.value || '')}" style="flex:1.4;min-width:0"><button type="button" class="btn sm quiet del" data-pair-del aria-label="Remove">×</button></div>`;
-const pairRows = (items = [], hints = []) => (items.length ? items.map((x) => pairRow(x)).join('') : hints.slice(0, 2).map((h) => pairRow({}, h)).join(''));
-const readPairs = (root, name) => [...root.querySelectorAll(`[data-pairs="${name}"] .pf-pair`)].map((r) => ({ label: r.querySelector('[data-pk=label]').value.trim(), value: r.querySelector('[data-pk=value]').value.trim() })).filter((x) => x.label && x.value);
-
-// ── Project editor ───────────────────────────────────────────────────────
-async function pfEditor(view, { projects, categories }) {
-  const isNew = !pfState.id;
-  const p = isNew ? { title: '', slug: '', category: pfState.filter !== 'all' && pfState.filter !== 'featured' ? pfState.filter : categories[0]?.slug, services: [], technologies: [], gallery: [], case_sections: [], featured: false, published: true }
-    : await api(`/admin/portfolio/projects/${pfState.id}`);
-  const all = (k) => [...new Set(projects.flatMap((x) => x[k] || []))].sort();
-  let slugTouched = !isNew;
-  let gallery = [...(p.gallery || [])];
-  const imgs = { cover_image: p.cover_image || '', logo: p.logo || '' };
-  const F = (k, l, extra = '', hint = '') => `<div class="field"><label for="pf-${k}">${l}</label><input class="input" id="pf-${k}" name="${k}" value="${esc(p[k] ?? '')}" ${extra}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
-  const T = (k, l, rows = 4, hint = '') => `<div class="field"><label for="pf-${k}">${l}</label><textarea class="input" id="pf-${k}" name="${k}" rows="${rows}">${esc(p[k] ?? '')}</textarea>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
-  const section = (s = {}, i) => `<div class="pf-sec" data-sec><div class="row" style="gap:8px"><input class="input" data-k="heading" placeholder="Section heading (e.g. Admin Dashboard)" value="${esc(s.heading || '')}" style="flex:1"><button type="button" class="btn sm quiet" data-sec-up aria-label="Move up">↑</button><button type="button" class="btn sm quiet del" data-sec-del>Remove</button></div>
-    <textarea class="input" data-k="body" rows="4" placeholder="What you did and why it matters">${esc(s.body || '')}</textarea>
-    <div class="row" style="gap:8px;align-items:center"><input type="hidden" data-k="image" value="${esc(s.image || '')}">${s.image ? `<img src="${esc(s.image)}" alt="" style="width:96px;height:60px;object-fit:cover;border-radius:6px;border:1px solid var(--line)">` : ''}<button type="button" class="btn sm ghost" data-sec-img>${s.image ? 'Change image' : 'Add image'}</button>${s.image ? '<button type="button" class="btn sm quiet" data-sec-img-del>Remove image</button>' : ''}</div></div>`;
-
-  view.innerHTML = `${head('Portfolio', isNew ? 'Add Project' : `Edit · ${esc(p.title)}`, isNew ? 'Fields marked * are required. Everything else is optional and only shows on the website when filled in.' : `Last updated ${pfWhen(p.updated_at)}`, `<button class="btn ghost sm" data-cancel>← All projects</button>`)}
-    <form id="pfForm" class="pf-editor">
-      <div class="stack" style="gap:18px;min-width:0">
-        <div class="card card-pad stack" style="gap:14px"><h3>Project</h3>
-          <div class="pf-g2">${F('title', 'Project Name *', 'required maxlength="120"')}${F('slug', 'Slug *', 'required maxlength="80"', `URL: /portfolio/<b id="slugOut">${esc(p.slug || '…')}</b>`)}</div>
-          <div class="pf-g2"><div class="field"><label for="pf-category">Category *</label><select class="input" id="pf-category" name="category">${categories.map((c) => `<option value="${esc(c.slug)}" ${c.slug === p.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>${F('subcategory', 'Subcategory / type', 'placeholder="e.g. Website Development, AI / EdTech"')}</div>
-          <div class="pf-g2">${F('client', 'Client')}${F('industry', 'Industry', 'placeholder="e.g. Automotive"')}</div>
-          <div class="pf-g2">${F('location', 'Location', 'placeholder="e.g. Dubai, UAE"')}${F('year', 'Year', 'maxlength="10" placeholder="2025"')}</div>
-          ${T('short_description', 'Short Description *', 2, 'One or two sentences — shown on the card and used as the Google description. <span id="sdCount"></span>')}
-          ${T('description', 'Full Description', 5, 'Leave a blank line between paragraphs. Supports **bold**, - bullets and [links](https://…).')}
-          <div class="field"><label>Services</label>${tagBox('services', p.services || [], all('services'))}</div>
-          <div class="field"><label>Technologies</label>${tagBox('technologies', p.technologies || [], all('technologies'))}</div>
-          <div class="pf-g2">${F('project_url', 'Project URL', 'placeholder="https://…"')}${F('admin_url', 'Admin URL', 'placeholder="https://…/admin"')}</div>
-        </div>
-        <div class="card card-pad stack" style="gap:14px"><h3>Case study</h3><p class="small muted" style="margin-top:-8px">Only filled-in sections appear on the project page. Don't add numbers you can't prove.</p>
-          ${T('challenge', 'Challenge', 4)}${T('solution', 'Solution', 4)}
-          <div class="field"><label>More sections</label><div id="secs" class="stack" style="gap:12px">${(p.case_sections || []).map(section).join('')}</div><button type="button" class="btn sm ghost" data-sec-add style="margin-top:10px;align-self:flex-start">+ Add section</button><span class="hint">e.g. Website Experience, Inventory Experience, Admin Dashboard, Lead Generation, Responsive Design.</span></div>
-        </div>
-        <div class="card card-pad stack" style="gap:14px"><h3>Card details &amp; results</h3>
-          <div class="field"><label>Project details</label><div class="stack" style="gap:8px" data-pairs="details">${pairRows(p.details, ['Platform', 'Objective', 'Audience', 'Budget', 'Creative', 'Design Approach'])}</div>
-            <button type="button" class="btn sm ghost" data-pair-add="details" style="margin-top:8px;align-self:flex-start">+ Add detail</button>
-            <span class="hint">Shown on the card and project page. Ads cards use Platform, Objective, Creative, Audience, Budget. UI/UX cards use Platform and Design Approach.</span></div>
-          <div class="field"><label>Results (real numbers only)</label><div class="stack" style="gap:8px" data-pairs="metrics">${pairRows(p.metrics, ['SEO Score', 'Technical Health', 'Keyword Growth', 'Organic Visibility'])}</div>
-            <button type="button" class="btn sm ghost" data-pair-add="metrics" style="margin-top:8px;align-self:flex-start">+ Add result</button>
-            <span class="hint">Shown as “Project results” — only add numbers from real reports (e.g. Search Console, Ads Manager). Leave empty otherwise; the card then shows the work delivered.</span></div>
-          ${T('results', 'Results / Project outcome', 3, 'Only real outcomes. Leave empty if you don’t have them.')}${T('testimonial', 'Testimonial', 2, 'A real quote from the client, with their permission.')}
-        </div>
-        <div class="card card-pad"><h3>Visibility</h3>
-          <div class="pf-g3" style="margin-top:12px">
-            <label class="sw-row"><span class="sw"><input type="checkbox" name="featured" ${p.featured ? 'checked' : ''}><span></span></span> Show first on the home page</label>
-            <label class="sw-row"><span class="sw"><input type="checkbox" name="published" ${p.published ? 'checked' : ''}><span></span></span> Published</label>
-            ${F('display_order', 'Display order', 'type="number" min="0" step="1"', 'Lower shows first. Or drag in the list.')}
-          </div>
-        </div>
-      </div>
-      <aside class="pf-side">
-        <div class="card card-pad"><h3>Live preview</h3><div id="pv" style="margin-top:12px"></div></div>
-        <div class="card card-pad"><div class="row" style="justify-content:space-between"><h3>Cover image</h3>${imgs.cover_image ? '<button type="button" class="btn sm quiet" data-img-del="cover_image">Remove</button>' : ''}</div>
-          <div class="pf-imgslot" data-img="cover_image">${imgs.cover_image ? `<img src="${esc(imgs.cover_image)}" alt="">` : '<span>Choose from Supabase or upload</span>'}</div></div>
-        <div class="card card-pad"><div class="row" style="justify-content:space-between"><h3>Logo</h3>${imgs.logo ? '<button type="button" class="btn sm quiet" data-img-del="logo">Remove</button>' : ''}</div>
-          <div class="pf-imgslot small" data-img="logo">${imgs.logo ? `<img src="${esc(imgs.logo)}" alt="" style="object-fit:contain">` : '<span>Add logo</span>'}</div></div>
-        <div class="card card-pad"><div class="row" style="justify-content:space-between"><h3>Gallery</h3><button type="button" class="btn sm ghost" data-gal-add>+ Add images</button></div>
-          <p class="tiny muted" style="margin-top:4px">Drag to reorder · ★ sets the cover</p><div id="gal" class="pf-gal"></div></div>
-      </aside>
-      <div class="pf-actions card"><button type="button" class="btn ghost" data-cancel>Cancel</button><span class="spacer"></span><button type="submit" class="btn" data-mode="preview">Save &amp; Preview</button><button type="submit" class="btn accent" data-mode="save">${isNew ? 'Save Project' : 'Save Changes'}</button></div>
-    </form>`;
-
-  const form = view.querySelector('#pfForm');
-  const val = (k) => form.elements[k]?.value?.trim() || '';
-  const sections = () => [...form.querySelectorAll('[data-sec]')].map((s) => ({ heading: s.querySelector('[data-k=heading]').value, body: s.querySelector('[data-k=body]').value, image: s.querySelector('[data-k=image]').value }));
-  const collect = () => ({
-    title: val('title'), slug: val('slug'), category: val('category'), subcategory: val('subcategory'), client: val('client'), industry: val('industry'),
-    location: val('location'), year: val('year'), short_description: val('short_description'), description: val('description'),
-    services: readTags(form, 'services'), technologies: readTags(form, 'technologies'), project_url: val('project_url'), admin_url: val('admin_url'),
-    challenge: val('challenge'), solution: val('solution'), results: val('results'), testimonial: val('testimonial'), case_sections: sections(),
-    details: readPairs(form, 'details'), metrics: readPairs(form, 'metrics'),
-    featured: form.elements.featured.checked, published: form.elements.published.checked, display_order: val('display_order'),
-    cover_image: imgs.cover_image, logo: imgs.logo, gallery,
-  });
-  const preview = () => {
-    const d = collect();
-    const c = categories.find((x) => x.slug === d.category);
-    view.querySelector('#pv').innerHTML = `<div class="pv-card${d.featured ? ' dark' : ''}">
-      <div class="pv-media">${d.cover_image ? `<img src="${esc(d.cover_image)}" alt="">` : `<span>${esc((d.client || d.title || 'C2').slice(0, 2).toUpperCase())}</span>`}</div>
-      <div class="pv-body"><p class="pv-kicker">${esc(d.featured && d.subcategory ? d.subcategory : c?.name || '')}${d.industry ? ` · <span>${esc(d.industry)}</span>` : ''}</p>
-      <h4>${esc(d.title || 'Project name')}</h4><p class="pv-desc">${esc(d.short_description || 'Short description')}</p>
-      <div class="pv-tags">${d.services.slice(0, 4).map((s) => `<span>${esc(s)}</span>`).join('')}</div><p class="pv-more">View Project →</p></div></div>
-      <p class="tiny muted" style="margin-top:8px">${d.published ? 'Published' : 'Draft — not visible on the website'}${d.featured ? ' · ★ Home page' : ''}</p>`;
-    view.querySelector('#slugOut').textContent = d.slug || pfSlug(d.title) || '…';
-    const n = d.short_description.length;
-    view.querySelector('#sdCount').textContent = `${n}/300`;
-  };
-  const drawGallery = () => {
-    view.querySelector('#gal').innerHTML = gallery.length ? gallery.map((g, i) => `<div class="pf-gi${g.url === imgs.cover_image ? ' cover' : ''}" draggable="true" data-i="${i}"><img src="${esc(g.url)}" alt="${esc(g.alt)}">
-      <div class="pf-gi-tools"><button type="button" data-gal-cover="${i}" title="Set as cover">★</button><button type="button" data-gal-del="${i}" title="Remove from gallery">×</button></div></div>`).join('') : '<p class="tiny muted">No gallery images.</p>';
-  };
-  const setImg = (k, url) => { imgs[k] = url; pfEditor.redraw(); };
-  pfEditor.redraw = () => {
-    for (const k of ['cover_image', 'logo']) {
-      const slot = view.querySelector(`[data-img="${k}"]`);
-      slot.innerHTML = imgs[k] ? `<img src="${esc(imgs[k])}" alt=""${k === 'logo' ? ' style="object-fit:contain"' : ''}>` : `<span>${k === 'logo' ? 'Add logo' : 'Choose from Supabase or upload'}</span>`;
-      const del = slot.parentElement.querySelector(`[data-img-del="${k}"]`);
-      if (imgs[k] && !del) slot.parentElement.querySelector('.row').insertAdjacentHTML('beforeend', `<button type="button" class="btn sm quiet" data-img-del="${k}">Remove</button>`);
-      if (!imgs[k] && del) del.remove();
-    }
-    drawGallery(); preview();
-  };
-  bindTags(form, preview);
-  pfEditor.redraw();
-
-  form.addEventListener('input', (e) => {
-    if (e.target.name === 'slug') slugTouched = true;
-    if (e.target.name === 'title' && !slugTouched) form.elements.slug.value = pfSlug(e.target.value);
-    preview();
-  });
-  form.addEventListener('change', preview);
-  const projectCtx = () => ({ title: val('title'), client: val('client'), category: val('category') });
-  view.onclick = async (e) => {
-    const t = e.target;
-    if (t.closest('[data-cancel]')) { Object.assign(pfState, { view: 'list', id: null }); return portfolio(view); }
-    const slot = t.closest('[data-img]');
-    if (slot) { const [u] = await pickMedia({ title: slot.dataset.img === 'logo' ? 'Choose a logo' : 'Choose the cover image', project: projectCtx() }); if (u) setImg(slot.dataset.img, u); return; }
-    const del = t.closest('[data-img-del]');
-    if (del) return setImg(del.dataset.imgDel, '');
-    if (t.closest('[data-gal-add]')) {
-      const urls = await pickMedia({ multiple: true, title: 'Add gallery images', project: projectCtx() });
-      for (const u of urls) if (!gallery.some((g) => g.url === u)) gallery.push({ url: u, alt: '' });
-      if (urls.length && !imgs.cover_image) imgs.cover_image = urls[0];
-      return pfEditor.redraw();
-    }
-    if (t.dataset.galCover) { imgs.cover_image = gallery[+t.dataset.galCover].url; toast('Cover image set'); return pfEditor.redraw(); }
-    if (t.dataset.galDel) { gallery.splice(+t.dataset.galDel, 1); return pfEditor.redraw(); }
-    const pa = t.closest('[data-pair-add]');
-    if (pa) { view.querySelector(`[data-pairs="${pa.dataset.pairAdd}"]`).insertAdjacentHTML('beforeend', pairRow({})); return; }
-    if (t.closest('[data-pair-del]')) { t.closest('.pf-pair').remove(); preview(); return; }
-    if (t.closest('[data-sec-add]')) { view.querySelector('#secs').insertAdjacentHTML('beforeend', section({})); return; }
-    const sec = t.closest('[data-sec]');
-    if (sec && t.closest('[data-sec-del]')) { sec.remove(); return; }
-    if (sec && t.closest('[data-sec-up]')) { sec.previousElementSibling?.before(sec); return; }
-    if (sec && t.closest('[data-sec-img-del]')) { sec.outerHTML = section({ ...sections()[[...view.querySelectorAll('[data-sec]')].indexOf(sec)], image: '' }); return; }
-    if (sec && t.closest('[data-sec-img]')) {
-      const [u] = await pickMedia({ title: 'Choose a section image', project: projectCtx() });
-      if (u) { const i = [...view.querySelectorAll('[data-sec]')].indexOf(sec); sec.outerHTML = section({ ...sections()[i], image: u }); }
-    }
-  };
-  // Gallery drag & drop
-  const gal = view.querySelector('#gal');
-  let from = null;
-  gal.addEventListener('dragstart', (e) => { from = +e.target.closest('.pf-gi')?.dataset.i; });
-  gal.addEventListener('dragover', (e) => e.preventDefault());
-  gal.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const to = +e.target.closest('.pf-gi')?.dataset.i;
-    if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-    gallery.splice(to, 0, gallery.splice(from, 1)[0]);
-    drawGallery();
-  });
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const mode = e.submitter?.dataset.mode || 'save';
-    const body = collect();
-    if (!body.slug) body.slug = pfSlug(body.title);
-    try {
-      const saved = await api(isNew ? '/admin/portfolio/projects' : `/admin/portfolio/projects/${p.id}`, { method: isNew ? 'POST' : 'PUT', body });
-      toast(isNew ? 'Project saved ✓' : 'Changes saved ✓');
-      if (mode === 'preview') window.open(`/portfolio/${saved.slug}`, '_blank');
-      Object.assign(pfState, { view: 'edit', id: saved.id });
-      portfolio(view);
-    } catch (ex) { toast(ex.message); }
-  };
-}
-
-// ── Categories ───────────────────────────────────────────────────────────
-function pfCategories(view, { categories }) {
-  view.innerHTML = `${head('Portfolio', 'Manage categories', 'Categories become the filter buttons on /portfolio, in this order. The empty message shows when a category has no published projects.', '<button class="btn ghost sm" data-back>← All projects</button>')}
-    <div class="card table-wrap"><table class="t"><thead><tr><th>Order</th><th>Name</th><th>Filter label</th><th>Empty message</th><th class="num">Projects</th><th></th></tr></thead><tbody>
-      ${categories.map((c, i) => `<tr data-slug="${esc(c.slug)}">
-        <td class="nowrap"><button class="btn sm quiet" data-cup ${i ? '' : 'disabled'}>↑</button><button class="btn sm quiet" data-cdown ${i < categories.length - 1 ? '' : 'disabled'}>↓</button></td>
-        <td><input class="input" data-k="name" value="${esc(c.name)}" style="height:36px"><div class="tiny muted">#${esc(c.slug)}</div></td>
-        <td><input class="input" data-k="short_name" value="${esc(c.short_name || '')}" style="height:36px"></td>
-        <td><input class="input" data-k="empty_text" value="${esc(c.empty_text || '')}" style="height:36px"></td>
-        <td class="num">${c.published}/${c.total}</td>
-        <td class="nowrap"><button class="btn sm accent" data-csave>Save</button><button class="btn sm quiet del" data-cdel ${c.total ? 'disabled title="Has projects"' : ''}>Delete</button></td>
-      </tr>`).join('')}</tbody></table></div>
-    <form class="card card-pad row wrap-row" id="catAdd" style="margin-top:16px;gap:10px;align-items:flex-end">
-      <div class="field" style="flex:1;min-width:180px"><label>New category</label><input class="input" name="name" placeholder="e.g. Branding" required></div>
-      <div class="field" style="flex:1;min-width:180px"><label>Empty message</label><input class="input" name="empty_text" placeholder="No projects here yet."></div>
-      <button class="btn accent">Add category</button></form>`;
-  const reload = () => portfolio(view);
-  view.onclick = async (e) => {
-    if (e.target.closest('[data-back]')) { pfState.view = 'list'; return reload(); }
-    const tr = e.target.closest('tr[data-slug]');
-    if (!tr) return;
-    const slug = tr.dataset.slug;
-    const get = (k) => tr.querySelector(`[data-k=${k}]`).value;
-    try {
-      if (e.target.closest('[data-csave]')) { await api(`/admin/portfolio/categories/${slug}`, { method: 'PUT', body: { name: get('name'), short_name: get('short_name'), empty_text: get('empty_text') } }); toast('Category saved'); reload(); }
-      if (e.target.closest('[data-cdel]') && confirm('Delete this category?')) { await api(`/admin/portfolio/categories/${slug}`, { method: 'DELETE' }); toast('Category deleted'); reload(); }
-      const dir = e.target.closest('[data-cup]') ? -1 : e.target.closest('[data-cdown]') ? 1 : 0;
-      if (dir) {
-        const slugs = categories.map((c) => c.slug);
-        const i = slugs.indexOf(slug);
-        [slugs[i], slugs[i + dir]] = [slugs[i + dir], slugs[i]];
-        await api('/admin/portfolio/categories/order', { method: 'PUT', body: { slugs } }); reload();
-      }
-    } catch (ex) { toast(ex.message); }
-  };
-  view.querySelector('#catAdd').onsubmit = async (e) => {
-    e.preventDefault();
-    try { await api('/admin/portfolio/categories', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); toast('Category added'); reload(); } catch (ex) { toast(ex.message); }
-  };
 }
 
 // ── Editable content: Products & Brands ─────────────────────────────────
@@ -886,6 +550,122 @@ function contentForm(view, kind, schema, x) {
       st.edit = saved.id;
       contentTab(view, kind);
     } catch (ex) { toast(ex.message); }
+  };
+}
+
+// ── Page Content ─────────────────────────────────────────────────────────
+// Every heading, paragraph, button, list item and image on the public pages.
+// The list of fields comes from the server (server/pages.js reads the views);
+// "Reset" brings back the original copy.
+const pgState = state.pg ||= { file: 'home', search: '', dirty: {} };
+async function pagesTab(view) {
+  const data = await api('/admin/pages');
+  const { pages, seo, media } = data;
+  let edits = data.edits;
+  const dirty = pgState.dirty;
+  if (!pages.some((g) => g.file === pgState.file)) pgState.file = pages[0].file;
+  const cur = (k, def) => (k in dirty ? dirty[k] : k in edits ? edits[k] : def);
+  const editedIn = (g) => g.fields.filter((f) => f.key in edits || `${f.key}~alt` in edits).length + (g.seo && (`seo.${g.seo}.title` in edits || `seo.${g.seo}.description` in edits) ? 1 : 0);
+  const plain = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const fieldHtml = (f) => {
+    const isEdited = f.key in edits || `${f.key}~alt` in edits;
+    const reset = `<button type="button" class="btn sm quiet" data-reset="${esc(f.key)}" ${isEdited || f.key in dirty || `${f.key}~alt` in dirty ? '' : 'hidden'}>Reset</button>`;
+    const top = `<div class="row" style="justify-content:space-between;gap:8px"><label for="pg-${esc(f.key)}" class="small"><b>${esc(f.label)}</b>${isEdited ? ' <span class="tiny" style="color:var(--accent)">· edited</span>' : ''}</label>${reset}</div>`;
+    if (f.type === 'image') {
+      return `<div class="card card-pad stack" style="gap:8px">${top}
+        <div class="pf-imgslot small" data-pick="${esc(f.key)}" title="Change image" style="aspect-ratio:16/7"><img src="${esc(cur(f.key, f.default))}" alt="" style="object-fit:contain"></div>
+        <div class="field"><label class="tiny muted" for="pg-${esc(f.key)}~alt">Alt text — describes the image for Google and screen readers</label><input class="input" id="pg-${esc(f.key)}~alt" data-k="${esc(f.key)}~alt" value="${esc(cur(`${f.key}~alt`, f.alt))}"></div></div>`;
+    }
+    const v = cur(f.key, f.default);
+    const input = f.type === 'text'
+      ? `<input class="input" id="pg-${esc(f.key)}" data-k="${esc(f.key)}" value="${esc(v)}">`
+      : `<textarea class="input" id="pg-${esc(f.key)}" data-k="${esc(f.key)}" rows="${Math.min(10, Math.max(2, Math.ceil(v.length / 90)))}">${esc(v)}</textarea>`;
+    return `<div class="card card-pad stack" style="gap:8px">${top}${input}${f.type === 'html' ? '<span class="hint">Formatting is kept as HTML (&lt;b&gt;, &lt;em&gt;, &lt;br&gt;, links). Change the words between the tags.</span>' : ''}</div>`;
+  };
+
+  const draw = () => {
+    const q = pgState.search.trim().toLowerCase();
+    const g = pages.find((x) => x.file === pgState.file);
+    const list = q ? pages.flatMap((p) => p.fields.filter((f) => [cur(f.key, f.default), f.default, f.alt].some((x) => plain(x).toLowerCase().includes(q))).map((f) => [p, f])) : g.fields.map((f) => [g, f]);
+    let lastSection = null;
+    const rows = list.map(([p, f]) => {
+      const sec = q ? p.label : f.section || 'Top of page';
+      const h = sec !== lastSection ? `<h3 class="pg-sec">${esc(sec)}</h3>` : '';
+      lastSection = sec;
+      return h + fieldHtml(f);
+    }).join('');
+    const seoBlock = !q && g.seo ? `<details class="card card-pad" ${pgState.seoOpen ? 'open' : ''} id="pgSeo"><summary style="cursor:pointer"><b>Google search listing</b> <span class="tiny muted">— page title and meta description</span></summary>
+        <div class="stack" style="gap:12px;margin-top:14px">
+          <div class="field"><label for="pg-st">Page title <span class="tiny muted">(about 50–60 characters)</span></label><input class="input" id="pg-st" data-k="seo.${g.seo}.title" value="${esc(cur(`seo.${g.seo}.title`, seo[g.seo]?.title))}" maxlength="120"></div>
+          <div class="field"><label for="pg-sd">Meta description <span class="tiny muted">(about 150–160 characters)</span></label><textarea class="input" id="pg-sd" data-k="seo.${g.seo}.description" rows="3" maxlength="320">${esc(cur(`seo.${g.seo}.description`, seo[g.seo]?.description))}</textarea></div>
+        </div></details>` : '';
+    const n = Object.keys(dirty).length;
+    view.innerHTML = `${head('Website', 'Page Content', 'Edit the words and images on every page — changes go live when you save. <b>Reset</b> brings back the original copy. Contact details, prices, products, brands and blog posts have their own tabs.', `<a class="btn ghost sm" href="${esc(g.url)}" target="_blank">View page ↗</a>`)}
+      ${media.configured ? '' : '<div class="pf-note"><span><b>Supabase images not connected.</b> You can still paste an image link (https://…) when changing an image.</span></div>'}
+      <div class="pg-wrap">
+        <aside class="pg-nav card card-pad">
+          <input class="input" id="pgSearch" type="search" placeholder="Search all pages…" value="${esc(pgState.search)}">
+          ${pages.map((p) => { const e = editedIn(p); return `<button type="button" class="pg-page ${p.file === pgState.file && !q ? 'on' : ''}" data-page="${esc(p.file)}"><span>${esc(p.label)}</span><span class="tiny muted">${p.fields.length}${e ? ` · <b style="color:var(--accent)">${e} edited</b>` : ''}</span></button>`; }).join('')}
+        </aside>
+        <div class="stack" style="gap:12px;min-width:0">
+          ${q ? `<p class="small muted">${list.length} match${list.length === 1 ? '' : 'es'} for “${esc(pgState.search)}”</p>` : ''}
+          ${seoBlock}${rows || '<div class="card empty"><p>Nothing matches.</p></div>'}
+        </div>
+      </div>
+      <div class="pf-actions card pg-bar" ${n ? '' : 'hidden'}><b>${n} unsaved change${n === 1 ? '' : 's'}</b><span class="spacer"></span><button type="button" class="btn ghost" data-discard>Discard</button><button type="button" class="btn accent" data-save>Save &amp; publish</button></div>`;
+  };
+  const refreshBar = () => {
+    const n = Object.keys(dirty).length;
+    const bar = view.querySelector('.pg-bar');
+    bar.hidden = !n;
+    bar.querySelector('b').textContent = `${n} unsaved change${n === 1 ? '' : 's'}`;
+  };
+  const save = async (changes, msg) => {
+    try {
+      edits = (await api('/admin/pages', { method: 'PUT', body: { changes } })).edits;
+      for (const k in changes) delete dirty[k];
+      toast(msg);
+    } catch (ex) { toast(ex.message); }
+    draw();
+  };
+
+  draw();
+  view.oninput = (e) => {
+    if (e.target.id === 'pgSearch') {
+      pgState.search = e.target.value;
+      const pos = e.target.selectionStart;
+      draw();
+      const s = view.querySelector('#pgSearch'); s.focus(); s.setSelectionRange(pos, pos);
+      return;
+    }
+    const k = e.target.dataset.k;
+    if (!k) return;
+    dirty[k] = e.target.value;
+    view.querySelector(`[data-reset="${CSS.escape(k.replace(/~alt$/, ''))}"]`)?.removeAttribute('hidden');
+    refreshBar();
+  };
+  view.onchange = null;
+  view.onclick = async (e) => {
+    const t = e.target;
+    const pg = t.closest('[data-page]');
+    if (pg) { pgState.file = pg.dataset.page; pgState.search = ''; draw(); window.scrollTo({ top: 0 }); return; }
+    if (t.closest('#pgSeo summary')) { pgState.seoOpen = !view.querySelector('#pgSeo').open; return; }
+    const r = t.closest('[data-reset]');
+    if (r) {
+      const keys = [r.dataset.reset, `${r.dataset.reset}~alt`];
+      keys.forEach((k) => delete dirty[k]);
+      const saved = keys.filter((k) => k in edits);
+      return saved.length ? save(Object.fromEntries(saved.map((k) => [k, ''])), 'Original copy restored ✓') : draw();
+    }
+    const pick = t.closest('[data-pick]');
+    if (pick) {
+      const [u] = await pickMedia({ title: 'Choose an image', folder: 'Website' });
+      if (u) { dirty[pick.dataset.pick] = u; draw(); }
+      return;
+    }
+    if (t.closest('[data-discard]')) { for (const k in dirty) delete dirty[k]; toast('Changes discarded'); return draw(); }
+    if (t.closest('[data-save]')) return save({ ...dirty }, 'Saved — live on the website ✓');
   };
 }
 
