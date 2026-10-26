@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Register | Master Meta Ads Workshop</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@700;800&display=swap">
+<link rel="stylesheet" href="/style.css">
+<script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+<script defer src="/common.js"></script><script defer src="/register.js"></script>
+</head>
+<body class="flow">
+<header class="flow-head wrap"><a class="brand" href="/"><span class="tn">TN</span><span>TerraNext Global Ventures</span></a></header>
+<main class="panel">
+  <div class="steps" aria-label="Progress"><span class="on">1 Register</span><span>2 Pay</span><span>3 Submit transaction ID</span><span>4 Confirmation</span></div>
+  <h1>Reserve Your Seat</h1>
+  <p class="lead"><span data-bind="title">Master Meta Ads, Live Online 3-Hour Workshop</span> · <span data-bind="weekday"></span>, <span data-bind="date"></span></p>
+  <div class="fee"><span>Workshop Registration Fee</span><span data-bind="price">₹499</span></div>
+  <form id="f" novalidate style="margin-top:20px">
+    <div class="alert bad" id="top-err" role="alert" hidden></div>
+    <div class="two">
+      <div class="fld"><label for="fullName">Full Name</label><input id="fullName" name="fullName" autocomplete="name" required maxlength="80"><div class="err" data-for="fullName"></div></div>
+      <div class="fld"><label for="phone">WhatsApp Mobile Number</label><input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="98765 43210" required maxlength="20"><div class="err" data-for="phone"></div></div>
+    </div>
+    <div class="fld"><label for="email">Email Address</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="120"><div class="err" data-for="email"></div></div>
+    <div class="two">
+      <div class="fld"><label for="organization">Business or Organization Name</label><input id="organization" name="organization" autocomplete="organization" required maxlength="120"><div class="err" data-for="organization"></div></div>
+      <div class="fld"><label for="city">City</label><input id="city" name="city" autocomplete="address-level2" required maxlength="60"><div class="err" data-for="city"></div></div>
+    </div>
+    <div class="fld"><label for="category">Professional Category</label>
+      <select id="category" name="category" required><option value="">Select…</option><option>Small Business Owner</option><option>SME</option><option>Real Estate Professional</option><option>Marketing Professional</option><option>Freelancer</option><option>Student</option><option>Other</option></select><div class="err" data-for="category"></div></div>
+    <div class="fld"><label for="website">Website URL <span class="opt">(optional)</span></label><input id="website" name="website" type="url" inputmode="url" placeholder="https://" maxlength="200"><div class="err" data-for="website"></div></div>
+    <div class="fld"><label for="learningGoal">What do you want to learn from this workshop? <span class="opt">(optional)</span></label><textarea id="learningGoal" name="learningGoal" rows="3" maxlength="500"></textarea></div>
+    <label class="chk"><input type="checkbox" name="reviewed"><span>I have reviewed the workshop details and payment instructions.</span></label><div class="err" data-for="reviewed"></div>
+    <label class="chk"><input type="checkbox" name="consent"><span>I agree to the <a href="/privacy-policy" target="_blank" rel="noopener">privacy notice</a>. My details will be used for workshop administration, payment verification, and relevant workshop communications.</span></label><div class="err" data-for="consent"></div>
+    <p class="fine" style="margin:0">We never ask for card details, UPI PINs, OTPs or passwords.</p>
+    <button class="btn btn-yellow" id="go" type="submit">CONTINUE TO PAYMENT <i data-lucide="arrow-right"></i></button>
+  </form>
+</main>
+</body>
+</html>
