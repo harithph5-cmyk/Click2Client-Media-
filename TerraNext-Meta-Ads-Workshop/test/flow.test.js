@@ -15,7 +15,7 @@ const call = (p, o = {}) => fetch(base + p, o);
 const json = (b) => ({ method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch', cookie: adminCookie }, body: JSON.stringify(b) });
 const reg = (over = {}) => call('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
   fullName: 'Asha K', phone: '98765 43210', email: 'Asha@Test.com', organization: 'Asha Homes', category: 'SME', city: 'Chennai', consent: true, reviewed: true, ...over }) });
-const pay = (tok, ref, extra = {}) => { const f = new FormData(); f.set('transactionReference', ref); f.set('paymentDate', new Date().toISOString().slice(0, 10)); for (const [k, v] of Object.entries(extra)) f.set(k, v); return call(`/api/session/${tok}/payment`, { method: 'POST', body: f }); };
+const pay = (tok, ref, extra = {}) => { const f = new FormData(); f.set('transactionReference', ref); f.set('paymentDate', new Date().toISOString().slice(0, 10)); f.set('screenshot', new Blob([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0,0,0,0,0,0,0,0])], { type: 'image/png' }), 's.png'); for (const [k, v] of Object.entries(extra)) f.set(k, v); return call(`/api/session/${tok}/payment`, { method: 'POST', body: f }); };
 const tokOf = (b) => b.paymentUrl.split('/').pop();
 
 test('registration validation', async () => {
@@ -37,14 +37,17 @@ test('full happy path: register -> qr -> submit -> whatsapp -> verify -> confirm
   assert.equal(s.whatsappUrl, undefined); assert.equal(s.confirmedAt, undefined);
   assert.equal((await call(`/api/session/${tok}/qr`)).status, 200);
 
-  assert.equal((await pay(tok, 'ab')).status, 400);                         // bad reference
-  assert.equal((await pay(tok, 'UTR123456789', { screenshot: new Blob([Buffer.from('not an image')]), })).status, 400); // fake screenshot
-  assert.equal((await pay(tok, '123456789012')).status, 201);
-  assert.equal((await pay(tok, '123456789012')).status, 409);              // no duplicate submission
+  assert.equal((await pay(tok, 'ab')).status, 400);
+  assert.equal((await pay(tok, '123456789012')).status, 400, 'sequential junk UTR');
+  assert.equal((await pay(tok, '111111111111')).status, 400, 'repeated junk UTR');
+  { const f = new FormData(); f.set('transactionReference', '583920174625'); f.set('paymentDate', new Date().toISOString().slice(0, 10)); assert.equal((await call(`/api/session/${tok}/payment`, { method: 'POST', body: f })).status, 400, 'screenshot required'); }                         // bad reference
+  assert.equal((await pay(tok, '583920174625', { screenshot: new Blob([Buffer.from('not an image')]), })).status, 400); // fake screenshot
+  assert.equal((await pay(tok, '583920174625')).status, 201);
+  assert.equal((await pay(tok, '583920174625')).status, 409);              // no duplicate submission
   s = await (await call(`/api/session/${tok}`)).json();
   assert.equal(s.status, 'VERIFICATION_PENDING');
   const u = new URL(s.whatsappUrl); assert.equal(u.pathname, '/919940411837');
-  const msg = u.searchParams.get('text'); assert.match(msg, /Registration ID: TNM-2026-/); assert.match(msg, /Amount Paid: ₹499/); assert.match(msg, /123456789012/); assert.match(msg, /1 November 2026/);
+  const msg = u.searchParams.get('text'); assert.match(msg, /Registration ID: TNM-2026-/); assert.match(msg, /Amount Paid: ₹499/); assert.match(msg, /583920174625/); assert.match(msg, /1 November 2026/);
 
   // Not paid until an admin says so
   assert.equal(db.prepare('SELECT registration_status s FROM registrations WHERE id=?').get(row.id).s, 'VERIFICATION_PENDING');
@@ -84,21 +87,22 @@ test('session security: bad / expired / revoked tokens, fee tampering, duplicate
   assert.equal(db.prepare('SELECT COUNT(*) c FROM registrations WHERE normalized_phone=?').get('9123456780').c, 1);
   db.prepare('UPDATE workshops SET qr_storage_key=NULL').run();
   assert.equal((await call(`/api/session/${tokOf(fresh)}/qr`)).status, 404);
-  assert.equal((await pay(tokOf(fresh), '123456789013')).status, 503, 'no QR configured -> no payment submission');
+  assert.equal((await pay(tokOf(fresh), '729104856301')).status, 503, 'no QR configured -> no payment submission');
 });
 
-test('duplicate UTR cannot be verified twice; reject / correction flows', async () => {
+test('reused UTR is refused at submission; reject / correction flows', async () => {
   db.prepare("UPDATE workshops SET qr_storage_key='official-qr.png'").run();
   const mk = async (phone, ref) => { const b = await (await reg({ phone, email: phone + '@t.com' })).json(); await pay(tokOf(b), ref); return tokOf(b); };
-  const t1 = await mk('9111111111', 'SAMEUTR99999'), t2 = await mk('9222222222', 'SAMEUTR99999');
-  const ids = db.prepare("SELECT id FROM payment_submissions WHERE transaction_reference='SAMEUTR99999' ORDER BY id").all().map((x) => x.id);
+  const t1 = await mk('9111111111', '418273650912');
+  { const b = await (await reg({ phone: '9222222222', email: '9222222222@t.com' })).json(); assert.equal((await pay(tokOf(b), '418273650912')).status, 409, 'UTR already used by another registration'); }
+  const t2 = await mk('9222222222', '537201948362');
+  const ids = db.prepare("SELECT id FROM payment_submissions WHERE transaction_reference IN ('418273650912','537201948362') ORDER BY id").all().map((x) => x.id);
   assert.equal((await call(`/api/admin/payments/${ids[0]}/verify`, json({ confirmed: true }))).status, 200);
-  assert.equal((await call(`/api/admin/payments/${ids[1]}/verify`, json({ confirmed: true }))).status, 409);
   assert.equal((await call(`/api/admin/payments/${ids[1]}/correct`, json({ reason: 'Wrong UTR' }))).status, 200);
   const s = await (await call(`/api/session/${t2}`)).json();
   assert.equal(s.status, 'PENDING_PAYMENT'); assert.equal(s.submission.reason, 'Wrong UTR');
-  assert.equal((await pay(t2, 'DIFFERENT12345')).status, 201, 'resubmission allowed after correction');
-  const id3 = db.prepare("SELECT id FROM payment_submissions WHERE transaction_reference='DIFFERENT12345'").get().id;
+  assert.equal((await pay(t2, '690318247150')).status, 201, 'resubmission allowed after correction');
+  const id3 = db.prepare("SELECT id FROM payment_submissions WHERE transaction_reference='690318247150'").get().id;
   assert.equal((await call(`/api/admin/payments/${id3}/reject`, json({ reason: 'Not received' }))).status, 200);
   assert.equal((await (await call(`/api/session/${t2}`)).json()).status, 'REJECTED');
   assert.equal((await call(`/api/session/${t2}/qr`)).status, 404, 'QR hidden once rejected');

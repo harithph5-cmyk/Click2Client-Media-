@@ -275,7 +275,9 @@ app.get('/api/session/:token/qr', sessionLimit, (req, res) => {
   sendPrivate(res, w.qr_storage_key);
 });
 
-const REF_RE = /^[A-Z0-9][A-Z0-9\-_/]{7,34}$/;
+const REF_RE = /^\d{12}$/; // UPI reference / UTR numbers are 12 digits
+const SEQ = '01234567890123456789', RSEQ = [...SEQ].reverse().join('');
+const junkRef = (r) => /(\d)\1{5}/.test(r) || [0, 1, 2, 3, 4, 5, 6].some((i) => SEQ.includes(r.slice(i, i + 6)) || RSEQ.includes(r.slice(i, i + 6)));
 const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
 app.post('/api/session/:token/payment', limit(15, 15), upload(3).single('screenshot'), (req, res) => {
   const reg = sessionFrom(req.params.token), w = workshop();
@@ -283,12 +285,16 @@ app.post('/api/session/:token/payment', limit(15, 15), upload(3).single('screens
   const ref = clean(req.body.transactionReference || '').toUpperCase();
   const pd = clean(req.body.paymentDate || '');
   const errs = {};
-  if (!REF_RE.test(ref)) errs.transactionReference = 'Enter the UPI transaction reference / UTR (8–35 letters or digits)';
+  if (!REF_RE.test(ref)) errs.transactionReference = 'Enter the 12-digit UPI reference number (UTR) from your payment app';
+  else if (junkRef(ref)) errs.transactionReference = 'That does not look like a real UPI reference number. Copy it from your payment app.';
+  if (!req.file) errs.screenshot = 'Upload the payment screenshot from your UPI app';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pd) || isNaN(Date.parse(pd)) || pd > istToday() || pd < reg.created_at.slice(0, 10)) errs.paymentDate = 'Enter the date you paid (not before registering, not in the future)';
   if (Object.keys(errs).length) return res.status(400).json({ error: 'Please fix the highlighted fields', fields: errs });
   if (reg.registration_status !== 'PENDING_PAYMENT') throw new HttpError(409, 'Payment details are already submitted and awaiting verification.');
   if (one('SELECT COUNT(*) c FROM payment_submissions WHERE registration_id=?', reg.id).c >= 5) throw new HttpError(429, 'Too many submissions. Please contact the workshop team.');
-  const key = req.file ? savePrivate(req.file, 'shot') : null;
+  // A UTR already used by a different registration cannot be claimed again.
+  if (one("SELECT 1 FROM payment_submissions WHERE transaction_reference=? AND registration_id<>? AND verification_status IN ('SUBMITTED','VERIFIED','REJECTED')", ref, reg.id)) throw new HttpError(409, 'This transaction reference has already been submitted. Contact the workshop team.');
+  const key = savePrivate(req.file, 'shot');
   try {
     tx(() => {
       const r = run('INSERT INTO payment_submissions (registration_id,transaction_reference,payment_date,screenshot_storage_key) VALUES (?,?,?,?)', reg.id, ref, pd, key);

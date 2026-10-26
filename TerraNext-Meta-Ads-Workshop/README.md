@@ -30,6 +30,7 @@ Admin: `/admin/login`. Re-running `create-admin` for an email resets that passwo
 - Recovering a pending registration needs the same phone **and** email.
 - Admin: scrypt passwords, 8 h HttpOnly + SameSite=Strict cookie, custom-header CSRF check, login rate limit, audit log for every decision.
 - Verify = one transaction; repeating is a no-op; a UTR can be verified for only one registration (DB unique index). PAID/REJECTED are final.
+- Payment proof: UTR must be 12 digits, junk patterns (111111111111, 123456789012) are rejected, a UTR already used by another registration is refused, and a screenshot is required. None of this proves money arrived; only the admin checking the bank/UPI records does.
 - Screenshots: magic-byte checked, 3 MB cap, stored outside `public/`, served only to a logged-in admin.
 
 ## Deliberate gaps

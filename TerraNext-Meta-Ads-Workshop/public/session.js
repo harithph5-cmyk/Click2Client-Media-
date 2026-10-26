@@ -37,9 +37,9 @@ function statusPage(s) {
       ${summary(s)}
       <form id="pf" novalidate>
         <div class="alert bad" id="pe" role="alert" hidden></div>
-        <div class="fld"><label for="ref">UPI transaction reference / UTR</label><input id="ref" name="transactionReference" autocomplete="off" maxlength="35" required><div class="err" data-for="transactionReference"></div></div>
+        <div class="fld"><label for="ref">UPI reference number (UTR, 12 digits)</label><input id="ref" name="transactionReference" autocomplete="off" inputmode="numeric" maxlength="12" pattern="\d{12}" required><div class="err" data-for="transactionReference"></div></div>
         <div class="fld"><label for="pd">Payment date</label><input id="pd" name="paymentDate" type="date" required><div class="err" data-for="paymentDate"></div></div>
-        <div class="fld"><label for="shot">Payment screenshot <span class="opt">(optional · PNG, JPG or WEBP · max 3 MB)</span></label><input id="shot" name="screenshot" type="file" accept="image/png,image/jpeg,image/webp"><div class="err" data-for="screenshot"></div></div>
+        <div class="fld"><label for="shot">Payment screenshot <span class="opt">(required · PNG, JPG or WEBP · max 3 MB)</span></label><input id="shot" name="screenshot" type="file" accept="image/png,image/jpeg,image/webp" required><div class="err" data-for="screenshot"></div></div>
         <button class="btn btn-yellow" id="sb" type="submit">SUBMIT FOR VERIFICATION</button>
         <a class="btn btn-line" href="/payment/${token}">Back to QR code</a>
       </form>${helpLine(s)}`;
@@ -49,9 +49,9 @@ function statusPage(s) {
       const f = e.target, fd = new FormData(f), file = fd.get('screenshot');
       const ref = String(fd.get('transactionReference')).trim();
       $$('.err', f).forEach((x) => (x.textContent = ''));
-      if (!/^[A-Za-z0-9][A-Za-z0-9\-_/]{7,34}$/.test(ref)) return ($('[data-for=transactionReference]').textContent = 'Enter the UPI transaction reference / UTR (8–35 letters or digits)');
+      if (!/^\d{12}$/.test(ref)) return ($('[data-for=transactionReference]').textContent = 'Enter the 12-digit UPI reference number (UTR)');
       if (file && file.size > 3 * 1024 * 1024) return ($('[data-for=screenshot]').textContent = 'File is too large (max 3 MB)');
-      if (!file?.size) fd.delete('screenshot');
+      if (!file?.size) return ($('[data-for=screenshot]').textContent = 'Upload your payment screenshot');
       $('#sb').disabled = true;
       try { await api(`/api/session/${token}/payment`, { method: 'POST', body: fd }); track('payment_reference_submitted'); go('payment-status'); }
       catch (err) {
@@ -65,7 +65,7 @@ function statusPage(s) {
     app.innerHTML = `${steps(3)}<h1>Send Your Details on WhatsApp</h1>
       <div class="alert ok" style="margin:14px 0">Your payment details have been submitted for verification. Your registration will be confirmed after the workshop team verifies the payment.</div>
       ${summary(s, statusRow(s) + `<div><dt>Transaction reference</dt><dd>${esc(sub.reference)}</dd></div><div><dt>Payment date</dt><dd>${esc(sub.paymentDate)}</dd></div>`)}
-      <p>Tap the button, then <b>press Send in WhatsApp</b> so the team can match your payment faster. Opening WhatsApp does not confirm your seat. Only the team's verification does.</p>
+      <p>Tap the button, then <b>press Send in WhatsApp</b> so the team can match your payment faster. <b>Your payment is not verified yet.</b> Your seat is confirmed only after the team finds the money in their account. Entering a reference number or opening WhatsApp confirms nothing.</p>
       <a class="btn btn-green" id="wa" style="width:100%;margin:16px 0" href="${esc(s.whatsappUrl)}" target="_blank" rel="noopener"><i data-lucide="message-circle"></i> SEND ON WHATSAPP</a>
       <details><summary>WhatsApp didn't open? Copy the message</summary><div class="stack"><div class="wa-msg" id="wm">${esc(s.whatsappText)}</div><button class="btn btn-line btn-sm" id="cp" type="button">Copy message</button></div></details>
       <button class="btn btn-line" style="width:100%;margin-top:16px" id="rf" type="button">Check payment status</button>${helpLine(s)}`;
