@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Baasha AI - Chat, Research and Agent | Click2Client Media</title>
+<meta name="description" content="Baasha AI is an AI assistant and agent from Click2Client Media. Chat, research the web with sources, or hand it a task and watch it plan, use tools and verify its work.">
+<link rel="canonical" href="https://click2clientmedia.com/baasha-ai">
+<meta property="og:title" content="Baasha AI by Click2Client Media">
+<meta property="og:description" content="Chat, research the web with sources, or give the agent a task.">
+<meta property="og:image" content="/baasha/assets/logo.webp">
+<link rel="icon" href="/baasha/assets/logo-mark.webp" type="image/webp">
+<link rel="stylesheet" href="/baasha/css/app.css">
+<link rel="stylesheet" href="/baasha/css/extra.css">
+<link rel="preload" href="/baasha/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/baasha/fonts/material-symbols-subset.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+<body data-mode="welcome">
+<a class="skip" href="#main">Skip to content</a>
+
+<aside class="sidebar" id="side" aria-label="Main navigation">
+  <div class="brand">
+    <img class="mark" src="/baasha/assets/logo-mark.webp" alt="" width="40" height="40">
+    <div class="t"><b>Baasha AI</b></div>
+    <button class="collapse" id="collapse" type="button" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar"><span class="ms">chevron_left</span></button>
+  </div>
+  <div class="newchat"><button id="newChat" type="button"><span class="ms">chat</span><span class="lbl">New Chat</span><span class="plus" aria-hidden="true"><span class="ms">add</span></span></button></div>
+  <nav class="nav" aria-label="Modes and sections">
+    <a href="#/" data-nav="chat" id="navChat"><span class="ms">forum</span><span>Chat</span></a>
+    <a href="#/" data-nav="research" id="navResearch"><span class="ms">travel_explore</span><span>Research</span></a>
+    <a href="#/" data-nav="agent" id="navAgent"><span class="ms">auto_awesome</span><span>Agent</span></a>
+    <a href="#/library" data-nav="library" id="navLibrary"><span class="ms">local_library</span><span>Library</span></a>
+  </nav>
+  <section class="recent" aria-label="Recent chats">
+    <h2>Recent chats</h2>
+    <div class="search"><span class="ms" aria-hidden="true">search</span>
+      <label class="sr" for="search">Search conversations</label>
+      <input id="search" type="search" placeholder="Search chats" autocomplete="off"></div>
+    <div class="list" id="list" role="list"></div>
+  </section>
+  <nav class="nav foot" aria-label="More">
+    <a href="#/settings" id="navSettings"><span class="ms">settings</span><span>Settings &amp; safety</span></a>
+    <a href="/products" id="navBack"><span class="ms">west</span><span>Click2Client products</span></a>
+  </nav>
+  <div class="usercard" title="Your conversations are saved only in this browser. Baasha AI does not store them on its servers.">
+    <div class="avatar"><span class="ms" aria-hidden="true">lock</span><i></i></div>
+    <div class="t"><b>Private to you</b><small>Saved in this browser</small></div>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+
+<div class="shell">
+  <header class="topbar">
+    <button class="menu" id="menu" type="button" aria-label="Open navigation" aria-expanded="false"><span class="ms">menu</span></button>
+    <span class="chip-s" id="titleChip" hidden><span class="ms" aria-hidden="true">chat</span><span id="title"></span></span>
+    <span class="grow"></span>
+    <div class="pill" role="status" aria-live="polite"><span class="ms" aria-hidden="true">layers</span><span class="dot" id="dot"></span><span class="txt" id="statusTxt">Connecting...</span></div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <section class="view" id="view-chat" data-mode="welcome" aria-label="Conversation">
+      <div class="stage">
+        <div class="atmos" aria-hidden="true"><div class="orb c"></div></div>
+        <div class="scroll" id="msgs">
+          <div class="welcome" id="welcome">
+            <div class="heroart"><img class="hero-art" src="/baasha/assets/hero.webp" alt="Baasha AI" width="1300" height="600" fetchpriority="high"><span class="glint" aria-hidden="true"></span></div>
+            <div id="slotWelcome"></div>
+            <div class="notice" id="notice" role="status" hidden></div>
+            <div class="shortcuts" id="shortcuts"><span>Try:</span></div>
+          </div>
+          <div class="thread" id="thread" aria-live="polite" aria-label="Conversation"></div>
+        </div>
+        <div class="dock" id="dock"></div>
+      </div>
+
+      <div class="zone" id="zone">
+        <div class="attach-row" id="attachRow">
+          <div class="strip" id="chip" role="status"><span class="ms" aria-hidden="true">attach_file</span><span class="nm" id="chipName"></span><span class="warn" id="chipWarn"></span><button type="button" id="chipX" aria-label="Remove attachment"><span class="ms">close</span></button></div>
+        </div>
+        <div class="ringwrap" id="ringwrap">
+          <form class="composer" id="form">
+            <label class="sr" for="prompt">Message Baasha</label>
+            <textarea id="prompt" rows="1" maxlength="6000" placeholder="Ask Baasha anything..." autocomplete="off"></textarea>
+            <div class="cbar">
+              <div class="cgroup">
+                <div class="modes" id="modes" role="radiogroup" aria-label="Mode">
+                  <span class="slider" aria-hidden="true"></span>
+                  <button type="button" role="radio" data-mode="chat" aria-checked="true" title="Chat: answers from the model, no tools"><span class="ms" aria-hidden="true">forum</span><span>Chat</span></button>
+                  <button type="button" role="radio" data-mode="research" aria-checked="false" title="Research: searches the web and cites sources"><span class="ms" aria-hidden="true">travel_explore</span><span>Research</span></button>
+                  <button type="button" role="radio" data-mode="agent" aria-checked="false" title="Agent: plans a task, uses tools, verifies and reports"><span class="ms" aria-hidden="true">auto_awesome</span><span>Agent</span></button>
+                </div>
+                <input type="file" id="file" class="sr" accept=".txt,.md,.csv,.json,.py,.js,.ts,.html,.css,.xml,.yaml,.yml,.sql" tabindex="-1">
+                <button class="cb" id="attachBtn" type="button" aria-label="Attach a text file" title="Attach a text file (read in your browser, up to 100 KB)"><span class="ms">attach_file</span></button>
+              </div>
+              <div class="cgroup">
+                <button class="send" id="send" type="submit" aria-label="Send message" title="Send"><span class="ms">arrow_upward</span></button>
+                <button class="send stop" id="stop" type="button" aria-label="Stop" title="Stop" hidden><span class="ms">stop</span></button>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="hint"><span id="modeHint">Enter to send &middot; Shift+Enter for a new line</span><span id="count"></span></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-library" hidden aria-label="Library">
+      <div class="page"><div class="in">
+        <h1>Library</h1>
+        <p class="lead">Reports your agent has written. They are saved in this browser only.</p>
+        <div id="reports"></div>
+      </div></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlgTitle">
+  <form method="dialog" id="dlgForm">
+    <h2 id="dlgTitle"></h2>
+    <p id="dlgBody"></p>
+    <label id="dlgField" hidden><span id="dlgLabel">Name</span><input id="dlgInput" type="text" maxlength="80" autocomplete="off"></label>
+    <div class="drow end"><button class="btn" id="dlgCancel" type="button">Cancel</button><button class="btn primary" id="dlgOk" type="submit">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="cfg" aria-labelledby="cfgTitle">
+  <form method="dialog" id="cfgForm">
+    <img class="logo-banner" src="/baasha/assets/logo.webp" alt="Baasha AI" width="1600" height="800" loading="lazy">
+    <h2 id="cfgTitle">Settings &amp; safety</h2>
+    <h3>Status</h3>
+    <div class="note" id="cStatus">Checking...</div>
+    <h3>What Baasha can and cannot do</h3>
+    <div class="note">
+      <b>Chat</b> answers from the AI model. <b>Research</b> searches the web and cites the pages it found. <b>Agent</b> plans a task and uses tools: web search, reading public web pages, a calculator, the date and time, and saving a report.<br><br>
+      It cannot send messages, spend money, delete, publish or change anything, and it only reads public web pages (never private or internal addresses). Web content is treated as untrusted. Links in agent answers are checked against what the tools really returned.
+    </div>
+    <h3>Your data</h3>
+    <div class="note">Conversations and reports are saved only in this browser. The text you send is processed by Google Gemini to produce answers. Do not share passwords or private identity numbers.</div>
+    <div class="drow"><button class="btn danger" id="cClear" type="button">Delete all my chats and reports...</button></div>
+    <div class="drow end"><button class="btn" value="close">Close</button></div>
+  </form>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script type="module" src="/baasha/js/app.js"></script>
+</body>
+</html>

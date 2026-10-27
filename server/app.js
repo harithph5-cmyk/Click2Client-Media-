@@ -55,6 +55,20 @@ const validEmail = (e) => /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const validPhone = (p) => /^\+?[\d\s-]{7,18}$/.test(p) && p.replace(/\D/g, '').length >= 7;
 const bad = (res, code, message, status = 400) => res.status(status).json({ error: { code, message } });
 
+// (mounted early: the /api catch-alls and admin guards further down must not see these routes)
+// Baasha AI: the public AI assistant / agent product (Chat, Research, Agent modes).
+// Its API lives in server/baasha/ and is loaded lazily, so a problem there can never take the website down.
+let baashaRouter;
+app.use('/api/baasha', h(async (req, res, next) => {
+  try { baashaRouter ||= (await import('./baasha/routes.js')).default; }
+  catch (e) { console.error('[baasha] failed to load:', e); return bad(res, 'unavailable', 'Baasha AI is temporarily unavailable.', 503); }
+  baashaRouter(req, res, next);
+}));
+const BAASHA_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'";
+app.get('/baasha', (req, res) => res.redirect(301, '/baasha-ai'));
+app.get('/baasha-ai', (req, res) => res.set({ 'content-security-policy': BAASHA_CSP, 'cache-control': 'no-cache' }).sendFile(path.join(pub, 'baasha.html')));
+
+
 // ── Audit execution ──────────────────────────────────────────────────────
 // Time budget per audit. Vercel functions are configured for 300 s
 // (vercel.json); we stop crawling early to leave room for the final steps.

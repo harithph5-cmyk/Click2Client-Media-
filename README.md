@@ -115,3 +115,30 @@ Statuses: Payment Pending · Screenshot Received · Payment Under Verification �
 - Audit numbers come only from real crawls and real APIs. Anything unverifiable is labelled "unavailable" and left out of the score.
 - There are no invented testimonials, client logos, ratings or statistics. The testimonials section stays hidden until you add real ones in Settings.
 - The site makes no ranking guarantees anywhere.
+
+## Baasha AI (`/baasha-ai`)
+
+Baasha AI is the AI assistant and agent product shown on **/products**. It has three modes:
+
+| Mode | What it does | Server pieces |
+|---|---|---|
+| **Chat** | Streams answers from Gemini. No tools, no web access. | `POST /api/baasha/chat` (`mode: "chat"`) |
+| **Research** | Gemini with Google Search grounding; the answer carries `[n]` citations and real source links. | `POST /api/baasha/chat` (`mode: "research"`) |
+| **Agent** | Plans the task, then loops over tools (web search, read a public page, calculator, date/time, save report), verifies the answer, and reports. Progress streams to the browser as server-sent events and can be stopped. | `POST /api/baasha/agent`, `server/baasha/agent.js` |
+
+Code lives in `server/baasha/` (loaded lazily by `server/app.js`, so a fault there cannot take the website down); the page is `public/baasha.html` with assets in `public/baasha/`.
+
+### Switching it on
+
+Set **`GEMINI_API_KEY`** in the hosting environment (Vercel → Settings → Environment Variables), then redeploy. Optional: `BAASHA_MODEL` (default `gemini-3.5-flash`; choose a model your key can use) and `BAASHA_DAILY_LIMIT`. Until the key is set the page loads and says it is not switched on yet; the rest of the site is unaffected. Check status at `GET /api/baasha/status` (it never reveals the key).
+
+### Safety and privacy
+
+- The key stays on the server; browsers only talk to `/api/baasha/*`. Requests from other websites are refused (Origin check).
+- Per-visitor hourly limits (chat 40, research 15, agent 6) and a daily ceiling protect your AI quota. Counters are in memory per server instance, so on Vercel they are approximate; add Vercel Firewall rate limits for hard guarantees.
+- Nothing visitors write is stored on the server. Chats and reports live in the visitor's own browser (`localStorage`), so there is no shared data to leak. The text sent is processed by Google Gemini.
+- The agent has read-only tools. It cannot send, buy, delete, publish or change anything. Page fetching is SSRF-protected: only public http(s) pages, addresses are validated when the connection is made, redirects are re-validated, private/loopback/link-local/metadata ranges are blocked, size and time are capped. Web content is treated as untrusted data, and any link in the agent's final answer that no tool returned is removed.
+
+### Tests
+
+`node --test test/*.test.js` (includes `test/baasha.test.js`: calculator, SSRF rules, rate limits, citation and link verification, the agent loop with a scripted model, and the HTTP layer with a mocked Gemini).

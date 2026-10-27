@@ -376,3 +376,4 @@
 @media (prefers-reduced-motion: no-preference) { .bs-badge { animation: plpulse2 2.4s ease-in-out infinite; } .bs-img { transition: transform .8s cubic-bezier(.2, .8, .2, 1); } .bs:hover .bs-img { transform: scale(1.02); } .bs { overflow: hidden; } }
 @keyframes plpulse2 { 50% { box-shadow: 0 0 0 10px rgba(255, 176, 32, .0), 0 0 24px rgba(255, 176, 32, .55); } }
 @media (max-width: 760px) { .bs { border-radius: 24px; } .bs-bar { flex-direction: column; align-items: stretch; padding: 22px; gap: 18px; } .bs .btn { width: 100%; justify-content: center; } }
+.bs-link{display:block}
