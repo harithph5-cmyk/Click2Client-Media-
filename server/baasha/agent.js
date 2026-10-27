@@ -4,7 +4,7 @@ import { generate as realGenerate, GeminiError } from './gemini.js';
 import { DECLARATIONS, LABELS, runTool as realRunTool } from './tools.js';
 
 export const MAX_STEPS = 8;
-export const TIME_BUDGET_MS = 170_000;
+export const TIME_BUDGET_MS = 90_000;      // keeps a whole run well inside typical proxy time limits
 
 const SYSTEM = `You are Baasha AI, an autonomous but careful assistant from Click2Client Media.
 You work in the open: you may only use the provided tools (web search, reading public web pages, a calculator, the date/time, and saving a report).
@@ -66,7 +66,7 @@ export async function runAgent({ task, history = [], emit, signal }, deps = {}) 
   while (steps < MAX_STEPS) {
     if (cancelled()) throw new GeminiError('Cancelled.', 499, 'cancelled');
     if (Date.now() - started > TIME_BUDGET_MS) { stopped = 'The time limit was reached.'; break; }
-    const r = await generate({ system: SYSTEM, contents, tools: [{ functionDeclarations: DECLARATIONS }], maxOutputTokens: 3000, timeoutMs: 60000 }, signal);
+    const r = await generate({ system: SYSTEM, contents, tools: [{ functionDeclarations: DECLARATIONS }], maxOutputTokens: 3000, timeoutMs: 45000 }, signal);
     const calls = r.parts.filter((p) => p.functionCall);
     if (!calls.length) { final = r.text; break; }
     steps++;
