@@ -21,6 +21,7 @@ export const EDITABLE_VIEWS = {
   'seo-tools': { label: 'SEO Tools', url: '/seo-tools', seo: 'seoTools' },
   services: { label: 'Services', url: '/services', seo: 'services' },
   products: { label: 'Products', url: '/products', seo: 'products' },
+  courses: { label: 'Courses', url: '/courses', seo: 'courses' },
   about: { label: 'About', url: '/about', seo: 'about' },
   _founder: { label: 'Meet the founder (About)', url: '/about' },
   blog: { label: 'Blog', url: '/blog', seo: 'blog' },

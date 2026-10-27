@@ -2,49 +2,234 @@
 <html lang="en-IN">
 <head>
 <!--#include head-->
+<link rel="stylesheet" href="/css/learn.css">
 </head>
-<body>
+<body class="pl">
 <!--#include header-->
+<!--#include icons-->
 <main id="main">
 
-<section class="pr-hero">
-  <div class="wrap">
-    <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Products</nav>
-    <span class="eyebrow"><!--@products.1-->Click2Client Products<!--/@products.1--></span>
-    <h1><!--@products.2-->Software that runs <span class="grad-text">the busy parts</span> of your business.<!--/@products.2--></h1>
-    <p class="lede"><!--@products.3-->Ready-made digital systems built by Click2Client Media — for hiring, learning, productivity and customer management. Set up for your team, without building from scratch.<!--/@products.3--></p>
-    <div class="ctas"><a class="btn primary lg" href="#products"><!--@products.4-->Explore Products<!--/@products.4--></a><a class="btn outline lg" href="/enquire?service=Product%20demo"><!--@products.5-->Book a Demo<!--/@products.5--></a></div>
-  </div>
-</section>
-
-<section class="section pr-list" id="products" aria-labelledby="pr-h">
-  <div class="wrap">
-    <div class="split-head reveal"><div class="sec-head"><span class="eyebrow"><!--@products.6-->All products<!--/@products.6--></span><h2 id="pr-h"><!--@products.7-->Choose a system for your team<!--/@products.7--></h2></div><p><!--@products.8-->Each product can be set up with your branding and workflow. Tell us what you need and we'll show you how it fits.<!--/@products.8--></p></div>
-    {{products.cards}}
-  </div>
-</section>
-
-<section class="section tint" aria-labelledby="how-pr">
-  <div class="wrap">
-    <div class="sec-head center reveal"><span class="eyebrow"><!--@products.9-->How it works<!--/@products.9--></span><h2 id="how-pr"><!--@products.10-->From first look to go-live<!--/@products.10--></h2></div>
-    <ol class="pr-steps">
-      <li class="reveal"><b>01</b><h3><!--@products.11-->Discover<!--/@products.11--></h3><p><!--@products.12-->Pick the product that matches the problem you want to solve.<!--/@products.12--></p></li>
-      <li class="reveal"><b>02</b><h3><!--@products.13-->Understand<!--/@products.13--></h3><p><!--@products.14-->Book a walkthrough and see it working with examples from your business.<!--/@products.14--></p></li>
-      <li class="reveal"><b>03</b><h3><!--@products.15-->Try<!--/@products.15--></h3><p><!--@products.16-->We set it up with your branding and workflow so your team can try it.<!--/@products.16--></p></li>
-      <li class="reveal"><b>04</b><h3><!--@products.17-->Go live<!--/@products.17--></h3><p><!--@products.18-->Launch with your team — with support from the people who built it.<!--/@products.18--></p></li>
-    </ol>
-  </div>
-</section>
-
-<section class="section tight">
-  <div class="wrap">
-    <div class="cta-final reveal">
-      <div><span class="eyebrow"><!--@products.19-->Need something specific?<!--/@products.19--></span><h2><!--@products.20-->Want a system built around your business?<!--/@products.20--></h2><p style="margin-top:14px;font-size:17px"><!--@products.21-->We also design and build custom SaaS, AI and automation tools.<!--/@products.21--></p></div>
-      <div class="row wrap-row" style="justify-content:flex-end"><a class="btn white lg" href="/enquire?service=Custom%20software%20%2F%20SaaS"><!--@products.22-->Talk About Your Idea<!--/@products.22--></a><a class="btn glass lg" href="{{whatsappHref}}" target="_blank" rel="noopener"><!--@products.23-->WhatsApp Us<!--/@products.23--></a></div>
+<section class="ph" aria-labelledby="ph-h">
+  <div class="wrap ph-grid">
+    <div class="ph-copy">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Home</a> / Products</nav>
+      <span class="eyebrow"><!--@products.1-->CRM, ERP &amp; AI software · Click2Client Media<!--/@products.1--></span>
+      <h1 id="ph-h"><!--@products.2-->Business software, CRM &amp; AI automation for the <span class="pl-grad">busy parts</span> of your business.<!--/@products.2--></h1>
+      <p class="lede"><!--@products.3-->Click2Client Media builds CRM, ERP, HRMS, school management and AI-powered software that simplifies operations, improves productivity and helps your business grow, customised to your workflow.<!--/@products.3--></p>
+      <div class="pl-ctas"><a class="btn primary lg" href="#catalogue"><!--@products.4-->Explore Products<!--/@products.4--></a><a class="btn outline lg" href="/enquire?service=Product%20demo"><!--@products.5-->Book a Demo<!--/@products.5--></a></div>
+    </div>
+    <div class="ph-stage" role="img" aria-label="Illustration of floating software panels: a CRM dashboard, an analytics chart, workflow automation nodes, an AI assistant and a task list">
+      <div class="ph-glow"></div>
+      <div class="ph-card ph-crm">
+        <b><!--@products.6-->Sales pipeline<!--/@products.6--></b>
+        <div class="ph-cols"><i style="--h:58%"></i><i style="--h:82%"></i><i style="--h:44%"></i><i style="--h:70%"></i><i style="--h:94%"></i></div>
+        <div class="ph-row"><span class="ph-av"></span><span class="ph-bar" style="width:62%"></span></div>
+        <div class="ph-row"><span class="ph-av v"></span><span class="ph-bar" style="width:46%"></span></div>
+      </div>
+      <div class="ph-card ph-chart">
+        <b><!--@products.7-->Performance<!--/@products.7--></b>
+        <svg viewBox="0 0 160 70" aria-hidden="true"><defs><linearGradient id="phg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0866FF" stop-opacity=".35"/><stop offset="1" stop-color="#0866FF" stop-opacity="0"/></linearGradient></defs><path d="M0 58 L22 46 L44 50 L66 30 L88 36 L110 16 L132 22 L160 6 V70 H0Z" fill="url(#phg)"/><path d="M0 58 L22 46 L44 50 L66 30 L88 36 L110 16 L132 22 L160 6" fill="none" stroke="#0866FF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="ph-card ph-flow">
+        <svg viewBox="0 0 170 80" aria-hidden="true"><path d="M26 40h40M104 22l-26 18M104 58 78 40" stroke="#16A8FF" stroke-width="2" fill="none" stroke-dasharray="4 4"/><circle cx="20" cy="40" r="12" fill="#0866FF"/><rect x="66" y="28" width="26" height="24" rx="7" fill="#805BFF"/><circle cx="116" cy="20" r="10" fill="#16A8FF"/><circle cx="116" cy="60" r="10" fill="#35D07F"/></svg>
+        <b><!--@products.8-->Automation<!--/@products.8--></b>
+      </div>
+      <div class="ph-card ph-ai">
+        <span class="ph-bub"><!--@products.9-->How many leads came in this week?<!--/@products.9--></span>
+        <span class="ph-bub me"><i></i><i></i><i></i></span>
+      </div>
+      <div class="ph-card ph-task">
+        <label><span class="ph-ck on"></span><span class="ph-bar" style="width:70%"></span></label>
+        <label><span class="ph-ck on"></span><span class="ph-bar" style="width:52%"></span></label>
+        <label><span class="ph-ck"></span><span class="ph-bar" style="width:62%"></span></label>
+      </div>
     </div>
   </div>
 </section>
+
+<section class="pl-glance" aria-label="About Click2Client Media software">
+  <div class="wrap pl-glance-in reveal">
+    <p><!--@products.10--><b>Click2Client Media</b> is a digital growth and software company based in {{city}}, Tamil Nadu. It offers <b>74 business software solutions</b> (CRM, ERP, HRMS, school management, finance, sales and marketing, industry-specific and AI automation tools) for businesses in India and abroad. Availability and integrations depend on your requirements.<!--/@products.10--></p>
+    <dl class="pl-stats"><div><dt><!--@products.11-->Software solutions<!--/@products.11--></dt><dd data-count="74"><!--@products.12-->74<!--/@products.12--></dd></div><div><dt><!--@products.13-->Categories<!--/@products.13--></dt><dd data-count="7"><!--@products.14-->7<!--/@products.14--></dd></div><div><dt><!--@products.15-->Flagship systems<!--/@products.15--></dt><dd data-count="4"><!--@products.16-->4<!--/@products.16--></dd></div></dl>
+  </div>
+  <div class="pl-ticker" aria-hidden="true"><div class="pl-track"><span>CRM</span><span>ERP</span><span>HRMS</span><span>ATS</span><span>School ERP</span><span>AI Chatbot</span><span>WhatsApp Automation</span><span>Billing &amp; Invoicing</span><span>Inventory</span><span>Payroll</span><span>Workflow Automation</span><span>Hospital Management</span><span>CRM</span><span>ERP</span><span>HRMS</span><span>ATS</span><span>School ERP</span><span>AI Chatbot</span><span>WhatsApp Automation</span><span>Billing &amp; Invoicing</span><span>Inventory</span><span>Payroll</span><span>Workflow Automation</span><span>Hospital Management</span></div></div>
+</section>
+
+<section class="pl-sec pf-sec" aria-labelledby="pf-h">
+  <div class="wrap">
+    <div class="pl-head reveal"><span class="eyebrow"><!--@products.17-->Featured software<!--/@products.17--></span><h2 id="pf-h"><!--@products.18-->Flagship CRM, ERP, HRMS and school management software<!--/@products.18--></h2></div>
+    <div class="pf-list">
+
+      <article class="fp reveal" id="crm-system">
+        <div class="fp-copy">
+          <div class="fp-top"><span class="fp-ic logo"><img src="<!--@products.img19-->/img/c2c-mark.webp<!--/@products.img19-->" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="pl-badge"><!--@products.20-->Business Management<!--/@products.20--></span></div>
+          <h3><!--@products.21-->CRM System<!--/@products.21--></h3>
+          <p><!--@products.22-->Manage customer relationships, capture enquiries, and track sales opportunities in one place.<!--/@products.22--></p>
+          <ul class="fp-tags"><li><!--@products.23-->Lead Management<!--/@products.23--></li><li><!--@products.24-->Customer Records<!--/@products.24--></li><li><!--@products.25-->Sales Pipeline<!--/@products.25--></li></ul>
+          <a class="btn primary lg" href="/enquire?service=CRM%20System"><!--@products.26-->Explore Product<!--/@products.26--></a>
+        </div>
+        <figure class="fp-shot">
+          <svg viewBox="0 0 480 300" role="img" aria-label="Illustrative CRM dashboard with lead cards, a customer profile and a sales pipeline">
+            <rect width="480" height="300" rx="16" class="m-win"/><rect width="480" height="30" rx="16" class="m-top"/><circle cx="18" cy="15" r="4" fill="#FF6B6B"/><circle cx="32" cy="15" r="4" fill="#FFC53D"/><circle cx="46" cy="15" r="4" fill="#35D07F"/>
+            <rect x="12" y="42" width="52" height="246" rx="10" class="m-side"/><rect x="22" y="54" width="32" height="8" rx="4" class="m-b"/><rect x="22" y="76" width="32" height="6" rx="3" class="m-g"/><rect x="22" y="92" width="32" height="6" rx="3" class="m-g"/><rect x="22" y="108" width="32" height="6" rx="3" class="m-g"/>
+            <g><rect x="76" y="42" width="120" height="52" rx="10" class="m-card"/><rect x="88" y="54" width="46" height="6" rx="3" class="m-g"/><text x="88" y="82" class="m-t">248 leads</text>
+            <rect x="204" y="42" width="120" height="52" rx="10" class="m-card"/><rect x="216" y="54" width="46" height="6" rx="3" class="m-g"/><text x="216" y="82" class="m-t m-bt">64% follow-up</text>
+            <rect x="332" y="42" width="136" height="52" rx="10" class="m-card"/><circle cx="356" cy="68" r="14" class="m-v"/><rect x="378" y="58" width="60" height="6" rx="3" class="m-g"/><rect x="378" y="72" width="40" height="5" rx="2.5" class="m-g2"/></g>
+            <text x="76" y="116" class="m-lb">New</text><text x="204" y="116" class="m-lb">Qualified</text><text x="332" y="116" class="m-lb">Won</text>
+            <g><rect x="76" y="124" width="120" height="48" rx="9" class="m-card"/><rect x="86" y="134" width="64" height="6" rx="3" class="m-g"/><rect x="86" y="148" width="40" height="5" rx="2.5" class="m-g2"/><circle cx="178" cy="148" r="7" class="m-c"/>
+            <rect x="76" y="180" width="120" height="48" rx="9" class="m-card"/><rect x="86" y="190" width="54" height="6" rx="3" class="m-g"/><rect x="86" y="204" width="44" height="5" rx="2.5" class="m-g2"/><circle cx="178" cy="204" r="7" class="m-v"/>
+            <rect x="204" y="124" width="120" height="48" rx="9" class="m-card m-hi"/><rect x="214" y="134" width="70" height="6" rx="3" class="m-b"/><rect x="214" y="148" width="46" height="5" rx="2.5" class="m-g2"/><circle cx="306" cy="148" r="7" class="m-b"/>
+            <rect x="204" y="180" width="120" height="48" rx="9" class="m-card"/><rect x="214" y="190" width="58" height="6" rx="3" class="m-g"/><rect x="214" y="204" width="38" height="5" rx="2.5" class="m-g2"/>
+            <rect x="332" y="124" width="136" height="48" rx="9" class="m-card"/><rect x="342" y="134" width="74" height="6" rx="3" class="m-g"/><rect x="342" y="148" width="44" height="5" rx="2.5" class="m-g2"/><path d="m444 142 5 5 9-10" class="m-ok"/></g>
+            <rect x="76" y="238" width="392" height="50" rx="10" class="m-card"/><path d="M90 276 L130 262 L170 268 L210 250 L250 258 L290 246 L330 252 L370 244 L410 248 L452 242" class="m-line"/>
+          </svg>
+          <figcaption class="fp-note"><!--@products.27-->Illustrative interface. Not a screenshot of live software.<!--/@products.27--></figcaption>
+        </figure>
+      </article>
+
+      <article class="fp flip reveal" id="erp-system">
+        <div class="fp-copy">
+          <div class="fp-top"><span class="fp-ic logo"><img src="<!--@products.img28-->/img/c2c-mark.webp<!--/@products.img28-->" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="pl-badge"><!--@products.29-->Business Management<!--/@products.29--></span></div>
+          <h3><!--@products.30-->ERP System<!--/@products.30--></h3>
+          <p><!--@products.31-->Bring essential business operations, resources, and reporting together in one connected platform.<!--/@products.31--></p>
+          <ul class="fp-tags"><li><!--@products.32-->Business Operations<!--/@products.32--></li><li><!--@products.33-->Inventory<!--/@products.33--></li><li><!--@products.34-->Reporting<!--/@products.34--></li></ul>
+          <a class="btn primary lg" href="/enquire?service=ERP%20System"><!--@products.35-->Explore Product<!--/@products.35--></a>
+        </div>
+        <figure class="fp-shot">
+          <svg viewBox="0 0 480 300" role="img" aria-label="Illustrative ERP dashboard with inventory summaries, operational charts and business metrics">
+            <rect width="480" height="300" rx="16" class="m-win"/><rect width="480" height="30" rx="16" class="m-top"/><circle cx="18" cy="15" r="4" fill="#FF6B6B"/><circle cx="32" cy="15" r="4" fill="#FFC53D"/><circle cx="46" cy="15" r="4" fill="#35D07F"/>
+            <g><rect x="14" y="42" width="106" height="56" rx="10" class="m-card"/><rect x="26" y="54" width="40" height="6" rx="3" class="m-g"/><text x="26" y="86" class="m-t">Orders</text>
+            <rect x="130" y="42" width="106" height="56" rx="10" class="m-card"/><rect x="142" y="54" width="40" height="6" rx="3" class="m-g"/><text x="142" y="86" class="m-t m-bt">Stock</text>
+            <rect x="246" y="42" width="106" height="56" rx="10" class="m-card"/><rect x="258" y="54" width="40" height="6" rx="3" class="m-g"/><text x="258" y="86" class="m-t">Revenue</text>
+            <rect x="362" y="42" width="106" height="56" rx="10" class="m-card"/><rect x="374" y="54" width="40" height="6" rx="3" class="m-g"/><text x="374" y="86" class="m-t m-bt">Reports</text></g>
+            <rect x="14" y="108" width="260" height="180" rx="12" class="m-card"/><text x="28" y="130" class="m-lb">Operations</text>
+            <g><rect x="34" y="226" width="22" height="46" rx="5" class="m-b"/><rect x="68" y="196" width="22" height="76" rx="5" class="m-c"/><rect x="102" y="214" width="22" height="58" rx="5" class="m-b"/><rect x="136" y="170" width="22" height="102" rx="5" class="m-v"/><rect x="170" y="190" width="22" height="82" rx="5" class="m-c"/><rect x="204" y="152" width="22" height="120" rx="5" class="m-b"/><rect x="238" y="178" width="22" height="94" rx="5" class="m-c"/></g>
+            <rect x="284" y="108" width="184" height="86" rx="12" class="m-card"/><text x="298" y="130" class="m-lb">Inventory</text><circle cx="340" cy="168" r="20" fill="none" stroke="#E6EEF5" stroke-width="9"/><circle cx="340" cy="168" r="20" fill="none" stroke="#0866FF" stroke-width="9" stroke-dasharray="80 126" transform="rotate(-90 340 168)"/><rect x="384" y="152" width="70" height="6" rx="3" class="m-g"/><rect x="384" y="168" width="52" height="6" rx="3" class="m-g2"/>
+            <rect x="284" y="202" width="184" height="86" rx="12" class="m-card"/><rect x="298" y="216" width="156" height="12" rx="4" class="m-g2"/><rect x="298" y="236" width="156" height="12" rx="4" class="m-g2"/><rect x="298" y="256" width="156" height="12" rx="4" class="m-g2"/><rect x="298" y="216" width="70" height="12" rx="4" class="m-b"/><rect x="298" y="236" width="104" height="12" rx="4" class="m-c"/><rect x="298" y="256" width="48" height="12" rx="4" class="m-v"/>
+          </svg>
+          <figcaption class="fp-note"><!--@products.36-->Illustrative interface. Not a screenshot of live software.<!--/@products.36--></figcaption>
+        </figure>
+      </article>
+
+      <div class="pf-pair">
+        <article class="fp stack reveal" id="hr-management-system">
+          <div class="fp-copy">
+            <div class="fp-top"><span class="fp-ic logo"><img src="<!--@products.img37-->/img/c2c-mark.webp<!--/@products.img37-->" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="pl-badge"><!--@products.38-->HR &amp; Recruitment<!--/@products.38--></span></div>
+            <h3><!--@products.39-->HR Management System<!--/@products.39--></h3>
+            <p><!--@products.40-->Simplify employee administration, attendance, leave requests, and HR workflows.<!--/@products.40--></p>
+            <ul class="fp-tags"><li><!--@products.41-->Employee Records<!--/@products.41--></li><li><!--@products.42-->Attendance<!--/@products.42--></li><li><!--@products.43-->Leave Management<!--/@products.43--></li></ul>
+            <a class="btn primary lg" href="/enquire?service=HR%20Management%20System%20(HRMS)"><!--@products.44-->Explore Product<!--/@products.44--></a>
+          </div>
+          <figure class="fp-shot">
+            <svg viewBox="0 0 480 280" role="img" aria-label="Illustrative HR dashboard with employee profile cards, attendance summary and a leave calendar">
+              <rect width="480" height="280" rx="16" class="m-win"/><rect width="480" height="30" rx="16" class="m-top"/><circle cx="18" cy="15" r="4" fill="#FF6B6B"/><circle cx="32" cy="15" r="4" fill="#FFC53D"/><circle cx="46" cy="15" r="4" fill="#35D07F"/>
+              <g><rect x="14" y="42" width="140" height="64" rx="10" class="m-card"/><circle cx="40" cy="74" r="16" class="m-b"/><rect x="64" y="62" width="72" height="7" rx="3" class="m-g"/><rect x="64" y="78" width="48" height="5" rx="2.5" class="m-g2"/>
+              <rect x="14" y="114" width="140" height="64" rx="10" class="m-card"/><circle cx="40" cy="146" r="16" class="m-v"/><rect x="64" y="134" width="64" height="7" rx="3" class="m-g"/><rect x="64" y="150" width="44" height="5" rx="2.5" class="m-g2"/>
+              <rect x="14" y="186" width="140" height="82" rx="10" class="m-card"/><circle cx="40" cy="214" r="16" class="m-c"/><rect x="64" y="204" width="68" height="7" rx="3" class="m-g"/><rect x="64" y="220" width="46" height="5" rx="2.5" class="m-g2"/><rect x="26" y="244" width="116" height="10" rx="5" class="m-g2"/><rect x="26" y="244" width="84" height="10" rx="5" class="m-b"/></g>
+              <rect x="164" y="42" width="130" height="226" rx="12" class="m-card"/><text x="178" y="64" class="m-lb">Attendance</text><circle cx="229" cy="136" r="38" fill="none" stroke="#E6EEF5" stroke-width="14"/><circle cx="229" cy="136" r="38" fill="none" stroke="#0866FF" stroke-width="14" stroke-dasharray="190 239" transform="rotate(-90 229 136)" stroke-linecap="round"/><text x="229" y="141" text-anchor="middle" class="m-t">92%</text><rect x="182" y="198" width="94" height="6" rx="3" class="m-g"/><rect x="182" y="214" width="70" height="6" rx="3" class="m-g2"/><rect x="182" y="230" width="84" height="6" rx="3" class="m-g2"/>
+              <rect x="304" y="42" width="162" height="226" rx="12" class="m-card"/><text x="318" y="64" class="m-lb">Leave calendar</text>
+              <g class="m-cal"><rect x="318" y="78" width="20" height="20" rx="5"/><rect x="344" y="78" width="20" height="20" rx="5"/><rect x="370" y="78" width="20" height="20" rx="5" class="v"/><rect x="396" y="78" width="20" height="20" rx="5" class="v"/><rect x="422" y="78" width="20" height="20" rx="5"/>
+              <rect x="318" y="104" width="20" height="20" rx="5"/><rect x="344" y="104" width="20" height="20" rx="5" class="b"/><rect x="370" y="104" width="20" height="20" rx="5"/><rect x="396" y="104" width="20" height="20" rx="5"/><rect x="422" y="104" width="20" height="20" rx="5"/>
+              <rect x="318" y="130" width="20" height="20" rx="5"/><rect x="344" y="130" width="20" height="20" rx="5"/><rect x="370" y="130" width="20" height="20" rx="5"/><rect x="396" y="130" width="20" height="20" rx="5" class="c"/><rect x="422" y="130" width="20" height="20" rx="5" class="c"/>
+              <rect x="318" y="156" width="20" height="20" rx="5"/><rect x="344" y="156" width="20" height="20" rx="5"/><rect x="370" y="156" width="20" height="20" rx="5" class="b"/><rect x="396" y="156" width="20" height="20" rx="5"/><rect x="422" y="156" width="20" height="20" rx="5"/></g>
+              <rect x="318" y="192" width="124" height="8" rx="4" class="m-g"/><rect x="318" y="210" width="96" height="8" rx="4" class="m-g2"/><rect x="318" y="228" width="108" height="8" rx="4" class="m-g2"/>
+            </svg>
+            <figcaption class="fp-note"><!--@products.45-->Illustrative interface. Not a screenshot of live software.<!--/@products.45--></figcaption>
+          </figure>
+        </article>
+
+        <article class="fp stack reveal" id="school-management-system">
+          <div class="fp-copy">
+            <div class="fp-top"><span class="fp-ic logo"><img src="<!--@products.img46-->/img/c2c-mark.webp<!--/@products.img46-->" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="pl-badge"><!--@products.47-->School &amp; Education<!--/@products.47--></span></div>
+            <h3><!--@products.48-->School Management System<!--/@products.48--></h3>
+            <p><!--@products.49-->Manage student information, attendance, academic records, and school administration through one platform.<!--/@products.49--></p>
+            <ul class="fp-tags"><li><!--@products.50-->Student Records<!--/@products.50--></li><li><!--@products.51-->Attendance<!--/@products.51--></li><li><!--@products.52-->Academic Management<!--/@products.52--></li></ul>
+            <a class="btn primary lg" href="/enquire?service=School%20Management%20System"><!--@products.53-->Explore Product<!--/@products.53--></a>
+          </div>
+          <figure class="fp-shot">
+            <svg viewBox="0 0 480 280" role="img" aria-label="Illustrative school dashboard with a student list, attendance chart, class schedule and academic overview">
+              <rect width="480" height="280" rx="16" class="m-win"/><rect width="480" height="30" rx="16" class="m-top"/><circle cx="18" cy="15" r="4" fill="#FF6B6B"/><circle cx="32" cy="15" r="4" fill="#FFC53D"/><circle cx="46" cy="15" r="4" fill="#35D07F"/>
+              <rect x="14" y="42" width="170" height="226" rx="12" class="m-card"/><text x="28" y="64" class="m-lb">Students</text>
+              <g><circle cx="38" cy="90" r="11" class="m-b"/><rect x="58" y="84" width="76" height="6" rx="3" class="m-g"/><rect x="58" y="95" width="48" height="4" rx="2" class="m-g2"/><rect x="146" y="85" width="26" height="10" rx="5" class="m-ok2"/>
+              <circle cx="38" cy="124" r="11" class="m-v"/><rect x="58" y="118" width="64" height="6" rx="3" class="m-g"/><rect x="58" y="129" width="44" height="4" rx="2" class="m-g2"/><rect x="146" y="119" width="26" height="10" rx="5" class="m-ok2"/>
+              <circle cx="38" cy="158" r="11" class="m-c"/><rect x="58" y="152" width="80" height="6" rx="3" class="m-g"/><rect x="58" y="163" width="40" height="4" rx="2" class="m-g2"/><rect x="146" y="153" width="26" height="10" rx="5" class="m-no"/>
+              <circle cx="38" cy="192" r="11" class="m-b"/><rect x="58" y="186" width="70" height="6" rx="3" class="m-g"/><rect x="58" y="197" width="52" height="4" rx="2" class="m-g2"/><rect x="146" y="187" width="26" height="10" rx="5" class="m-ok2"/>
+              <circle cx="38" cy="226" r="11" class="m-v"/><rect x="58" y="220" width="60" height="6" rx="3" class="m-g"/><rect x="58" y="231" width="46" height="4" rx="2" class="m-g2"/><rect x="146" y="221" width="26" height="10" rx="5" class="m-ok2"/></g>
+              <rect x="194" y="42" width="272" height="100" rx="12" class="m-card"/><text x="208" y="64" class="m-lb">Attendance</text>
+              <g><rect x="214" y="104" width="22" height="26" rx="5" class="m-b"/><rect x="246" y="90" width="22" height="40" rx="5" class="m-b"/><rect x="278" y="80" width="22" height="50" rx="5" class="m-c"/><rect x="310" y="94" width="22" height="36" rx="5" class="m-b"/><rect x="342" y="76" width="22" height="54" rx="5" class="m-c"/><rect x="374" y="86" width="22" height="44" rx="5" class="m-b"/><rect x="406" y="72" width="22" height="58" rx="5" class="m-v"/></g>
+              <rect x="194" y="152" width="162" height="116" rx="12" class="m-card"/><text x="208" y="174" class="m-lb">Schedule</text>
+              <g><rect x="208" y="184" width="134" height="16" rx="5" class="m-b"/><rect x="208" y="206" width="104" height="16" rx="5" class="m-c"/><rect x="208" y="228" width="120" height="16" rx="5" class="m-v"/></g>
+              <rect x="364" y="152" width="102" height="116" rx="12" class="m-card"/><text x="376" y="174" class="m-lb">Grades</text><circle cx="415" cy="220" r="26" fill="none" stroke="#E6EEF5" stroke-width="10"/><circle cx="415" cy="220" r="26" fill="none" stroke="#805BFF" stroke-width="10" stroke-dasharray="110 163" transform="rotate(-90 415 220)" stroke-linecap="round"/>
+            </svg>
+            <figcaption class="fp-note"><!--@products.54-->Illustrative interface. Not a screenshot of live software.<!--/@products.54--></figcaption>
+          </figure>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pl-sec" id="catalogue" aria-labelledby="pc-h">
+  <div class="wrap">
+    <div class="pl-head reveal"><span class="eyebrow"><!--@products.55-->Software catalogue<!--/@products.55--></span><h2 id="pc-h"><!--@products.56-->Find the right business software<!--/@products.56--></h2><p><!--@products.57-->Browse 74 solutions by category, or search by name or need. Every system can be set up around your workflow.<!--/@products.57--></p></div>
+    <div class="pc-bar reveal">
+      <div class="pc-tabs" id="pcTabs" role="group" aria-label="Software categories">{{products.tabs}}</div>
+      <div class="pc-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><use href="#i-search"/></svg><input id="pcSearch" type="search" placeholder="Search software and solutions..." aria-label="Search software and solutions" autocomplete="off"></div>
+      <p class="pc-pop">Popular: <button type="button" data-q="crm"><!--@products.58-->CRM<!--/@products.58--></button><button type="button" data-q="employee"><!--@products.59-->HR &amp; payroll<!--/@products.59--></button><button type="button" data-q="school"><!--@products.60-->School<!--/@products.60--></button><button type="button" data-q="whatsapp"><!--@products.61-->WhatsApp<!--/@products.61--></button><button type="button" data-q="chatbot"><!--@products.62-->AI chatbot<!--/@products.62--></button><button type="button" data-q="invoice"><!--@products.63-->Billing<!--/@products.63--></button></p>
+    </div>
+    <p class="pc-status" id="pcStatus" role="status" aria-live="polite"></p>
+  
+    <div id="pcGroups">{{products.catalogue}}</div>
+    <div class="pc-empty" id="pcEmpty" hidden><h3><!--@products.64-->No matching software found.<!--/@products.64--></h3><p><!--@products.65-->Try another word, or tell us what you need and we will help you find the right system.<!--/@products.65--></p><a class="btn primary" href="/enquire?service=Custom%20software%20%2F%20SaaS"><!--@products.66-->Discuss Your Requirements<!--/@products.66--></a></div>
+  </div>
+</section>
+
+<section class="pl-sec" aria-labelledby="bs-h">
+  <div class="wrap">
+    <div class="bs reveal">
+      <img class="bs-img" src="<!--@products.img67-->/img/baasha-ai-coming-soon.webp<!--/@products.img67-->" alt="Painted artwork announcing the Baasha AI model from Click2Client Media" width="720" height="893" loading="lazy" decoding="async">
+      <div class="bs-copy">
+        <span class="bs-badge"><!--@products.68-->Coming soon<!--/@products.68--></span>
+        <h2 id="bs-h"><!--@products.69-->Baasha AI model<!--/@products.69--></h2>
+        <p><!--@products.70-->A new AI model from Click2Client Media is on the way. Join the waiting list and we will let you know as soon as it is ready.<!--/@products.70--></p>
+        <a class="btn primary lg" href="/enquire?service=Baasha%20AI%20model%20waiting%20list"><!--@products.71-->Notify Me<!--/@products.71--></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pd" aria-labelledby="pd-h">
+  <div class="wrap">
+    <div class="pd-split"><div class="pd-head reveal"><span class="eyebrow"><!--@products.72-->Custom software development in India<!--/@products.72--></span><h2 id="pd-h"><!--@products.73-->Don't see the system you need?<!--/@products.73--></h2><p><!--@products.74-->Every business works differently. We help you explore customised software, integrations, and AI automation solutions based on your workflow.<!--/@products.74--></p></div>
+    <img class="pd-img reveal" src="<!--@products.img75-->/img/illustrations/products-connected-systems.svg<!--/@products.img75-->" alt="Illustration of a central AI hub connecting CRM, HRMS, school and finance software modules" width="640" height="420" loading="lazy" decoding="async"></div>
+    <div class="pd-grid">
+      <article class="pd-card reveal">
+        <svg viewBox="0 0 220 120" aria-hidden="true"><rect x="10" y="14" width="70" height="44" rx="10" class="d-b"/><rect x="90" y="14" width="56" height="44" rx="10" class="d-c"/><rect x="156" y="14" width="54" height="44" rx="10" class="d-v"/><rect x="10" y="68" width="100" height="40" rx="10" class="d-c"/><rect x="120" y="68" width="90" height="40" rx="10" class="d-b"/><path d="M80 36h10M146 36h10M60 58v10M165 58v10" stroke="#fff" stroke-opacity=".7" stroke-width="2"/></svg>
+        <h3><!--@products.76-->Custom Business Software<!--/@products.76--></h3><p><!--@products.77-->Dashboards, portals and internal tools designed around how your team really works.<!--/@products.77--></p>
+      </article>
+      <article class="pd-card reveal">
+        <svg viewBox="0 0 220 120" aria-hidden="true"><circle cx="30" cy="60" r="16" class="d-b"/><rect x="82" y="42" width="38" height="36" rx="10" class="d-v"/><circle cx="170" cy="28" r="14" class="d-c"/><circle cx="170" cy="92" r="14" class="d-c"/><path d="M46 60h36M120 55l36-22M120 65l36 22" stroke="#fff" stroke-opacity=".75" stroke-width="2.4" stroke-dasharray="5 5" fill="none"/></svg>
+        <h3><!--@products.78-->AI Workflow Automation<!--/@products.78--></h3><p><!--@products.79-->Connect repeatable steps, approvals and notifications so routine work moves on its own.<!--/@products.79--></p>
+      </article>
+      <article class="pd-card reveal">
+        <svg viewBox="0 0 220 120" aria-hidden="true"><rect x="14" y="20" width="58" height="80" rx="12" class="d-b"/><rect x="148" y="20" width="58" height="80" rx="12" class="d-v"/><circle cx="110" cy="60" r="22" class="d-c"/><path d="M72 60h16M132 60h16" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M104 60h12M110 54v12" stroke="#081B2B" stroke-width="3" stroke-linecap="round"/></svg>
+        <h3><!--@products.80-->Software Integration<!--/@products.80--></h3><p><!--@products.81-->Link the tools you already use so data flows between them instead of being re-typed.<!--/@products.81--></p>
+      </article>
+    </div>
+    <p class="pd-act reveal"><a class="btn white lg" href="/enquire?service=Custom%20software%20%2F%20SaaS"><!--@products.82-->Discuss Your Requirements<!--/@products.82--></a></p>
+  </div>
+</section>
+
+<section class="pl-sec tint" aria-labelledby="faq-h">
+  <div class="wrap faq-wrap">
+    <div class="pl-head reveal"><span class="eyebrow"><!--@products.83-->FAQ<!--/@products.83--></span><h2 id="faq-h"><!--@products.84-->Business software FAQs<!--/@products.84--></h2></div>
+    <div class="faq">{{faq.html}}</div>
+    <p class="pl-fine"><!--@products.85-->Product availability and integrations depend on requirements and a technical assessment. Some solutions may be customised or under development.<!--/@products.85--></p>
+  </div>
+</section>
+
 </main>
 <!--#include footer-->
+<script type="module" src="/js/learn.js"></script>
 </body>
 </html>

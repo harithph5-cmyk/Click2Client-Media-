@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['products', 'Products'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['products', 'Products'], ['software', 'Software Catalogue'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, pages: pagesTab, products: (v) => contentTab(v, 'product'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, pages: pagesTab, products: (v) => contentTab(v, 'product'), software: (v) => contentTab(v, 'software'), courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -456,7 +456,7 @@ async function contentTab(view, kind) {
   const st = (ctState[kind] ||= { edit: null });
   const editing = st.edit === 'new' ? { title: '', data: {}, published: true } : items.find((x) => x.id === st.edit);
   if (editing) return contentForm(view, kind, schema, editing);
-  const publicUrl = kind === 'product' ? '/products' : '/#br-h';
+  const publicUrl = { product: '/products', software: '/products#catalogue', course: '/courses' }[kind] || '/#br-h';
   const thumb = (x) => (x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy" style="width:72px;height:46px;object-fit:${kind === 'brand' ? 'contain' : 'cover'};border-radius:8px;border:1px solid var(--line);background:#fff;display:block">` : `<span class="pf-noimg" style="width:72px;height:46px">${kind === 'brand' ? 'No logo' : 'No image'}</span>`);
   view.innerHTML = `${head('Website', schema.label, esc(schema.hint), `<a class="btn ghost sm" href="${publicUrl}" target="_blank">View on site ↗</a><button class="btn sm accent" data-new>+ Add ${esc(schema.singular)}</button>`)}
     ${media.configured ? '' : '<div class="pf-note"><span><b>Supabase images not connected.</b> Add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in your hosting environment variables to upload images. You can paste image links meanwhile.</span></div>'}
@@ -464,7 +464,7 @@ async function contentTab(view, kind) {
       ${items.map((x, i) => `<tr data-id="${esc(x.id)}" draggable="true">
         <td class="pf-grip" title="Drag to reorder">⋮⋮</td><td class="mono small">${String(i + 1).padStart(2, '0')}</td>
         <td>${thumb(x)}</td>
-        <td><b>${esc(x.title)}</b>${x.data.tag ? `<div class="tiny muted">${esc(x.data.tag)}</div>` : x.data.website ? `<div class="tiny muted break">${esc(x.data.website)}</div>` : ''}</td>
+        <td><b>${esc(x.title)}</b>${x.data.category ? `<div class="tiny muted">${esc(x.data.category)}</div>` : x.data.tag ? `<div class="tiny muted">${esc(x.data.tag)}</div>` : x.data.website ? `<div class="tiny muted break">${esc(x.data.website)}</div>` : ''}</td>
         <td><label class="sw" title="Shown on the website"><input type="checkbox" data-pub ${x.published ? 'checked' : ''}><span></span></label> <span class="tiny ${x.published ? '' : 'muted'}">${x.published ? 'Shown' : 'Hidden'}</span></td>
         <td class="nowrap"><button class="btn sm ghost" data-edit>Edit</button><button class="btn sm quiet del" data-del>Delete</button><span class="pf-move"><button class="btn sm quiet" data-up aria-label="Move up">↑</button><button class="btn sm quiet" data-down aria-label="Move down">↓</button></span></td>
       </tr>`).join('')}</tbody></table></div><p class="tiny muted" style="margin-top:8px">Drag rows (or use ↑ ↓) to change the order on the website.</p>`

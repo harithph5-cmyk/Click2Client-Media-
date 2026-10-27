@@ -10,7 +10,8 @@ import { config } from '../config.js';
 import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
-import { productsVars, homeContentVars } from '../content.js';
+import { productsVars, coursesVars, homeContentVars } from '../content.js';
+import { faqHtml, faqSchema } from './faq.js';
 import { hubVars, toolVars, TOOLS } from '../tools.js';
 import { getEdits, applyEdits } from '../pages.js';
 import { TOOL_CONTENT } from './tools-content.js';
@@ -45,7 +46,8 @@ export const PAGES = {
   home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
   seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: '15 Free SEO Tools — Website Checker, Meta Tags, Broken Links & Schema | Click2Client Media', description: 'Free professional SEO tools to analyze, optimize and audit your website: SEO checker, meta tags, heading analyzer, robots.txt, XML sitemap, schema validator, broken links, redirects and keyword density.', priority: '0.9', crumb: 'SEO Tools' },
-  products: { path: '/products', file: 'products', title: 'Products — ATS, AI Quiz, Productivity & CRM Systems | Click2Client Media', description: 'Ready-made digital systems from Click2Client Media: an ATS for recruitment, an AI quiz system, a productivity / to-do system and a CRM for managing leads and customers.', priority: '0.8', crumb: 'Products' },
+  products: { path: '/products', file: 'products', title: 'CRM, ERP & AI Business Software Solutions India | Click2Client', description: 'Business management software, CRM, ERP, HRMS, school management and AI automation solutions for businesses in India. 74 systems, customised to your workflow.', priority: '0.8', crumb: 'Products', trail: [{ name: 'Home', path: '/' }, { name: 'Products', path: '/products' }], extraSchema: faqSchema('products') },
+  courses: { path: '/courses', file: 'courses', title: 'SEO & Digital Marketing Courses Online in India | Click2Client', description: 'Online SEO and digital marketing courses with AI, GEO and AEO training, plus an AI and business automation course. Live online options and practical projects.', priority: '0.8', crumb: 'Courses' },
   about: { path: '/about', file: 'about', title: 'About Click2Client Media — Digital Marketing, SEO & Web Development, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
   blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
   services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
@@ -105,6 +107,8 @@ export async function renderPage(id, req, override = {}) {
   if (!override.page && (edits[`seo.${id}.title`] || edits[`seo.${id}.description`])) p = { ...p, title: edits[`seo.${id}.title`] || p.title, description: edits[`seo.${id}.description`] || p.description };
   const s = await siteSettings();
   const base = siteUrl(req);
+  const cv = id === 'courses' ? await coursesVars(base) : null;
+  if (cv && !override.page) p = { ...p, trail: [{ name: 'Home', path: '/' }, { name: 'Courses', path: '/courses' }], extraSchema: [cv.schema, faqSchema('courses')] };
   const tel = s.phone.replace(/[^\d+]/g, '');
   const wa = s.whatsapp.replace(/\D/g, '');
   const vars = {
@@ -134,6 +138,8 @@ export async function renderPage(id, req, override = {}) {
     [`nav.${p.nav || id}`]: 'aria-current="page"',
   };
   if (id === 'products') Object.assign(vars, await productsVars());
+  if (id === 'products' || id === 'courses') vars['faq.html'] = faqHtml(id);
+  if (cv) Object.assign(vars, { 'courses.cards': cv.cards, 'courses.options': cv.options });
   if (id === 'seoTools') Object.assign(vars, hubVars());
   if (id === 'home') Object.assign(vars, await homeContentVars());
   if (id === 'blog') Object.assign(vars, await blogListVars());
