@@ -43,18 +43,18 @@ export async function siteSettings() {
 export const siteUrl = (req) => config.publicUrl || `${req.protocol}://${req.get('host')}`;
 
 export const PAGES = {
-  home: { path: '/', file: 'home', title: 'Digital Marketing, SEO & Website Development Agency in India | Click2Client Media', description: 'Click2Client Media is a digital marketing agency in Madurai, Tamil Nadu, helping businesses across India and abroad grow with SEO, performance marketing and high-converting websites. Run a free SEO audit.', priority: '1.0' },
+  home: { path: '/', file: 'home', title: 'Digital Marketing & SEO Agency in India | Click2Client', description: 'Click2Client Media is a digital marketing agency in Madurai, India. Grow with SEO, performance marketing and high-converting websites. Free SEO audit.', priority: '1.0' },
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
-  seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: '15 Free SEO Tools — Website Checker, Meta Tags, Broken Links & Schema | Click2Client Media', description: 'Free professional SEO tools to analyze, optimize and audit your website: SEO checker, meta tags, heading analyzer, robots.txt, XML sitemap, schema validator, broken links, redirects and keyword density.', priority: '0.9', crumb: 'SEO Tools' },
-  products: { path: '/products', file: 'products', title: 'CRM, ERP & AI Business Software Solutions India | Click2Client', description: 'Business management software, CRM, ERP, HRMS, school management and AI automation solutions for businesses in India. 74 systems, customised to your workflow.', priority: '0.8', crumb: 'Products', trail: [{ name: 'Home', path: '/' }, { name: 'Products', path: '/products' }], extraSchema: faqSchema('products') },
-  courses: { path: '/courses', file: 'courses', title: 'SEO & Digital Marketing Courses Online in India | Click2Client', description: 'Online SEO and digital marketing courses with AI, GEO and AEO training, plus an AI and business automation course. Live online options and practical projects.', priority: '0.8', crumb: 'Courses' },
-  about: { path: '/about', file: 'about', title: 'About Click2Client Media — Digital Marketing, SEO & Web Development, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
-  blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
-  services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
+  seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: '15 Free SEO Tools: Checker, Meta & Schema | Click2Client', description: 'Free SEO tools to check your website: SEO checker, meta tags, headings, image ALT, canonical, robots.txt, sitemap, schema and Open Graph.', priority: '0.9', crumb: 'SEO Tools' },
+  products: { path: '/products', file: 'products', title: 'CRM, ERP & AI Business Software India | Click2Client', description: 'Business management software, CRM, ERP, HRMS, school management and AI automation solutions for businesses in India. 74 systems, customised to your workflow.', priority: '0.8', crumb: 'Products', trail: [{ name: 'Home', path: '/' }, { name: 'Products', path: '/products' }], extraSchema: faqSchema('products') },
+  courses: { path: '/courses', file: 'courses', title: 'SEO & Digital Marketing Courses Online | Click2Client', description: 'Online SEO and digital marketing courses with AI, GEO and AEO training, plus an AI and business automation course. Live online options and practical projects.', priority: '0.8', crumb: 'Courses' },
+  about: { path: '/about', file: 'about', title: 'About Click2Client Media | Digital Marketing, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
+  blog: { path: '/blog', file: 'blog', title: 'SEO & Digital Marketing Blog | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
+  services: { path: '/services', file: 'services', title: 'SEO, Digital Marketing & Web Services | Click2Client', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web apps and UI/UX design for businesses in India and abroad.', priority: '0.9', crumb: 'Services' },
   enquire: { path: '/enquire', file: 'enquire', title: 'Book a Consultation | Click2Client Media', description: 'Tell us about your business and goals. Click2Client Media will get back to you about SEO, digital marketing or website development.', priority: '0.7', crumb: 'Enquire Now' },
-  privacy: { path: '/privacy-policy', file: 'privacy', title: 'Privacy Policy | Click2Client Media', description: 'How Click2Client Media collects, uses and protects your information.', priority: '0.2', crumb: 'Privacy Policy' },
+  privacy: { path: '/privacy-policy', file: 'privacy', title: 'Privacy Policy | Click2Client Media', description: 'How Click2Client Media collects, uses and protects your personal information, and the choices and rights you have over your data.', priority: '0.2', crumb: 'Privacy Policy' },
   terms: { path: '/terms', file: 'terms', title: 'Terms & Conditions | Click2Client Media', description: 'Terms for using the Click2Client Media website and SEO audit services.', priority: '0.2', crumb: 'Terms & Conditions' },
-  cookies: { path: '/cookie-policy', file: 'cookies', title: 'Cookie Policy | Click2Client Media', description: 'How the Click2Client Media website uses cookies.', priority: '0.2', crumb: 'Cookie Policy' },
+  cookies: { path: '/cookie-policy', file: 'cookies', title: 'Cookie Policy | Click2Client Media', description: 'How the Click2Client Media website uses cookies, which cookies are strictly necessary, and how you can control or block cookies in your browser.', priority: '0.2', crumb: 'Cookie Policy' },
 };
 
 function schemaFor(id, s, base, p = PAGES[id]) {
@@ -100,9 +100,37 @@ function testimonialsHtml(raw) {
     <div class="testimonials reveal">${items.slice(0, 6).map(([n, b, q]) => `<figure class="card testimonial"><blockquote>“${esc(q)}”</blockquote><figcaption><b>${esc(n)}</b><span>${esc(b)}</span></figcaption></figure>`).join('')}</div></div></section>`;
 }
 
+const KEYWORDS = {
+  default: 'digital marketing agency in india, seo services india, website development, seo audit tool, click2client media',
+  home: 'digital marketing agency in india, seo services india, seo company india, digital marketing company in india, website development, free seo audit, performance marketing, madurai',
+  audit: 'seo audit, website audit tool, seo audit report, free seo audit, website analysis, site audit, seo audit tools',
+  seoTools: 'free seo tools, seo checker, website audit tools, seo analysis, meta tag checker, schema validator, robots.txt checker',
+  services: 'seo services, digital marketing services, seo optimization services, website development, google ads, meta ads, technical seo, seo agency india',
+  products: 'business software india, crm software, erp software, hrms, school management software, ai chatbot, workflow automation, whatsapp business automation',
+  courses: 'seo and digital marketing courses, digital marketing course online, seo course, ai course, geo and aeo, google ads course, meta ads course, n8n automation course',
+  about: 'digital marketing company madurai, seo agency india, click2client media, website development company',
+  blog: 'seo blog, digital marketing tips, seo guides, content marketing seo, google ads tips, website tips',
+  enquire: 'book seo consultation, digital marketing consultation, website development enquiry, click2client media contact',
+};
+
+/** Keep search titles at 60 characters or fewer, and descriptions at 160 or fewer. */
+export function fitTitle(t) {
+  if (t.length <= 60) return t;
+  t = t.replace(/ \| Click2Client Media$/, ' | Click2Client');
+  if (t.length <= 60) return t;
+  const i = t.lastIndexOf(' | ');
+  return i < 0 ? t.slice(0, 60) : `${t.slice(0, i).split(/ [—–:] /)[0]}${t.slice(i)}`;
+}
+export function fitDesc(d) {
+  if (d.length <= 160) return d;
+  const cut = d.slice(0, 157);
+  return cut.slice(0, cut.lastIndexOf(' ')).replace(/[ ,;:.-]+$/, '') + '…';
+}
+
 export async function renderPage(id, req, override = {}) {
   const edits = await getEdits();
   let p = override.page || PAGES[id];
+  p = { ...p, title: fitTitle(p.title), description: fitDesc(p.description) };
   // Search titles/descriptions edited in Admin → Page Content
   if (!override.page && (edits[`seo.${id}.title`] || edits[`seo.${id}.description`])) p = { ...p, title: edits[`seo.${id}.title`] || p.title, description: edits[`seo.${id}.description`] || p.description };
   const s = await siteSettings();
@@ -128,6 +156,7 @@ export async function renderPage(id, req, override = {}) {
     'price.p25': String(TIERS.p25.price),
     'price.p50': String(TIERS.p50.price),
     'schema': schemaFor(id, s, base, p),
+    'keywords': esc(p.keywords || KEYWORDS[id] || KEYWORDS.default),
     'ogImage': esc(`${base}/img/click2client-media-logo.webp`),
     'ogType': 'website',
     'testimonials': testimonialsHtml(s.testimonials),
@@ -196,7 +225,7 @@ export async function renderTool(req, tool) {
   }
 
   const page = {
-    path, file: 'seo-tool', nav: 'audit', title, description,
+    path, file: 'seo-tool', nav: 'audit', title, description, keywords: `${tool.name.toLowerCase()}, free seo tool, seo audit tool, website audit tools, click2client media`,
     trail: [{ name: 'Home', path: '/' }, { name: 'SEO Tools', path: '/seo-tools' }, { name: tool.name, path }],
     extraSchema,
   };

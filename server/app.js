@@ -172,10 +172,17 @@ pubApi.post('/orders', h(async (req, res) => {
   res.status(201).json({ token: order.token });
 }));
 
+// A UPI reference number (UTR) is 12 digits. Reject obvious junk (000000000000, 123456789012, 121212121212).
+export function validUtr(v) {
+  if (!/^\d{12}$/.test(v)) return false;
+  if (new Set(v).size < 4) return false;
+  return !'01234567890123456789'.includes(v) && !'98765432109876543210'.includes(v);
+}
+
 async function orderView(o) {
   const s = await siteSettings();
   const t = TIERS[o.plan];
-  const text = `Hi Click2Client Media, I have completed the ₹${o.amount} payment for the ${t.name}. I am attaching my payment screenshot.\n\nName: ${o.name}\nBusiness: ${o.business}\nWebsite: ${o.website}\nEmail: ${o.email}\nOrder ref: ${o.id}`;
+  const text = `Hi Click2Client Media, I have completed the ₹${o.amount} payment for the ${t.name}. I am attaching my payment screenshot.\n\nName: ${o.name}\nBusiness: ${o.business}\nWebsite: ${o.website}\nEmail: ${o.email}\nOrder ref: ${o.id}${o.transaction_id ? `\nUPI reference (UTR): ${o.transaction_id}` : ''}`;
   const audit = o.audit_id ? await store.getAudit(o.audit_id) : null;
   return {
     ref: o.id, plan: o.plan, planName: t.name, pages: t.pages, amount: o.amount,
@@ -183,7 +190,9 @@ async function orderView(o) {
     name: o.name, business: o.business, website: o.website, email: o.email, createdAt: o.created_at,
     qrAvailable: true, upiId: s.upiId || null, payeeName: s.payeeName,
     upiLink: upiLink({ upiId: s.upiId, payeeName: s.payeeName, amount: o.amount, note: `${t.short} ${o.id}` }),
-    whatsappHref: `https://wa.me/${s.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`,
+    // The WhatsApp link is only handed out once a payment reference (UTR) has been recorded.
+    utr: o.transaction_id || null,
+    whatsappHref: o.transaction_id || o.payment_status === 'rejected' ? `https://wa.me/${s.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(text)}` : null,
     auditId: o.payment_status === 'verified' ? o.audit_id : null,
     auditStatus: o.payment_status === 'verified' ? audit?.status || null : null,
   };
@@ -198,8 +207,15 @@ pubApi.get('/orders/:token', h(async (req, res) => {
 pubApi.post('/orders/:token/submitted', h(async (req, res) => {
   const o = await store.getOrderByToken(req.params.token);
   if (!o) return bad(res, 'not_found', 'Order not found.', 404);
-  // Clicking the WhatsApp button only tells us a screenshot is on its way. It never marks the order paid.
-  if (o.payment_status === 'pending') await store.updateOrder(o.id, { payment_status: 'screenshot_received' });
+  if (o.payment_status === 'pending' || o.payment_status === 'rejected') {
+    // The customer must give the UPI reference number (UTR) of a real payment first. This never marks
+    // the order paid — an admin still checks the UTR against the bank/UPI statement.
+    const utr = String(req.body?.utr ?? '').replace(/\s+/g, '');
+    if (rateLimited('utr:' + req.ip, 12)) return bad(res, 'rate_limited', 'Too many attempts. Please try again later.', 429);
+    if (!validUtr(utr)) return bad(res, 'invalid_utr', 'Please enter the 12-digit UPI reference number (UTR) from your payment confirmation.');
+    if (await store.utrInUse(utr, o.id)) return bad(res, 'utr_used', 'This UPI reference number has already been used for another order. Please check it, or contact us on WhatsApp.');
+    await store.updateOrder(o.id, { payment_status: 'screenshot_received', transaction_id: utr });
+  }
   res.json(await orderView(await store.getOrderByToken(req.params.token)));
 }));
 
@@ -410,7 +426,7 @@ app.use('/api', (req, res) => bad(res, 'not_found', 'Unknown API route.', 404));
 
 // ═════════════════════════════ PAGES ══════════════════════════════════════
 for (const [id, p] of Object.entries(PAGES)) {
-  app.get(p.path, h(async (req, res) => res.type('html').send(await renderPage(id, req))));
+  app.get(p.path, h(async (req, res) => res.set({ 'x-robots-tag': 'index, follow, max-image-preview:large', 'cache-control': 'public, s-maxage=60, stale-while-revalidate=600' }).type('html').send(await renderPage(id, req))));
 }
 app.get(['/index.html', '/home'], (req, res) => res.redirect(301, '/'));
 app.get(['/seo-audit/', '/services/', '/enquire/'], (req, res) => res.redirect(301, req.path.replace(/\/$/, '')));
@@ -431,7 +447,7 @@ d.addEventListener('click',function(e){var t=e.target&&e.target.closest?e.target
 app.get('/seo-tools/:slug', h(async (req, res, next) => {
   const tool = tools.liveTool(req.params.slug);
   if (!tool) return next();
-  res.type('html').send(await renderTool(req, tool));
+  res.set({ 'x-robots-tag': 'index, follow, max-image-preview:large', 'cache-control': 'public, s-maxage=60, stale-while-revalidate=600' }).type('html').send(await renderTool(req, tool));
 }));
 
 // The portfolio was retired: old links go to the home page (products to /products)

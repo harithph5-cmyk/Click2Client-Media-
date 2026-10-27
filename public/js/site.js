@@ -86,7 +86,7 @@ if (auditUrl && $('#f-url')) $('#f-url').value = auditUrl.slice(0, 300);
 // Enquiry
 const enquiry = $('#enquiryForm');
 if (enquiry) {
-  const svc = new URLSearchParams(location.search).get('service');
+  const svc = new URLSearchParams(location.search).get('service') || new URLSearchParams(location.hash.slice(1)).get('service');
   if (svc) {
     const sel = $('#e-service');
     if (![...sel.options].some((o) => o.value === svc || o.text === svc)) sel.add(new Option(svc, svc));

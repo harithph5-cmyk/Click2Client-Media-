@@ -312,6 +312,8 @@ const orderRow = (r) => (r ? { ...r, amount: num(r.amount), audit_score: num(r.a
 export const getOrderByToken = async (token) => orderRow(await one('SELECT * FROM orders WHERE token = ?', [token]));
 export const getOrder = async (id) => orderRow(await one('SELECT * FROM orders WHERE id = ?', [id]));
 export const listOrders = async () => (await q(`SELECT o.*, a.status AS audit_status, a.score AS audit_score FROM orders o LEFT JOIN audits a ON a.id = o.audit_id ORDER BY o.created_at DESC LIMIT 500`)).map(orderRow);
+/** Another order already using this UPI reference number (UTR)? */
+export const utrInUse = async (utr, exceptId) => Boolean(await one('SELECT id FROM orders WHERE transaction_id = ? AND id <> ?', [utr, exceptId]));
 export async function updateOrder(id, fields) {
   const allowed = ['payment_status', 'transaction_id', 'audit_id', 'admin_note', 'verified_at'];
   const keys = Object.keys(fields).filter((k) => allowed.includes(k));

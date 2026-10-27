@@ -23,7 +23,7 @@ export const KINDS = {
       { k: 'description', label: 'Short description', type: 'textarea', required: true, max: 300 },
       { k: 'points', label: 'Key points', type: 'list', hint: 'One per line — up to 5.', max: 5 },
       { k: 'cta_label', label: 'Button text', type: 'text', placeholder: 'Explore Product', max: 40 },
-      { k: 'cta_url', label: 'Button link', type: 'url', placeholder: '/enquire?service=…', hint: 'Leave empty to open the enquiry form with this product selected.' },
+      { k: 'cta_url', label: 'Button link', type: 'url', placeholder: '/enquire#service=…', hint: 'Leave empty to open the enquiry form with this product selected.' },
       { k: 'color', label: 'Icon colour', type: 'select', options: ['blue', 'purple', 'green', 'orange'] },
     ],
   },
@@ -271,7 +271,7 @@ const ICON = {
 };
 const LOGO = '<img src="/img/c2c-mark.webp" alt="" width="64" height="64" loading="lazy" decoding="async">';
 const C = { blue: 'c1', purple: 'c2', green: 'c3', orange: 'c4' };
-const ctaUrl = (p) => p.data.cta_url || `/enquire?service=${encodeURIComponent(p.title)}`;
+const ctaUrl = (p) => p.data.cta_url || `/enquire#service=${encodeURIComponent(p.title)}`;
 
 function productCard(p) {
   const d = p.data;
@@ -290,7 +290,7 @@ function productCard(p) {
 const seedRows = (kind) => SEED[kind].map((it, i) => ({ id: `seed-${i}`, kind, slug: it.slug || slugify(it.title), title: it.title, data: it.data, image: '', published: true, display_order: i }));
 const publicItems = (kind) => listItems(kind).catch(() => seedRows(kind));
 const svgIcon = (id, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#${id}"/></svg>`;
-const enquireUrl = (service) => `/enquire?service=${encodeURIComponent(service)}`;
+const enquireUrl = (service) => `/enquire#service=${encodeURIComponent(service)}`;
 
 export async function productsVars() {
   const [items, soft] = await Promise.all([listItems('product').catch(() => []), publicItems('software')]);

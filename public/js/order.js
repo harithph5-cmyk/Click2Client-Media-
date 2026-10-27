@@ -39,8 +39,16 @@ function render(o) {
         <div class="amount" style="margin-top:14px">₹${o.amount}</div>
         <p class="small" style="margin-top:6px;text-align:center">Enter <b style="color:var(--ink)">₹${o.amount}</b> as the amount in your UPI app after scanning.</p>
       </div>
-      <p style="margin-top:18px;font-size:14.5px">After completing the payment, take a screenshot of your successful payment and send it to us on WhatsApp.</p>
-      <a class="btn wa-btn" id="waBtn" href="${esc(o.whatsappHref)}" target="_blank" rel="noopener" style="margin-top:14px">${ICON.whatsapp} Send Payment Screenshot on WhatsApp</a>
+      <form id="utrForm" class="utr-form" novalidate>
+        <h3 style="font:700 18px var(--display)">Already paid? Confirm your payment</h3>
+        <p class="small" style="margin:4px 0 12px">After paying, enter the <b>12-digit UPI reference number (UTR)</b> shown in your payment confirmation. The WhatsApp screenshot step unlocks after this.</p>
+        <label class="small" for="utr" style="font-weight:600">UPI reference number (UTR)</label>
+        <input class="input mono" id="utr" name="utr" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="e.g. 412345678901" style="margin-top:6px">
+        <label class="chk"><input type="checkbox" id="paidChk"> I have paid ₹${o.amount} using the QR code above.</label>
+        <p class="form-msg" id="utrMsg" role="alert" hidden></p>
+        <button class="btn accent lg" id="utrBtn" type="submit" style="width:100%;margin-top:12px" disabled>Confirm payment &amp; continue</button>
+        <p class="small" style="margin-top:10px;display:flex;gap:8px;align-items:center"><span aria-hidden="true">🔒</span> WhatsApp opens only after payment details are submitted.</p>
+      </form>
       <p class="note" style="margin-top:12px">Never share your UPI PIN, OTP, card number, CVV or bank password with anyone — we will never ask for them.</p>`;
   } else if (o.paymentStatus === 'verified') {
     main = o.auditId
@@ -56,11 +64,11 @@ function render(o) {
       <a class="btn wa-btn" href="${esc(o.whatsappHref)}" target="_blank" rel="noopener" style="margin-top:16px">${ICON.whatsapp} Contact us on WhatsApp</a>`;
   } else {
     main = `<div class="pay-steps" aria-hidden="true"><span class="on"></span><span class="on"></span><span class="on"></span></div>
-      <span class="status-chip verifying">Payment Status: Under Verification</span>
+      <span class="status-chip verifying">Payment Status: Awaiting Screenshot &amp; Verification</span>
       <h2 style="font:700 26px var(--display);margin:14px 0 6px;letter-spacing:-0.02em">Payment Submitted for Verification</h2>
-      <p style="font-size:15px">Thank you! Your payment confirmation has been sent for verification. Once your payment is verified, we'll process your ${esc(o.planName)} and notify you through WhatsApp/email.</p>
-      <p class="small" style="margin-top:12px">Keep this page bookmarked — it updates by itself when your payment is verified.</p>
-      <a class="btn outline sm" href="${esc(o.whatsappHref)}" target="_blank" rel="noopener" style="margin-top:16px">${ICON.whatsapp} Didn't send the screenshot? Open WhatsApp again</a>`;
+      <p style="font-size:15px">Thank you! We've recorded your UPI reference <b class="mono">${esc(o.utr || '')}</b>. <b>Last step:</b> send us a screenshot of your successful payment on WhatsApp. Our team checks it against the payment and then starts your ${esc(o.planName)}.</p>
+      <a class="btn wa-btn" href="${esc(o.whatsappHref)}" target="_blank" rel="noopener" style="margin-top:16px">${ICON.whatsapp} Send Payment Screenshot on WhatsApp</a>
+      <p class="small" style="margin-top:12px">Keep this page bookmarked — it updates by itself when your payment is verified.</p>`;
   }
 
   view.innerHTML = `
@@ -87,12 +95,22 @@ function render(o) {
       </aside>
     </div>`;
 
-  const wa = document.getElementById('waBtn');
-  if (wa) wa.addEventListener('click', async () => {
-    // Opening WhatsApp records that a screenshot is on its way; it does NOT mark the order paid.
-    track('payment_submitted', { audit_plan: o.plan, currency: 'INR', value: o.amount });
-    try { render(await api(`/public/orders/${encodeURIComponent(token)}/submitted`, { method: 'POST' })); } catch {}
-  });
+  const form = document.getElementById('utrForm');
+  if (form) {
+    const utr = form.utr, chk = form.paidChk, btn = document.getElementById('utrBtn'), msg = document.getElementById('utrMsg');
+    const sync = () => { btn.disabled = !(/^\d{12}$/.test(utr.value.replace(/\s/g, '')) && chk.checked); };
+    utr.addEventListener('input', () => { utr.value = utr.value.replace(/[^\d\s]/g, ''); sync(); });
+    chk.addEventListener('change', sync);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true; msg.hidden = true;
+      try {
+        const next = await api(`/public/orders/${encodeURIComponent(token)}/submitted`, { method: 'POST', body: { utr: utr.value } });
+        track('payment_submitted', { audit_plan: o.plan, currency: 'INR', value: o.amount });
+        render(next);
+      } catch (ex) { msg.textContent = ex.message; msg.hidden = false; msg.className = 'form-msg err'; sync(); }
+    });
+  }
 
   clearInterval(poll);
   const needsPoll = o.paymentStatus !== 'pending' && o.paymentStatus !== 'rejected' && o.auditStatus !== 'complete' && o.auditStatus !== 'failed';
