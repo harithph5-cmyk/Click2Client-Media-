@@ -342,17 +342,17 @@ body[data-mode=welcome] .topbar .menu{background:rgba(255,255,255,.88);box-shado
 /* welcome: artwork fills the top, composer overlaps its lower edge */
 [data-mode=welcome] .scroll{padding:0}
 .welcome{margin:0;max-width:none;padding:0;display:flex;flex-direction:column;align-items:center}
-.hero-art{display:block;width:100%;height:auto;max-height:70vh;object-fit:cover;object-position:50% 0;-webkit-mask-image:linear-gradient(#000 80%,transparent 100%);mask-image:linear-gradient(#000 80%,transparent 100%);user-select:none;-webkit-user-drag:none}
-#slotWelcome{position:relative;z-index:3;width:100%;max-width:880px;margin-top:-92px;padding:0 24px}
+.hero-art{display:block;width:100%;height:auto;max-height:none;object-fit:contain;user-select:none;-webkit-user-drag:none}
+#slotWelcome{position:relative;z-index:3;width:100%;max-width:880px;margin-top:18px;padding:0 24px}
 .shortcuts{margin-top:14px;padding-bottom:28px}
 .orb.c{bottom:-120px;left:50%;transform:translateX(-50%);width:900px;height:380px;background:rgba(162,238,255,.3)}
 .zone{max-width:none}
 .composer{padding:18px 26px}
 .composer textarea{font-size:17px}
-@media (max-width:1023px){.hero-art{max-height:62vh}}
+@media (max-width:1023px){.hero-art{max-height:none}}
 @media (max-width:767px){
-  .hero-art{height:min(34vh,260px);object-fit:cover;object-position:60% 50%}
-  #slotWelcome{margin-top:-56px;padding:0 12px}
+  .hero-art{height:auto;object-fit:contain}
+  #slotWelcome{margin-top:14px;padding:0 12px}
   .nav a{padding:10px 12px}
 }
 
