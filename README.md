@@ -132,6 +132,8 @@ Code lives in `server/baasha/` (loaded lazily by `server/app.js`, so a fault the
 
 Set **`GEMINI_API_KEY`** in the hosting environment (Vercel → Settings → Environment Variables), then redeploy. Optional: `BAASHA_MODEL` (default `gemini-3.5-flash`; choose a model your key can use) and `BAASHA_DAILY_LIMIT`. Until the key is set the page loads and says it is not switched on yet; the rest of the site is unaffected. Check status at `GET /api/baasha/status` (it never reveals the key).
 
+**Reliability.** Provider errors are classified (daily quota, per-minute limit, search quota, bad key or model, outage, timeout). Temporary failures are retried at most twice with backoff, quota and key errors are not retried, and once Google reports a used-up quota the server stops calling it for a few minutes. The Agent's final status (`completed`, `partially_completed`, `failed`) is computed by the server from the real tool results, and a failed search is disclosed in the answer and the report. `GET /api/baasha/status` reports backend, AI provider and web research separately. Google Search grounding has little or no free-tier quota, so Research needs billing enabled on the Gemini project; the Agent still works without it and says when it could not search. The host is Hostinger (auto-deploys `main`).
+
 ### Safety and privacy
 
 - The key stays on the server; browsers only talk to `/api/baasha/*`. Requests from other websites are refused (Origin check).
