@@ -26,7 +26,7 @@ const kb = createKnowledgeBase();
 test('the real knowledge folder loads with documents, sections, skills and areas', () => {
   const s = kb.stats();
   assert.ok(s.documents >= 50, `documents ${s.documents}`); assert.ok(s.sections > 200, `sections ${s.sections}`);
-  assert.deepEqual(kb.listSkills().map((x) => x.id).sort(), ['crawlability-check', 'on-page-review', 'seo-technical-audit']);
+  assert.deepEqual(kb.listSkills().map((x) => x.id).sort(), ['aeo-analysis', 'content-brief-creation', 'crawlability-check', 'geo-analysis', 'internal-linking', 'keyword-research', 'on-page-review', 'search-intent-analysis', 'seo-report-generation', 'seo-technical-audit', 'structured-data']);
   for (const a of ['library', 'reference', 'skills']) assert.ok(s.areas.includes(a), `area ${a}`);
 });
 
@@ -371,7 +371,7 @@ test('the status report lists the tools, skills and knowledge actually loaded', 
   await withServer(async (base, real) => {
     const s = await (await real(base + '/api/baasha/status')).json();
     assert.equal(s.agent.mode, 'assisted'); assert.ok(s.agent.knowledge.documents >= 50 && s.agent.knowledge.sections > 200);
-    assert.deepEqual([...s.agent.skills].sort(), ['crawlability-check', 'on-page-review', 'seo-technical-audit']);
+    assert.deepEqual([...s.agent.skills].sort(), ['aeo-analysis', 'content-brief-creation', 'crawlability-check', 'geo-analysis', 'internal-linking', 'keyword-research', 'on-page-review', 'search-intent-analysis', 'seo-report-generation', 'seo-technical-audit', 'structured-data']);
     const names = s.agent.tools.map((t) => t.name); for (const n of ['audit_site', 'run_seo_tool', 'search_knowledge', 'load_skill', 'web_search']) assert.ok(names.includes(n), n);
     assert.ok(s.agent.tools.every((t) => t.risk === 'low'), 'Stage 1 registers no write tools');
     assert.equal(s.agent.taskLog, 'memory');

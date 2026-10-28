@@ -30,7 +30,7 @@ export function systemPrompt() {
 }
 
 const PLAN_PROMPT = (task) => `Break this task into a short plan of 2 to 6 concrete steps for an assistant that can search the web, read public pages, calculate, check the time, run SEO checks and a website audit, search an SEO knowledge base, and save a report.
-Reply with JSON only: {"goal": "<one sentence>", "steps": [{"title": "<short step>", "tool": "web_search|fetch_page|calculate|current_datetime|write_report|audit_site|run_seo_tool|search_knowledge|load_skill|none"}]}
+Reply with JSON only: {"goal": "<one sentence>", "steps": [{"title": "<short step>", "tool": "web_search|fetch_page|calculate|current_datetime|write_report|audit_site|run_seo_tool|aeo_analyze|geo_analyze|search_knowledge|load_skill|none"}]}
 Task: ${task}`;
 
 const URL_RE = /https?:\/\/[^\s)\]}>"'`*]+/g;
@@ -155,6 +155,7 @@ export async function runAgent({ task, history = [], emit, signal, mode = 'assis
         rec.summary = clip(result.error || result.summary || result.title || (result.result !== undefined ? `= ${result.result}` : '') || (result.saved ? 'report saved' : 'done'), 240);
         if (result.ok && result.audit) rec.summary = `Score ${result.audit.score?.overall ?? 'n/a'}, ${result.audit.issueCount} issue(s), ${result.audit.pagesAnalyzed} page(s)${result.audit.incomplete ? ' (incomplete)' : ''}`;
         else if (result.ok && result.tool && result.name) rec.summary = `${result.name}${result.result?.status ? ': ' + result.result.status : ''}`;
+        else if (result.ok && result.result?.kind && 'score' in result.result) rec.summary = `${String(result.result.kind).toUpperCase()} heuristic score ${result.result.score ?? 'n/a'} (${result.result.graded} graded checks)`;
         else if (result.ok && result.kind === 'reference') rec.summary = result.results ? `${result.count} knowledge section(s) found` : `Loaded skill ${result.id}`;
         if (result.ok && result.empty) rec.summary = 'The search worked but returned no sources.';
         if (rec.deduped) rec.summary = 'Repeated request: the earlier result was reused.';
