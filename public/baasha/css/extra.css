@@ -115,3 +115,19 @@
   *,.run::before,.hero-art,.glint,.ringwrap.working{animation:none!important;transition:none!important}
   .ringwrap.working{background:var(--ring)}
 }
+
+/* ---- workspace panel (memory, task history, account) ---- */
+#ws{width:min(680px,calc(100vw - 32px))}
+.wstabs{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--outline-variant,#d7dae6);padding-bottom:8px}
+.wstabs [role=tab]{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border:0;border-radius:999px;background:transparent;color:var(--on-surface-variant,#4a4f63);cursor:pointer}
+.wstabs [role=tab][aria-selected=true]{background:var(--primary-container,#4f5bf6);color:#fff}
+.wspanel{display:flex;flex-direction:column;gap:10px;min-height:120px}
+.wsitem{border:1px solid var(--outline-variant,#d7dae6);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px}
+.wshead{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.wsbody{font-size:14px;line-height:1.5;overflow-wrap:anywhere;white-space:pre-wrap}
+.wsitem small{color:var(--outline,#6b7084)}
+.wsitem textarea,.wsform textarea,.wsform input,.wsform select{font:inherit;font-size:14px;width:100%;padding:8px 10px;border:1px solid var(--outline-variant,#d7dae6);border-radius:8px;background:#fff;color:inherit}
+.wsform{display:flex;flex-direction:column;gap:8px}
+.wshist{display:flex;flex-direction:column;gap:4px;font-size:12.5px;background:#f4f5fb;border-radius:8px;padding:8px 10px}
+.wsver{display:flex;gap:8px;align-items:center;justify-content:space-between;overflow-wrap:anywhere}
+.wsver .btn{flex:none;padding:3px 10px;font-size:12px}

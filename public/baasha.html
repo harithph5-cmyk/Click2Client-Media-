@@ -40,6 +40,7 @@
     <div class="list" id="list" role="list"></div>
   </section>
   <nav class="nav foot" aria-label="More">
+    <a href="#/workspace" id="navWorkspace"><span class="ms">checklist</span><span>Workspace</span></a>
     <a href="#/settings" id="navSettings"><span class="ms">settings</span><span>Settings &amp; safety</span></a>
     <a href="/products" id="navBack"><span class="ms">west</span><span>Click2Client products</span></a>
   </nav>
@@ -120,6 +121,21 @@
     <p id="dlgBody"></p>
     <label id="dlgField" hidden><span id="dlgLabel">Name</span><input id="dlgInput" type="text" maxlength="80" autocomplete="off"></label>
     <div class="drow end"><button class="btn" id="dlgCancel" type="button">Cancel</button><button class="btn primary" id="dlgOk" type="submit">OK</button></div>
+  </form>
+</dialog>
+
+<dialog id="ws" aria-labelledby="wsTitle">
+  <form method="dialog" id="wsForm">
+    <h2 id="wsTitle">Your workspace</h2>
+    <div class="wstabs" role="tablist" aria-label="Workspace sections">
+      <button type="button" role="tab" data-tab="memory" aria-selected="true">Memory</button>
+      <button type="button" role="tab" data-tab="tasks" aria-selected="false">Task history</button>
+      <button type="button" role="tab" data-tab="account" aria-selected="false">Account</button>
+    </div>
+    <div id="wsMemory" class="wspanel"></div>
+    <div id="wsTasks" class="wspanel" hidden></div>
+    <div id="wsAccount" class="wspanel" hidden></div>
+    <div class="drow end"><button class="btn" value="close">Close</button></div>
   </form>
 </dialog>
 

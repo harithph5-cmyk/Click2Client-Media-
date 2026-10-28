@@ -44,21 +44,25 @@ export class MemoryTaskStore {
     this.tasks.set(t.id, { ...t, events: [] });
     while (this.tasks.size > this.maxTasks) this.tasks.delete(this.tasks.keys().next().value);
   }
-  async get(id) { const t = this.tasks.get(id); return t ? { id: t.id, kind: t.kind, mode: t.mode, status: t.status, goal: t.goal, created_at: t.created_at, updated_at: t.updated_at, completed_at: t.completed_at || null, summary: t.summary || null } : null; }
+  async get(id) { const t = this.tasks.get(id); return t ? { id: t.id, kind: t.kind, mode: t.mode, status: t.status, goal: t.goal, workspace_id: t.workspace_id || null, created_at: t.created_at, updated_at: t.updated_at, completed_at: t.completed_at || null, summary: t.summary || null } : null; }
   async setStatus(id, status, { summary = null, at }) { const t = this.tasks.get(id); if (!t) return; t.status = status; t.updated_at = at; if (TERMINAL.has(status)) t.completed_at = at; if (summary) t.summary = summary; }
   async addEvent(id, e) { const t = this.tasks.get(id); if (!t) return; if (t.events.length < this.maxEvents) t.events.push(e); }
   async events(id, limit = 200) { return (this.tasks.get(id)?.events || []).slice(0, limit); }
   async purge() { return 0; }
+  async listByWorkspace(ws, limit = 50) { return [...this.tasks.values()].filter((t) => t.workspace_id === ws).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit).map((t) => ({ id: t.id, status: t.status, goal: t.goal, created_at: t.created_at, completed_at: t.completed_at || null, summary: t.summary || null })); }
+  async deleteByWorkspace(ws) { for (const [k, t] of this.tasks) if (t.workspace_id === ws) this.tasks.delete(k); }
 }
 
 /* ---------- Postgres store ---------- */
 export class PgTaskStore {
   constructor(db) { this.kind = 'postgres'; this.db = db; }
-  async create(t) { await this.db.query('INSERT INTO agent_tasks (id, kind, mode, status, goal, ip_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [t.id, t.kind, t.mode, t.status, t.goal, t.ip_hash, t.created_at, t.updated_at]); }
-  async get(id) { const r = await this.db.queryOne('SELECT id, kind, mode, status, goal, created_at, updated_at, completed_at, summary FROM agent_tasks WHERE id = ?', [id]); if (!r) return null; return { ...r, summary: r.summary ? JSON.parse(r.summary) : null }; }
+  async create(t) { await this.db.query('INSERT INTO agent_tasks (id, kind, mode, status, goal, ip_hash, workspace_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [t.id, t.kind, t.mode, t.status, t.goal, t.ip_hash, t.workspace_id || null, t.created_at, t.updated_at]); }
+  async get(id) { const r = await this.db.queryOne('SELECT id, kind, mode, status, goal, workspace_id, created_at, updated_at, completed_at, summary FROM agent_tasks WHERE id = ?', [id]); if (!r) return null; return { ...r, summary: r.summary ? JSON.parse(r.summary) : null }; }
   async setStatus(id, status, { summary = null, at }) { await this.db.query('UPDATE agent_tasks SET status = ?, updated_at = ?, completed_at = ?, summary = COALESCE(?, summary) WHERE id = ?', [status, at, TERMINAL.has(status) ? at : null, summary ? JSON.stringify(summary) : null, id]); }
   async addEvent(id, e) { await this.db.query('INSERT INTO agent_events (task_id, seq, at, type, data) VALUES (?, ?, ?, ?, ?)', [id, e.seq, e.at, e.type, e.data]); }
   async events(id, limit = 200) { return (await this.db.query('SELECT seq, at, type, data FROM agent_events WHERE task_id = ? ORDER BY seq LIMIT ?', [id, limit])); }
+  async listByWorkspace(ws, limit = 50) { return (await this.db.query('SELECT id, status, goal, created_at, completed_at, summary FROM agent_tasks WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?', [ws, limit])).map((r) => ({ ...r, summary: r.summary ? JSON.parse(r.summary) : null })); }
+  async deleteByWorkspace(ws) { await this.db.query('DELETE FROM agent_events WHERE task_id IN (SELECT id FROM agent_tasks WHERE workspace_id = ?)', [ws]); await this.db.query('DELETE FROM agent_tasks WHERE workspace_id = ?', [ws]); }
   async purge(days) { const cut = new Date(Date.now() - days * 86400_000).toISOString(); await this.db.query('DELETE FROM agent_events WHERE task_id IN (SELECT id FROM agent_tasks WHERE created_at < ?)', [cut]); await this.db.query('DELETE FROM agent_tasks WHERE created_at < ?', [cut]); }
 }
 
@@ -80,13 +84,13 @@ export const RETENTION_DAYS = Number(process.env.BAASHA_TASK_RETENTION_DAYS || 3
 let lastPurge = 0;
 
 /* ---------- recorder: what the agent uses; it never throws and never blocks the run on logging ---------- */
-export async function openTask({ goal, mode = 'assisted', ip = '', store: given = null } = {}) {
+export async function openTask({ goal, mode = 'assisted', ip = '', workspaceId = null, store: given = null } = {}) {
   const st = given || await getTaskStore();
   const id = newTaskId(), at = new Date().toISOString();
   let status = 'queued', seq = 0, failures = 0, persistence = st.kind;
   let chain = Promise.resolve();
   const run = (fn) => { chain = chain.then(fn).catch((e) => { failures++; persistence = 'failed'; console.error('[baasha] task log:', e?.code || e?.message); }); return chain; };
-  run(() => st.create({ id, kind: 'agent', mode, status, goal: String(goal || '').slice(0, 2000), ip_hash: hashIp(ip), created_at: at, updated_at: at }));
+  run(() => st.create({ id, kind: 'agent', mode, status, goal: String(goal || '').slice(0, 2000), ip_hash: hashIp(ip), workspace_id: workspaceId, created_at: at, updated_at: at }));
   if (st.kind === 'postgres' && Date.now() - lastPurge > 3600_000) { lastPurge = Date.now(); run(() => st.purge(RETENTION_DAYS)); }
   const event = (type, data = {}) => { const e = { seq: ++seq, at: new Date().toISOString(), type, data: sanitizeData(data) }; return run(() => st.addEvent(id, e)); };
   const rec = {
@@ -113,10 +117,15 @@ export async function openTask({ goal, mode = 'assisted', ip = '', store: given 
 }
 
 // What the owner may read back about a task (never raw page content).
-export async function readTask(id, st = null) {
+export async function readTask(id, st = null, { workspaceId = null } = {}) {
   const s = st || await getTaskStore();
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(String(id || ''))) return null;
   const task = await s.get(id); if (!task) return null;
+  if (task.workspace_id && task.workspace_id !== workspaceId) return null;      // a workspace task is visible only to its own workspace
+  delete task.workspace_id;
   const events = (await s.events(id, 200)).map((e) => ({ seq: e.seq, at: e.at, type: e.type, data: JSON.parse(e.data || '{}') }));
   return { ...task, persistence: s.kind, events };
 }
+
+export async function listTasks(workspaceId, limit = 50, st = null) { const s = st || await getTaskStore(); return workspaceId ? s.listByWorkspace(workspaceId, limit) : []; }
+export async function deleteWorkspaceTasks(workspaceId, st = null) { const s = st || await getTaskStore(); if (workspaceId) await s.deleteByWorkspace(workspaceId); }

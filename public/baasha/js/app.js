@@ -2,6 +2,7 @@
 import {$, el, icon, toast, copyText, ask} from './core.js';
 import {md} from './markdown.js';
 import {statusView, loadDb, addReport, RUN_TITLES} from './state.js';
+import {initWorkspace} from './workspace.js';
 
 const KEY = 'baasha.v1';
 const MODES = {
@@ -423,5 +424,5 @@ $('cClear').onclick = async () => {
 };
 
 /* ---------- start ---------- */
-layout(); setMode('chat'); setView('welcome'); renderList(); route(); loadStatus(); autosize();
+layout(); setMode('chat'); setView('welcome'); renderList(); route(); loadStatus(); autosize(); initWorkspace({toast, ask});
 addEventListener('beforeunload', e => { if (S.busy) { e.preventDefault(); e.returnValue = ''; } });

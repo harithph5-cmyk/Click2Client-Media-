@@ -6,6 +6,8 @@ import { runAgent } from './agent.js';
 import { researchWithoutGrounding, SearchError, fallbackSeen } from './search.js';
 import { openTask, readTask, getTaskStore } from './taskstore.js';
 import { getKnowledgeBase } from './kb.js';
+import { accountRouter, accountsConfig, sessionFromRequest } from './accounts.js';
+import { getWsStore } from './wsstore.js';
 import { toolCatalogue } from './agenttools.js';
 import { rateLimited, dailyCapReached, LIMITS } from './limits.js';
 
@@ -21,7 +23,7 @@ const bad = (res, status, code, message) => res.status(status).json({ error: { c
 // Only the site's own pages may call the API (stops other websites from spending the owner's AI quota).
 router.use((req, res, next) => {
   const origin = req.get('origin');
-  if (origin) { try { if (new URL(origin).host !== req.get('host')) return bad(res, 403, 'forbidden', 'Cross-site requests are not allowed.'); } catch { return bad(res, 403, 'forbidden', 'Bad origin.'); } }
+  if (origin && !req.path.startsWith('/auth/google/')) { try { if (new URL(origin).host !== req.get('host')) return bad(res, 403, 'forbidden', 'Cross-site requests are not allowed.'); } catch { return bad(res, 403, 'forbidden', 'Bad origin.'); } }
   next();
 });
 router.use(express.json({ limit: '100kb' }));
@@ -29,6 +31,14 @@ router.use((err, req, res, next) => (err?.type === 'entity.parse.failed' || err?
 
 // Real readiness, not just "the page loaded": the backend answers, the AI provider is configured and reachable
 // (checked with a cached, quota-free request), and web research is either untested, working or known to be blocked.
+// Sign-in status: which settings are missing (names only) and where accounts are stored.
+async function accountsInfo() {
+  const cfg = accountsConfig();
+  let storage = 'unavailable', schema = 'unknown';
+  try { const st = await getWsStore(); storage = st.kind; if (st.kind === 'postgres') { try { await st.ready(); schema = 'ready'; } catch (e) { console.error('[baasha] accounts schema:', e?.code || e?.message); schema = 'failed'; } } else schema = 'memory'; } catch { /* leave unavailable */ }
+  return { configured: cfg.configured, missing: cfg.missing, storage, schema };
+}
+
 // Read from the code that is actually loaded: what the agent can really do, not what a document says.
 async function agentInfo() {
   const kb = getKnowledgeBase().stats();
@@ -54,12 +64,15 @@ export async function statusReport() {
     research: { available: researchOk, via: googleOk ? 'google' : 'web', state: !researchOk ? 'unavailable' : seen === true ? 'working' : 'untested', reason: researchOk ? null : sb?.error.kind || 'search_blocked' },
     modes: { chat: usable, research: researchOk, agent: usable }, limits: LIMITS, checkedAt: new Date().toISOString(),
     agent: await agentInfo(),
+    accounts: await accountsInfo(),
   };
 }
 router.get('/status', async (req, res) => {
   try { res.set('cache-control', 'no-store').json(await statusReport()); }
   catch { res.set('cache-control', 'no-store').status(500).json({ ok: false, backend: 'error', state: 'down' }); }
 });
+
+router.use(accountRouter());                       // sign-in, /me and the workspace API (memory, task history)
 
 /* ---------- validation ---------- */
 export function cleanMessages(raw) {
@@ -149,9 +162,11 @@ router.post('/agent', (req, res) => {
     const task = String(req.body?.task ?? '').replace(/\u0000/g, '').trim();
     if (task.length < 5 || task.length > 2000) return bad(res, 400, 'bad_request', 'Describe your task in 5 to 2000 characters.');
     const sse = openStream(req, res);
-    const rec = await openTask({ goal: task, mode: 'assisted', ip: req.ip });      // never throws; logging problems do not stop the task
-    sse.send('task', { id: rec.id, persistence: rec.persistence });
-    try { await runAgent({ task, history: cleanMessages(req.body?.context) || [], emit: ({ type, ...d }) => sse.send(type, d), signal: sse.signal, mode: 'assisted', recorder: rec }); sse.send('done', {}); }
+    const sess = await sessionFromRequest(req);                                    // signed-in users get their workspace; others stay anonymous
+    const workspaceId = sess?.workspaceId || null;
+    const rec = await openTask({ goal: task, mode: 'assisted', ip: req.ip, workspaceId });      // never throws; logging problems do not stop the task
+    sse.send('task', { id: rec.id, persistence: rec.persistence, workspace: Boolean(workspaceId) });
+    try { await runAgent({ task, history: cleanMessages(req.body?.context) || [], emit: ({ type, ...d }) => sse.send(type, d), signal: sse.signal, mode: 'assisted', recorder: rec, workspaceId }); sse.send('done', {}); }
     catch (e) {
       if (e?.code === 'cancelled') rec.finish('cancelled', { reason: 'client left or pressed stop' });
       else { console.error('[baasha] agent:', e?.kind || e?.code || 'error'); rec.event('error', { kind: e?.kind || e?.code || 'internal' }); rec.finish('failed', { error: e?.kind || 'internal' }); sse.send('error', publicError(e)); }
@@ -164,7 +179,8 @@ router.post('/agent', (req, res) => {
 router.get('/tasks/:id', async (req, res) => {
   if (rateLimited(`tasks:${req.ip}`, 120)) return bad(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
   try {
-    const t = await readTask(req.params.id);
+    const sess = await sessionFromRequest(req);
+    const t = await readTask(req.params.id, null, { workspaceId: sess?.workspaceId || null });
     res.set({ 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
     if (!t) return bad(res, 404, 'not_found', 'This task does not exist.');
     res.json({ ok: true, task: t });
