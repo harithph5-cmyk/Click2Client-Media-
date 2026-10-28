@@ -23,9 +23,10 @@ export function statusView(s) {
     return { tone: 'off', label: 'Unavailable', lines, canRetry: true };
   }
   lines.push(`AI provider: configured and reachable (model ${s.model}).`);
+  const via = r.via === 'web' ? ' through a general web search (Google Search quota is not available)' : '';
   if (r.state === 'unavailable') lines.push(`Web research: unavailable${r.reason === 'search_quota' ? ' (the search quota was reached)' : ''}. Chat works, and the Agent will say when it could not search.`);
-  else if (r.state === 'working') lines.push('Web research: working.');
-  else lines.push('Web research: not tested yet (it is checked the first time you use it).');
+  else if (r.state === 'working') lines.push(`Web research: working${via}.`);
+  else lines.push(`Web research: available${via}, not tested yet (it is checked the first time you use it).`);
   if (s.limits) lines.push(`Limits per visitor each hour: ${s.limits.chat} chat messages, ${s.limits.research} research questions, ${s.limits.agent} agent tasks.`);
   return s.state === 'degraded'
     ? { tone: 'warn', label: `Limited · ${s.model}`, lines, canRetry: true }

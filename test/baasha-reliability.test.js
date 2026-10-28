@@ -12,6 +12,7 @@ const { runAgent, assess, disclosure } = await import('../server/baasha/agent.js
 const routes = await import('../server/baasha/routes.js');
 const { resetLimits } = await import('../server/baasha/limits.js');
 const ui = await import('../public/baasha/js/state.js');
+const srch = await import('../server/baasha/search.js');
 
 /* ---------- mocked Gemini: a queue of replies, and a log of every call that was made ---------- */
 const reply = (status, body) => ({ ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body, arrayBuffer: async () => new ArrayBuffer(0), body: null });
@@ -20,17 +21,22 @@ const quotaDaily = () => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'quo
 const noDetail429 = () => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'quota', details: [{ '@type': 'x.Help' }] } });
 const minute429 = () => ({ error: { status: 'RESOURCE_EXHAUSTED', message: 'slow down', details: [{ '@type': 'x.QuotaFailure', violations: [{ quotaId: 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier' }] }, { '@type': 'x.RetryInfo', retryDelay: '0.05s' }] } });
 
+// the keyless search is mocked too: by default it refuses (like a blocked server), tests can set ddgReply
+const ddgPage = (items) => `<html><body>${items.map(([t, u, sn, cls = '']) => `<div class="result ${cls}"><a class="result__a" href="//duckduckgo.com/l/?uddg=${encodeURIComponent(u)}&rut=x">${t}</a><a class="result__snippet">${sn}</a></div>`).join('')}</body></html>`;
+let ddgReply = () => ({ ok: false, status: 202, text: async () => '' });
 async function mocked(queue, fn) {
   const real = globalThis.fetch, calls = [];
   globalThis.fetch = async (url, opts) => {
+    if (String(url).includes('duckduckgo.com/html')) { calls.ddg = (calls.ddg || 0) + 1; return ddgReply(String(url)); }
     if (!String(url).includes('generativelanguage.googleapis.com')) return real(url, opts);
     calls.push({ url: String(url), body: opts?.body ? JSON.parse(opts.body) : null });
     const next = typeof queue === 'function' ? queue(calls.length, String(url), opts) : queue.shift();
     if (next instanceof Error) throw next;
     return next;
   };
-  gem.resetBreakers(); gem.resetProbe();
-  try { return await fn(calls); } finally { globalThis.fetch = real; gem.resetBreakers(); gem.resetProbe(); }
+  const clean = () => { gem.resetBreakers(); gem.resetProbe(); srch.fallbackSeen.ok = null; ddgReply = () => ({ ok: false, status: 202, text: async () => '' }); };
+  clean();
+  try { return await fn(calls); } finally { globalThis.fetch = real; clean(); }
 }
 const GROUNDED = { contents: [], tools: [{ google_search: {} }] };
 const PLAIN = { contents: [] };
@@ -122,8 +128,8 @@ test('identical searches are run once; a failing search is not repeated', async 
     const ctx = { sources: new Map() };
     const a = await runTool('web_search', { query: 'one' }, ctx);
     const b = await runTool('web_search', { query: 'two' }, ctx);
-    assert.equal(a.ok, false); assert.equal(a.category, 'search_quota');
-    assert.ok(b.skipped && b.category === 'search_quota'); assert.equal(calls.length, 1, 'no second request to Google');
+    assert.equal(a.ok, false); assert.equal(a.category, 'search_blocked');
+    assert.ok(b.skipped && b.category === 'search_blocked'); assert.equal(calls.length, 1, 'no second request to Google'); assert.equal(calls.ddg, 1, 'and no second request to the search service');
   });
 });
 
@@ -171,7 +177,7 @@ test('rate-limited research is disclosed: the agent cannot claim it searched', a
     });
     const fin = events.at(-1);
     const ends = events.filter((e) => e.type === 'tool_end');
-    assert.equal(ends[0].ok, false); assert.equal(ends[0].category, 'search_quota'); assert.equal(ends[1].status, 'skipped');
+    assert.equal(ends[0].ok, false); assert.equal(ends[0].category, 'search_blocked'); assert.equal(ends[1].status, 'skipped');
     assert.equal(fin.status, 'partially_completed');
     assert.match(fin.text, /Partially completed/); assert.match(fin.text, /not checked against sources/);
     assert.match(fin.text, /Tools that failed: Searching the web x2/); assert.match(fin.text, /Sources retrieved: 0/);
@@ -231,7 +237,7 @@ test('research with the search quota used up returns a clear structured error', 
   await mocked(() => reply(429, noDetail429()), async () => withServer(async (base) => {
     const { text } = await post(base, '/api/baasha/chat', { mode: 'research', messages: [{ role: 'user', content: 'What is new in Python?' }] });
     const err = sseEvents(text).find(([t]) => t === 'error')[1];
-    assert.equal(err.kind, 'search_quota'); assert.match(err.message, /search is temporarily unavailable/i); assert.doesNotMatch(text, /try again in a minute/i);
+    assert.equal(err.kind, 'search_blocked'); assert.match(err.message, /search is temporarily unavailable/i); assert.doesNotMatch(text, /try again in a minute/i);
   }));
 });
 
@@ -251,7 +257,10 @@ test('status endpoint: ready, degraded, down, and no secrets', async () => {
   }));
   await mocked(() => reply(200, { name: 'models/x' }), async () => withServer(async (base) => {
     gem.trip('search', gem.providerError('search_quota'), 60000);
-    const s = await (await realFetch(base + '/api/baasha/status')).json();
+    let s = await (await realFetch(base + '/api/baasha/status')).json();
+    assert.equal(s.state, 'ready'); assert.equal(s.research.via, 'web'); assert.equal(s.modes.research, true, 'research still works through the keyless search');
+    srch.fallbackSeen.ok = false;
+    s = await (await realFetch(base + '/api/baasha/status')).json();
     assert.equal(s.state, 'degraded'); assert.equal(s.modes.research, false); assert.equal(s.modes.chat, true); assert.equal(s.research.reason, 'search_quota');
   }));
   await mocked(() => reply(403, { error: { status: 'PERMISSION_DENIED' } }), async () => withServer(async (base) => {
@@ -292,4 +301,65 @@ test('saved conversations load defensively and reports are not duplicated', () =
   assert.equal(list.length, 1); assert.equal(a, b);
   ui.addReport(list, { title: 'T', markdown: 'other', complete: false }); assert.equal(list.length, 2); assert.equal(list[0].complete, false);
   assert.deepEqual(ui.loadDb(JSON.stringify(db)).chats, db.chats, 'a refresh does not change saved chats');
+});
+
+/* ---------- keyless research fallback ---------- */
+test('search results are unwrapped, de-duplicated and limited to public pages', () => {
+  assert.equal(srch.unwrap('//duckduckgo.com/l/?uddg=https%3A%2F%2Fpypi.org%2Fproject%2Frequests%2F&rut=z'), 'https://pypi.org/project/requests/');
+  assert.equal(srch.unwrap('javascript:alert(1)'), null);
+  const html = ddgPage([['Docs', 'https://docs.example.org/a', 'Install with pip'], ['Dup', 'https://docs.example.org/a', 'again'], ['Ad', 'https://ads.example.org/', 'buy', 'result--ad'],
+    ['Local', 'http://127.0.0.1/admin', 'private'], ['Meta', 'http://169.254.169.254/latest', 'private'], ['Two', 'https://two.example.org/', 'second']]);
+  const r = srch.parseResults(html);
+  assert.deepEqual(r.map((x) => x.url), ['https://docs.example.org/a', 'https://two.example.org/']); assert.equal(r[0].snippet, 'Install with pip');
+  assert.equal(srch.cleanCitations('Yes [1] and [2] but not [7] or [0].', 2), 'Yes [1] and [2] but not  or .');
+});
+
+test('when Google search has no quota, web_search falls back to real keyless results', async () => {
+  await mocked(() => reply(429, noDetail429()), async (calls) => {
+    ddgReply = () => ({ ok: true, status: 200, text: async () => ddgPage([['Requests docs', 'https://requests.example.org/install', 'pip install requests'], ['PyPI', 'https://pypi.example.org/requests', 'Python HTTP for humans']]) });
+    const ctx = { sources: new Map() };
+    const r = await runTool('web_search', { query: 'python requests install' }, ctx);
+    assert.ok(r.ok && r.via === 'web' && !r.empty); assert.equal(r.sources.length, 2); assert.match(r.summary, /pip install requests/);
+    assert.ok(ctx.sources.has('https://requests.example.org/install'), 'sources are recorded so links can be verified');
+    const r2 = await runTool('web_search', { query: 'another thing' }, ctx);          // breaker is open: no more Google calls
+    assert.ok(r2.ok && r2.via === 'web'); assert.equal(calls.length, 1); assert.equal(calls.ddg, 2);
+  });
+});
+
+test('a keyless search with no results is empty, not a failure; a refusal is a failure', async () => {
+  await mocked(() => reply(429, noDetail429()), async () => {
+    ddgReply = () => ({ ok: true, status: 200, text: async () => '<html><body>nothing</body></html>' });
+    const r = await runTool('web_search', { query: 'zzzz qqqq' }, { sources: new Map() });
+    assert.ok(r.ok && r.empty && r.sources.length === 0);
+  });
+  await mocked(() => reply(429, noDetail429()), async () => {
+    const r = await runTool('web_search', { query: 'blocked one' }, { sources: new Map() });
+    assert.equal(r.ok, false); assert.equal(r.category, 'search_blocked');
+  });
+});
+
+test('research mode answers from retrieved sources when Google search is unavailable', async () => {
+  let n = 0;
+  await mocked((i, url) => (url.includes(':generateContent') && n++ === 0 ? reply(429, noDetail429()) : reply(200, okBody('Install it with pip [1]. Another claim [9].'))), async (calls) => withServer(async (base) => {
+    ddgReply = () => ({ ok: true, status: 200, text: async () => ddgPage([['Requests install', 'https://requests-docs.invalid/install', 'Run pip install requests.']]) });
+    const { text } = await post(base, '/api/baasha/chat', { mode: 'research', messages: [{ role: 'user', content: 'How do I install requests?' }] });
+    const res = sseEvents(text).find(([t]) => t === 'result')[1];
+    assert.equal(res.via, 'web'); assert.equal(res.verified, true); assert.deepEqual(res.sources.map((s) => s.url), ['https://requests-docs.invalid/install']);
+    assert.match(res.text, /general web search/); assert.match(res.text, /pip \[1\]/); assert.doesNotMatch(res.text, /\[9\]/, 'citations to sources that were not retrieved are removed');
+    const plain = calls.at(-1).body; assert.equal(plain.tools, undefined, 'the summary call does not use the search tool');
+    assert.match(JSON.stringify(plain.contents), /Run pip install requests/);
+  }));
+});
+
+test('research reports an honest error when both search routes fail', async () => {
+  await mocked(() => reply(429, noDetail429()), async () => withServer(async (base) => {
+    ddgReply = () => { throw new TypeError('network down'); };
+    const { text } = await post(base, '/api/baasha/chat', { mode: 'research', messages: [{ role: 'user', content: 'Anything?' }] });
+    const err = sseEvents(text).find(([t]) => t === 'error')[1]; assert.equal(err.kind, 'search_unreachable'); assert.match(err.message, /could not be reached/);
+  }));
+});
+
+test('status view mentions the general web search route', () => {
+  const v = ui.statusView({ ok: true, state: 'ready', model: 'm', provider: {}, research: { state: 'working', via: 'web' } });
+  assert.equal(v.tone, 'on'); assert.match(v.lines.join(' '), /general web search/);
 });

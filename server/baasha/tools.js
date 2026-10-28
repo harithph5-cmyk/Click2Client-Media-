@@ -1,8 +1,9 @@
 // Tools the Baasha AI agent may use. Every tool is read-only and runs on the server with limits:
 // there is no file access, no shell, and nothing is sent, bought, deleted or published.
 import * as cheerio from 'cheerio';
-import { generate } from './gemini.js';
+import { generate, tripped } from './gemini.js';
 import { safeFetch, UrlRejected } from './ssrf.js';
+import { searchWeb, SearchError } from './search.js';
 
 /* ---------- calculator: a real parser, never eval ---------- */
 export function calculate(expression) {
@@ -71,14 +72,42 @@ export async function fetchPage(url, signal) {
 export async function webSearch(query, signal) {
   const q = String(query ?? '').trim().slice(0, 300);
   if (!q) return { ok: false, category: 'bad_input', error: 'Give a search query.' };
+  // Google Search grounding has no free quota: when it is known to be blocked, or just said so, use the keyless search
+  if (tripped('search')) return fallbackSearch(q, signal);
+  let r;
+  try {
+    r = await groundedSearch(q, signal);
+  } catch (e) {
+    if (e?.kind === 'search_quota' || e?.kind === 'quota_daily') return fallbackSearch(q, signal);
+    throw e;
+  }
+  const sources = r.sources.slice(0, 8);
+  // a search that worked but found nothing is reported as such, not as a failure and not as evidence
+  return { ok: true, query: q, summary: r.text.slice(0, 3500), sources, empty: !sources.length, retries: (r.attempts || 1) - 1 };
+}
+
+// Keyless search: the facts are the real titles and snippets of the results (no AI summary, so no model quota is used).
+async function fallbackSearch(q, signal) {
+  try {
+    const found = await searchWeb(q, signal, 6);
+    return { ok: true, query: q, via: 'web', summary: found.map((r) => `${r.title} (${r.url}): ${r.snippet}`).join('\n').slice(0, 3500), sources: found.map(({ title, url }) => ({ title, url })), empty: false, note: 'General web search results; use fetch_page to read a page before relying on it.' };
+  } catch (e) {
+    if (e?.code === 'cancelled') throw e;
+    if (e instanceof SearchError) {
+      if (e.kind === 'no_results') return { ok: true, query: q, via: 'web', summary: 'The search found no results.', sources: [], empty: true };
+      return { ok: false, category: `search_${e.kind}`, error: e.message };
+    }
+    throw e;
+  }
+}
+
+async function groundedSearch(q, signal) {
   const r = await generate({
     contents: [{ role: 'user', parts: [{ text: `Search the web and report the facts found for: ${q}
 Be concise. List concrete facts, names, numbers and dates, and say what you could not confirm.` }] }],
     tools: [{ google_search: {} }], maxOutputTokens: 1500, timeoutMs: 45000,
   }, signal);
-  const sources = r.sources.slice(0, 8);
-  // a search that worked but found nothing is reported as such, not as a failure and not as evidence
-  return { ok: true, query: q, summary: r.text.slice(0, 3500), sources, empty: !sources.length, retries: (r.attempts || 1) - 1 };
+  return r;
 }
 
 /* ---------- registry ---------- */
@@ -99,7 +128,7 @@ export const LABELS = { web_search: 'Searching the web', fetch_page: 'Reading a 
 
 const LIMITS = { web_search: 4, fetch_page: 6 };       // calls per task, so one task cannot burn the quota
 const norm = (v) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
-const PERSISTENT = new Set(['search_quota', 'quota_daily', 'auth', 'model', 'not_configured']);
+const PERSISTENT = new Set(['search_quota', 'quota_daily', 'auth', 'model', 'not_configured', 'search_blocked']);
 
 // Runs one tool call. Always returns a plain object (never throws) so the agent loop can continue.
 // Failures are {ok:false, category, error}; a repeated identical call reuses the earlier result (deduped:true).

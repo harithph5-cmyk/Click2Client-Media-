@@ -3,6 +3,7 @@
 import express from 'express';
 import { generate, stream, isConfigured, modelName, GeminiError, probeProvider, tripped, searchSeen } from './gemini.js';
 import { runAgent } from './agent.js';
+import { researchWithoutGrounding, SearchError, fallbackSeen } from './search.js';
 import { rateLimited, dailyCapReached, LIMITS } from './limits.js';
 
 const router = express.Router();
@@ -31,12 +32,15 @@ export async function statusReport() {
   const mb = tripped('model'), sb = tripped('search');
   const problem = !configured ? 'not_configured' : mb?.error.kind || p.problem || null;
   const usable = configured && p.reachable !== false && !['auth', 'model', 'quota_daily', 'unreachable'].includes(problem);
-  const researchOk = usable && !sb && searchSeen.ok !== false;
+  // research works through Google Search when its quota allows, otherwise through the keyless web search
+  const googleOk = !sb && searchSeen.ok !== false, webOk = fallbackSeen.ok !== false;
+  const researchOk = usable && (googleOk || webOk);
+  const seen = googleOk ? searchSeen.ok : fallbackSeen.ok;
   const state = !configured ? 'not_configured' : !usable ? 'down' : researchOk ? 'ready' : 'degraded';
   return {
     ok: true, backend: 'up', state, configured, model: configured ? modelName() : null,
     provider: { configured, reachable: p.reachable, problem },
-    research: { available: researchOk, state: !usable ? 'unavailable' : sb ? 'unavailable' : searchSeen.ok === true ? 'working' : searchSeen.ok === false ? 'unavailable' : 'untested', reason: sb?.error.kind || null },
+    research: { available: researchOk, via: googleOk ? 'google' : 'web', state: !researchOk ? 'unavailable' : seen === true ? 'working' : 'untested', reason: researchOk ? null : sb?.error.kind || 'search_blocked' },
     modes: { chat: usable, research: researchOk, agent: usable }, limits: LIMITS, checkedAt: new Date().toISOString(),
   };
 }
@@ -75,7 +79,8 @@ function openStream(req, res) {
   const end = () => { clearInterval(beat); if (!res.writableEnded) res.end(); };
   return { signal: ctl.signal, send, end };
 }
-const publicError = (e) => e instanceof GeminiError ? { code: e.code, kind: e.kind || e.code, message: e.message, ...(e.retryAfterMs ? { retryAfterSec: Math.ceil(e.retryAfterMs / 1000) } : {}) } : { code: 'internal', kind: 'internal', message: 'Something went wrong. Please try again.' };
+const SEARCH_MESSAGES = { blocked: 'Web search is temporarily unavailable (the search service refused the request). Chat and calculations still work.', unreachable: 'Web search is temporarily unavailable (the search service could not be reached). Chat and calculations still work.', no_results: 'The web search found nothing for that question. Try rephrasing it.', bad_input: 'Type a question to research.' };
+const publicError = (e) => e instanceof SearchError ? { code: 'search_unavailable', kind: `search_${e.kind}`, message: SEARCH_MESSAGES[e.kind] || SEARCH_MESSAGES.unreachable } : e instanceof GeminiError ? { code: e.code, kind: e.kind || e.code, message: e.message, ...(e.retryAfterMs ? { retryAfterSec: Math.ceil(e.retryAfterMs / 1000) } : {}) } : { code: 'internal', kind: 'internal', message: 'Something went wrong. Please try again.' };
 
 // citation markers [1][2] inserted from Gemini's grounding data (real source indices only)
 export function withCitations(text, supports) {
@@ -103,9 +108,22 @@ router.post('/chat', (req, res, next) => {
         sse.send('done', {});
       } else {
         sse.send('status', { text: 'Searching the web' });
-        const r = await generate({ system: RESEARCH_SYSTEM, contents: toContents(msgs), tools: [{ google_search: {} }], maxOutputTokens: 4096, timeoutMs: 90000 }, sse.signal);
-        const note = r.sources.length ? '' : "> **No web sources were found for this question,** so the answer below is from the AI's general knowledge and has not been checked.\n\n";
-        sse.send('result', { text: note + withCitations(r.text, r.supports), sources: r.sources.slice(0, 12), queries: r.queries.slice(0, 6), verified: r.sources.length > 0 });
+        // Google Search grounding has no free quota; when it is blocked or just refused, use the keyless search instead
+        const viaWeb = async () => {
+          const r = await researchWithoutGrounding(msgs.at(-1).content, sse.signal);
+          const lead = `> Sources came from a general web search. Baasha read ${r.pagesRead} of ${r.sources.length} pages and summarised what it found.\n\n`;
+          sse.send('result', { text: lead + r.text, sources: r.sources, queries: [msgs.at(-1).content.slice(0, 120)], verified: true, via: 'web' });
+        };
+        let grounded = null;
+        if (!tripped('search')) {
+          try { grounded = await generate({ system: RESEARCH_SYSTEM, contents: toContents(msgs), tools: [{ google_search: {} }], maxOutputTokens: 4096, timeoutMs: 90000 }, sse.signal); }
+          catch (e) { if (e?.kind !== 'search_quota' && e?.kind !== 'quota_daily') throw e; }
+        }
+        if (!grounded) await viaWeb();
+        else {
+          const note = grounded.sources.length ? '' : "> **No web sources were found for this question,** so the answer below is from the AI's general knowledge and has not been checked.\n\n";
+          sse.send('result', { text: note + withCitations(grounded.text, grounded.supports), sources: grounded.sources.slice(0, 12), queries: grounded.queries.slice(0, 6), verified: grounded.sources.length > 0, via: 'google' });
+        }
         sse.send('done', {});
       }
     } catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] chat:', e?.kind || e?.code || 'error'); sse.send('error', publicError(e)); } }

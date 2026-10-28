@@ -26,7 +26,7 @@ const RESEARCH = new Set(['web_search', 'fetch_page']);
 const REASONS = {
   quota_daily: 'the AI quota is used up', search_quota: 'the search quota was reached', rate_minute: 'too many requests', rate_limited: 'the service was busy',
   unavailable: 'the service was unavailable', timeout: 'it timed out', unreachable: 'the service could not be reached', auth: 'a server setup problem',
-  model: 'a server setup problem', bad_request: 'the request was rejected', limit: 'the per-task limit was reached', page_error: 'the page could not be opened',
+  model: 'a server setup problem', bad_request: 'the request was rejected', limit: 'the per-task limit was reached', search_blocked: 'the search service refused the request', search_unreachable: 'the search service could not be reached', no_results: 'nothing was found', page_error: 'the page could not be opened',
   bad_input: 'the input was not valid', tool_error: 'the tool reported an error', blocked: 'the request was blocked', empty: 'an empty answer', malformed: 'an unreadable answer',
 };
 
