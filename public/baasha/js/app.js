@@ -1,6 +1,7 @@
 // Baasha AI web app: Chat, Research and Agent modes. History and reports are kept in this browser only.
 import {$, el, icon, toast, copyText, ask} from './core.js';
 import {md} from './markdown.js';
+import {statusView, loadDb, addReport, RUN_TITLES} from './state.js';
 
 const KEY = 'baasha.v1';
 const MODES = {
@@ -11,11 +12,11 @@ const MODES = {
   agent: {label: 'Agent', hint: 'Plans the task, uses tools, checks its work and reports.', ph: 'Describe a task for the agent...',
     ideas: [['checklist', 'Competitor report', 'Find three competitors of a bakery in Chennai and write a short comparison report.'], ['calculate', 'EMI calculation', 'Calculate the monthly EMI for a loan of 500000 rupees at 9.5% a year for 36 months, show the working, and explain it simply.'], ['description', 'Page summary', 'Read https://example.com and summarise what the page says in five bullet points.']]},
 };
-const S = {chat: null, mode: 'chat', busy: false, ctl: null, file: null, status: null};
+const S = {chat: null, mode: 'chat', busy: false, ctl: null, file: null, status: undefined};   // status: undefined = loading, null = failed
 
 /* ---------- storage (this browser only) ---------- */
 let db = {chats: [], reports: []};
-try { const raw = JSON.parse(localStorage.getItem(KEY) || 'null'); if (raw && Array.isArray(raw.chats)) db = {chats: raw.chats, reports: Array.isArray(raw.reports) ? raw.reports : []}; } catch (_) { /* start fresh */ }
+try { db = loadDb(localStorage.getItem(KEY)); } catch (_) { /* storage blocked: start fresh */ }
 function persist() {
   db.chats = db.chats.sort((a, b) => b.updated - a.updated).slice(0, 40);
   db.reports = db.reports.slice(0, 40);
@@ -78,7 +79,7 @@ function sourcesBox(sources) {
 }
 function reportCard(rep) {
   const c = el('div', 'rep'); const t = el('div', 'rt');
-  t.append(icon('description'), el('b', '', rep.title), el('small', '', 'Saved to your Library'));
+  t.append(icon('description'), el('b', '', rep.title), el('small', '', rep.complete === false ? 'Preliminary report - saved to your Library' : 'Saved to your Library'));
   const dl = el('button', 'btn primary'); dl.type = 'button'; dl.append(icon('download'), document.createTextNode('Download .md')); dl.onclick = () => downloadReport(rep);
   c.append(t, dl); return c;
 }
@@ -151,9 +152,10 @@ function toolRow(c, ev) {
   r.append(el('span', 'st'), el('b', '', ev.label), el('small', '', ev.input ? ev.input.replace(/[{}"]/g, ' ').slice(0, 90) : ''));
   q(c, '.acts').appendChild(r); return r;
 }
+const runState = run => run.error || run.status === 'failed' ? 'error' : run.status === 'partially_completed' ? 'warn' : 'done';
 function runCardStatic(run) {          // for saved history: no animation delays
-  const c = runShell(); c.classList.add('static'); c.dataset.state = run.error ? 'error' : 'done';
-  q(c, '.rtitle').textContent = run.error ? 'The agent stopped' : 'Agent finished'; q(c, '.rstatus').textContent = run.summary || '';
+  const c = runShell(); c.classList.add('static'); c.dataset.state = runState(run);
+  q(c, '.rtitle').textContent = run.error ? 'The agent stopped' : RUN_TITLES[run.status] || 'Agent finished'; q(c, '.rstatus').textContent = run.summary || '';
   setPlan(c, {steps: run.plan || []}); advancePlan(c, (run.plan || []).length); setProgress(c, 100);
   (run.tools || []).forEach(t => { const r = toolRow(c, t); r.dataset.s = t.ok ? 'ok' : 'bad'; r.lastChild.textContent = t.detail || ''; });
   if (run.verify) showVerify(c, run.verify);
@@ -210,18 +212,18 @@ async function respond() {                   // answers the last user message of
         else if (t === 'tool_start') { toolRow(card, d); q(card, '.rstatus').textContent = d.label + '...'; }
         else if (t === 'tool_end') {
           const r = card.querySelector(`.act[data-id="${CSS.escape(d.id)}"]`); if (r) { r.dataset.s = d.ok ? 'ok' : 'bad'; r.lastChild.textContent = d.detail; }
-          tools.push({id: d.id, label: r ? r.children[1].textContent : d.name, ok: d.ok, detail: d.detail}); done++; advancePlan(card, Math.min(done, planLen - 1)); setProgress(card, 12 + (done / (done + 2)) * 70);
+          tools.push({id: d.id, label: r ? r.children[1].textContent : d.name, ok: d.ok, detail: d.detail, category: d.category}); done++; advancePlan(card, Math.min(done, planLen - 1)); setProgress(card, 12 + (done / (done + 2)) * 70);
         }
         else if (t === 'verify') { run.verify = d; q(card, '.rstatus').textContent = 'Checking the answer against what the tools returned...'; setProgress(card, 92); }
         else if (t === 'final') {
-          advancePlan(card, planLen); setProgress(card, 100); card.dataset.state = 'done'; q(card, '.rtitle').textContent = 'Agent finished';
+          run.status = d.status; advancePlan(card, planLen); setProgress(card, 100); card.dataset.state = runState(run); q(card, '.rtitle').textContent = RUN_TITLES[d.status] || 'Agent finished';
           run.summary = `${d.steps} tool step${d.steps === 1 ? '' : 's'} in ${d.seconds}s` + (d.stopped ? ` - ${d.stopped}` : ''); q(card, '.rstatus').textContent = run.summary;
           if (run.verify) showVerify(card, run.verify);
           msg.content = d.text; msg.sources = d.sources; msg.run = run;
           ui.bub.innerHTML = md(d.text); ui.bub.classList.add('reveal-final'); ui.body.insertBefore(ui.bub, null);
           if (d.sources?.length) ui.body.appendChild(sourcesBox(d.sources));
-          if (d.report) { const rep = {id: uid(), title: d.report.title, markdown: d.report.markdown, created: Date.now()}; db.reports.unshift(rep); msg.report = rep; ui.body.appendChild(reportCard(rep)); }
-          burst(card);
+          if (d.report) { const rep = addReport(db.reports, {id: uid(), title: d.report.title, markdown: d.report.markdown, complete: d.report.complete, created: Date.now()}); msg.report = rep; ui.body.appendChild(reportCard(rep)); }
+          if (d.status === 'completed') burst(card);
         }
         else if (t === 'error') throw new Error(d.message);
       }
@@ -268,7 +270,7 @@ async function send(text) {
   if (S.busy) return;
   text = (text ?? prompt.value).trim();
   if (!text) { prompt.focus(); return; }
-  if (!S.status?.configured) { showNotice(); return; }
+  if (S.status?.state === 'not_configured') { showNotice(); return; }   // otherwise let the server answer, so real problems get a real message
   const chat = ensureChat(), file = S.file;
   const m = {role: 'user', content: text, mode: S.mode}; if (file) m.file = file;
   chat.messages.push(m); if (chat.title === 'New chat') chat.title = text.replace(/\s+/g, ' ').slice(0, 60);
@@ -351,7 +353,7 @@ function renderReports() {
   if (!db.reports.length) { box.appendChild(el('p', 'lead', 'No reports yet. Ask the Agent to write one, for example: "Research three competitors and write a report".')); return; }
   db.reports.forEach(r => {
     const row = el('div', 'hrow'); const t = el('div', 't', r.title);
-    row.append(icon('description'), t, el('small', '', new Date(r.created).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'})));
+    row.append(icon('description'), t, el('small', '', (r.complete === false ? 'Preliminary - ' : '') + new Date(r.created).toLocaleString([], {dateStyle: 'medium', timeStyle: 'short'})));
     const dl = el('button', 'ic'); dl.type = 'button'; dl.setAttribute('aria-label', 'Download ' + r.title); dl.title = 'Download'; dl.appendChild(icon('download')); dl.onclick = () => downloadReport(r);
     const rm = el('button', 'ic'); rm.type = 'button'; rm.setAttribute('aria-label', 'Delete ' + r.title); rm.title = 'Delete'; rm.appendChild(icon('delete'));
     rm.onclick = async () => { if (await ask({title: 'Delete this report?', body: `"${r.title}" will be removed from this browser.`, ok: 'Delete', danger: true})) { db.reports = db.reports.filter(x => x !== r); persist(); renderReports(); } };
@@ -393,19 +395,28 @@ function showNotice() {
   n.textContent = 'Baasha AI is not switched on yet. The site owner still has to finish setup, so answers are unavailable for now. You can read what it will do under Settings & safety.';
   toast('Baasha AI is not switched on yet.', 4000);
 }
+function paintStatus() {
+  const v = statusView(S.status);
+  $('dot').className = 'dot ' + (v.tone === 'on' ? 'on' : v.tone === 'warn' ? 'warn' : v.tone === 'wait' ? 'wait' : 'off'); $('statusTxt').textContent = v.label;
+  $('notice').hidden = S.status?.state !== 'not_configured';
+  if ($('cfg').open) paintSettings();
+}
+function paintSettings() {
+  const v = statusView(S.status), box = $('cStatus'); box.replaceChildren();
+  v.lines.forEach(l => box.appendChild(el('div', '', l)));
+  $('cRetry').hidden = !v.canRetry; $('cRetry').disabled = S.status === undefined;
+}
 async function loadStatus() {
+  S.status = undefined; paintStatus();
   try {
-    const r = await fetch('/api/baasha/status', {cache: 'no-store'}); const s = await r.json(); S.status = s;
-    $('dot').className = 'dot ' + (s.configured ? 'on' : 'off');
-    $('statusTxt').textContent = s.configured ? 'Ready · ' + s.model : 'Not switched on yet';
-    $('notice').hidden = s.configured; if (!s.configured) showNotice();
-  } catch (_) { S.status = null; $('dot').className = 'dot off'; $('statusTxt').textContent = 'Cannot reach Baasha AI'; }
+    const r = await fetch('/api/baasha/status', {cache: 'no-store', signal: AbortSignal.timeout(10000)});
+    S.status = r.ok ? await r.json() : null;
+  } catch (_) { S.status = null; }             // the loading state always ends: success, or "cannot reach"
+  paintStatus();
+  if (S.status?.state === 'not_configured') showNotice();
 }
-function openSettings() {
-  const s = S.status;
-  $('cStatus').textContent = !s ? 'Baasha AI cannot be reached right now.' : s.configured ? `Ready. Model: ${s.model}. Limits per visitor each hour: ${s.limits.chat} chat messages, ${s.limits.research} research questions, ${s.limits.agent} agent tasks.` : 'Not switched on yet: the site owner must add the AI key on the server.';
-  $('cfg').showModal();
-}
+function openSettings() { paintSettings(); $('cfg').showModal(); }
+$('cRetry').onclick = () => loadStatus();
 $('cClear').onclick = async () => {
   if (!await ask({title: 'Delete everything?', body: 'All chats and reports saved in this browser will be deleted. This cannot be undone.', ok: 'Delete everything', danger: true})) return;
   db = {chats: [], reports: []}; persist(); newChat(); renderReports(); toast('Everything was deleted from this browser.');

@@ -45,7 +45,13 @@
 .run{background:#fff;border:1px solid rgba(36,107,253,.14);border-radius:var(--r-lg);padding:16px;box-shadow:0 10px 30px -12px rgba(36,107,253,.28);position:relative;overflow:hidden}
 .run::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:var(--ring);background-size:200% 100%;animation:flow 2.2s linear infinite}
 .run[data-state=done]::before,.run.static::before{animation:none;background:linear-gradient(90deg,#10b981,#3fe1fd)}
-.run[data-state=error]::before{background:#ef4444;animation:none}
+.run.run[data-state=error]::before{background:#ef4444;animation:none}
+.run.run[data-state=warn]::before{background:linear-gradient(90deg,#f59e0b,#fbbf24);animation:none}
+.run.run[data-state=warn] .orbit .o1,.run.run[data-state=warn] .orbit .o2,.run.run[data-state=error] .orbit .o1,.run.run[data-state=error] .orbit .o2{animation:none;opacity:.9}
+.run.run[data-state=warn] .orbit .o1,.run.run[data-state=warn] .orbit .o2{border-color:#f59e0b}
+.run.run[data-state=error] .orbit .o1,.run.run[data-state=error] .orbit .o2{border-color:#ef4444}
+.run.run[data-state=warn] .prog i{animation:none;background:#f59e0b}
+.run.run[data-state=error] .prog i{animation:none;background:#ef4444}
 @keyframes flow{to{background-position:200% 0}}
 .run-h{display:flex;align-items:center;gap:14px}
 .rt{display:flex;flex-direction:column;min-width:0}

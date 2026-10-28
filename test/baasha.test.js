@@ -96,7 +96,8 @@ test('agent plans, calls tools, verifies links and returns a report', async () =
   await runAgent({ task: 'What is 6 times 7? Write a short report.', emit: (e) => events.push(e), signal: new AbortController().signal },
     { generate: async () => script.shift(), runTool });
   const types = events.map((e) => e.type);
-  assert.deepEqual(types, ['status', 'plan', 'tool_start', 'tool_end', 'tool_start', 'tool_end', 'verify', 'final']);
+  assert.deepEqual(types, ['state', 'status', 'plan', 'tool_start', 'tool_end', 'tool_start', 'tool_end', 'verify', 'final']);
+  assert.equal(events.at(-1).status, 'completed');
   assert.equal(events.find((e) => e.type === 'tool_end').detail, '= 42');
   const fin = events.at(-1);
   assert.match(fin.text, /42/); assert.doesNotMatch(fin.text, /invented\.example/);
@@ -110,7 +111,8 @@ test('agent stops at the step limit and still answers; cancelled runs stop', asy
   const events = [];
   await runAgent({ task: 'Keep looping please', emit: (e) => events.push(e), signal: new AbortController().signal }, { generate: looping, runTool });
   assert.equal(events.filter((e) => e.type === 'tool_start').length, 8);
-  assert.match(events.at(-1).stopped, /step limit/); assert.equal(events.at(-1).text, 'Best effort answer.');
+  assert.match(events.at(-1).stopped, /step limit/); assert.match(events.at(-1).text, /Best effort answer\./);
+  assert.equal(events.at(-1).status, 'partially_completed'); assert.match(events.at(-1).text, /Partially completed/);
   const ctl = new AbortController(); ctl.abort();
   await assert.rejects(() => runAgent({ task: 'cancelled task', emit() {}, signal: ctl.signal }, { generate: async () => ({ text: '{"steps":[{"title":"x"}]}', parts: [] }), runTool }), /Cancelled/);
 });

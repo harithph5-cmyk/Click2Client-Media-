@@ -98,6 +98,8 @@ body.sb-mini .shell{margin-left:var(--sidebar-mini)}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--outline);flex:none}
 .dot.on{background:var(--primary-container);animation:pulse 2s infinite}
 .dot.off{background:var(--error)}
+.dot.warn{background:#f59e0b}
+.dot.wait{background:var(--outline);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{opacity:.45}}
 .chip-s{display:inline-flex;align-items:center;gap:4px;border-radius:999px;background:var(--surface-container);padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--on-variant)}
 .chip-s .ms{font-size:14px;color:var(--secondary)}

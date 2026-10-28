@@ -1,7 +1,7 @@
 // HTTP API for Baasha AI (mounted at /api/baasha). Stateless: nothing a visitor writes is stored on the
 // server; conversations live in the visitor's own browser, so there is no shared data to leak.
 import express from 'express';
-import { generate, stream, isConfigured, modelName, GeminiError } from './gemini.js';
+import { generate, stream, isConfigured, modelName, GeminiError, probeProvider, tripped, searchSeen } from './gemini.js';
 import { runAgent } from './agent.js';
 import { rateLimited, dailyCapReached, LIMITS } from './limits.js';
 
@@ -23,9 +23,26 @@ router.use((req, res, next) => {
 router.use(express.json({ limit: '100kb' }));
 router.use((err, req, res, next) => (err?.type === 'entity.parse.failed' || err?.status === 413) ? bad(res, err.status || 400, 'bad_request', 'The request was not valid JSON or was too large.') : next(err));
 
-router.get('/status', (req, res) => {
-  const ok = isConfigured();
-  res.set('cache-control', 'no-store').json({ ok: true, configured: ok, model: ok ? modelName() : null, modes: { chat: ok, research: ok, agent: ok }, limits: LIMITS });
+// Real readiness, not just "the page loaded": the backend answers, the AI provider is configured and reachable
+// (checked with a cached, quota-free request), and web research is either untested, working or known to be blocked.
+export async function statusReport() {
+  const configured = isConfigured();
+  const p = await probeProvider();
+  const mb = tripped('model'), sb = tripped('search');
+  const problem = !configured ? 'not_configured' : mb?.error.kind || p.problem || null;
+  const usable = configured && p.reachable !== false && !['auth', 'model', 'quota_daily', 'unreachable'].includes(problem);
+  const researchOk = usable && !sb && searchSeen.ok !== false;
+  const state = !configured ? 'not_configured' : !usable ? 'down' : researchOk ? 'ready' : 'degraded';
+  return {
+    ok: true, backend: 'up', state, configured, model: configured ? modelName() : null,
+    provider: { configured, reachable: p.reachable, problem },
+    research: { available: researchOk, state: !usable ? 'unavailable' : sb ? 'unavailable' : searchSeen.ok === true ? 'working' : searchSeen.ok === false ? 'unavailable' : 'untested', reason: sb?.error.kind || null },
+    modes: { chat: usable, research: researchOk, agent: usable }, limits: LIMITS, checkedAt: new Date().toISOString(),
+  };
+}
+router.get('/status', async (req, res) => {
+  try { res.set('cache-control', 'no-store').json(await statusReport()); }
+  catch { res.set('cache-control', 'no-store').status(500).json({ ok: false, backend: 'error', state: 'down' }); }
 });
 
 /* ---------- validation ---------- */
@@ -58,7 +75,7 @@ function openStream(req, res) {
   const end = () => { clearInterval(beat); if (!res.writableEnded) res.end(); };
   return { signal: ctl.signal, send, end };
 }
-const publicError = (e) => e instanceof GeminiError ? { code: e.code, message: e.message } : { code: 'internal', message: 'Something went wrong. Please try again.' };
+const publicError = (e) => e instanceof GeminiError ? { code: e.code, kind: e.kind || e.code, message: e.message, ...(e.retryAfterMs ? { retryAfterSec: Math.ceil(e.retryAfterMs / 1000) } : {}) } : { code: 'internal', kind: 'internal', message: 'Something went wrong. Please try again.' };
 
 // citation markers [1][2] inserted from Gemini's grounding data (real source indices only)
 export function withCitations(text, supports) {
@@ -87,10 +104,11 @@ router.post('/chat', (req, res, next) => {
       } else {
         sse.send('status', { text: 'Searching the web' });
         const r = await generate({ system: RESEARCH_SYSTEM, contents: toContents(msgs), tools: [{ google_search: {} }], maxOutputTokens: 4096, timeoutMs: 90000 }, sse.signal);
-        sse.send('result', { text: withCitations(r.text, r.supports), sources: r.sources.slice(0, 12), queries: r.queries.slice(0, 6) });
+        const note = r.sources.length ? '' : "> **No web sources were found for this question,** so the answer below is from the AI's general knowledge and has not been checked.\n\n";
+        sse.send('result', { text: note + withCitations(r.text, r.supports), sources: r.sources.slice(0, 12), queries: r.queries.slice(0, 6), verified: r.sources.length > 0 });
         sse.send('done', {});
       }
-    } catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] chat:', e?.code || e?.message); sse.send('error', publicError(e)); } }
+    } catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] chat:', e?.kind || e?.code || 'error'); sse.send('error', publicError(e)); } }
     finally { sse.end(); }
   });
 });
@@ -102,7 +120,7 @@ router.post('/agent', (req, res) => {
     if (task.length < 5 || task.length > 2000) return bad(res, 400, 'bad_request', 'Describe your task in 5 to 2000 characters.');
     const sse = openStream(req, res);
     try { await runAgent({ task, history: cleanMessages(req.body?.context) || [], emit: ({ type, ...d }) => sse.send(type, d), signal: sse.signal }); sse.send('done', {}); }
-    catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] agent:', e?.code || e?.message); sse.send('error', publicError(e)); } }
+    catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] agent:', e?.kind || e?.code || 'error'); sse.send('error', publicError(e)); } }
     finally { sse.end(); }
   });
 });

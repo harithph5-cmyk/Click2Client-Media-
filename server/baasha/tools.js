@@ -70,12 +70,15 @@ export async function fetchPage(url, signal) {
 /* ---------- web search through Gemini's Google Search grounding ---------- */
 export async function webSearch(query, signal) {
   const q = String(query ?? '').trim().slice(0, 300);
-  if (!q) return { ok: false, error: 'Give a search query.' };
+  if (!q) return { ok: false, category: 'bad_input', error: 'Give a search query.' };
   const r = await generate({
-    contents: [{ role: 'user', parts: [{ text: `Search the web and report the facts found for: ${q}\nBe concise. List concrete facts, names, numbers and dates, and say what you could not confirm.` }] }],
+    contents: [{ role: 'user', parts: [{ text: `Search the web and report the facts found for: ${q}
+Be concise. List concrete facts, names, numbers and dates, and say what you could not confirm.` }] }],
     tools: [{ google_search: {} }], maxOutputTokens: 1500, timeoutMs: 45000,
   }, signal);
-  return { ok: true, query: q, summary: r.text.slice(0, 3500), sources: r.sources.slice(0, 8) };
+  const sources = r.sources.slice(0, 8);
+  // a search that worked but found nothing is reported as such, not as a failure and not as evidence
+  return { ok: true, query: q, summary: r.text.slice(0, 3500), sources, empty: !sources.length, retries: (r.attempts || 1) - 1 };
 }
 
 /* ---------- registry ---------- */
@@ -94,24 +97,45 @@ export const DECLARATIONS = [
 
 export const LABELS = { web_search: 'Searching the web', fetch_page: 'Reading a web page', calculate: 'Calculating', current_datetime: 'Checking the date and time', write_report: 'Writing the report' };
 
+const LIMITS = { web_search: 4, fetch_page: 6 };       // calls per task, so one task cannot burn the quota
+const norm = (v) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+const PERSISTENT = new Set(['search_quota', 'quota_daily', 'auth', 'model', 'not_configured']);
+
 // Runs one tool call. Always returns a plain object (never throws) so the agent loop can continue.
+// Failures are {ok:false, category, error}; a repeated identical call reuses the earlier result (deduped:true).
 export async function runTool(name, args, ctx) {
   const a = args && typeof args === 'object' ? args : {};
+  ctx.cache ||= new Map(); ctx.counts ||= {};
+  const research = name === 'web_search' || name === 'fetch_page';
+  const key = research ? `${name}:${norm(name === 'web_search' ? a.query : a.url)}` : null;
+  if (key && ctx.cache.has(key)) return { ...ctx.cache.get(key), deduped: true };
+  if (name === 'web_search' && ctx.searchDown) return { ok: false, skipped: true, category: ctx.searchDown.category, error: `Web search is not available in this task: ${ctx.searchDown.error}` };
+  if (research && (ctx.counts[name] || 0) >= LIMITS[name]) return { ok: false, skipped: true, category: 'limit', error: `The limit of ${LIMITS[name]} ${name === 'web_search' ? 'searches' : 'pages'} per task was reached.` };
+  if (research) ctx.counts[name] = (ctx.counts[name] || 0) + 1;
+  let result;
   try {
     switch (name) {
-      case 'web_search': { const r = await webSearch(a.query, ctx.signal); if (r.ok) r.sources.forEach((s) => ctx.sources.set(s.url, s)); return r; }
-      case 'fetch_page': { const r = await fetchPage(a.url, ctx.signal); if (r.ok) ctx.sources.set(r.url, { title: r.title || r.url, url: r.url }); return r; }
+      case 'web_search': { result = await webSearch(a.query, ctx.signal); if (result.ok) result.sources.forEach((s) => ctx.sources.set(s.url, s)); break; }
+      case 'fetch_page': { result = await fetchPage(a.url, ctx.signal); if (result.ok) ctx.sources.set(result.url, { title: result.title || result.url, url: result.url }); break; }
       case 'calculate': return { ok: true, expression: String(a.expression).slice(0, 200), result: calculate(a.expression) };
       case 'current_datetime': return { ok: true, ...currentDatetime(a.timezone) };
       case 'write_report': {
         const title = String(a.title ?? 'Report').slice(0, 120), markdown = String(a.markdown ?? '').slice(0, 30000);
-        if (markdown.trim().length < 20) return { ok: false, error: 'The report is empty.' };
+        if (markdown.trim().length < 20) return { ok: false, category: 'bad_input', error: 'The report is empty.' };
         ctx.report = { title, markdown }; return { ok: true, saved: true, characters: markdown.length };
       }
-      default: return { ok: false, error: `There is no tool called "${String(name).slice(0, 40)}".` };
+      default: return { ok: false, category: 'bad_input', error: `There is no tool called "${String(name).slice(0, 40)}".` };
     }
   } catch (e) {
     if (e?.code === 'cancelled') throw e;
-    return { ok: false, error: String(e?.message || 'The tool failed.').slice(0, 300) };
+    // provider errors keep their kind (quota, timeout...) and message; anything else is a plain tool error
+    result = { ok: false, category: e?.kind || 'tool_error', error: String(e?.message || 'The tool failed.').slice(0, 300), retries: Math.max(0, (e?.attempts || 1) - 1) };
   }
+  if (!result.ok && name === 'fetch_page') result.category ||= 'page_error';
+  if (name === 'web_search' && !result.ok) {
+    ctx.searchFails = (ctx.searchFails || 0) + 1;
+    if (PERSISTENT.has(result.category) || ctx.searchFails >= 2) ctx.searchDown = result;   // do not keep running a failing search
+  }
+  if (key) ctx.cache.set(key, result);
+  return result;
 }
