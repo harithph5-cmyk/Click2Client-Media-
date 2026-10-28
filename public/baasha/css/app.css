@@ -351,7 +351,7 @@ body[data-mode=welcome] .topbar .menu{background:rgba(255,255,255,.88);box-shado
 .composer textarea{font-size:17px}
 @media (max-width:1023px){.hero-art{max-height:62vh}}
 @media (max-width:767px){
-  .hero-art{height:min(46vh,360px);object-fit:cover;object-position:50% 0}
+  .hero-art{height:min(34vh,260px);object-fit:cover;object-position:60% 50%}
   #slotWelcome{margin-top:-56px;padding:0 12px}
   .nav a{padding:10px 12px}
 }
