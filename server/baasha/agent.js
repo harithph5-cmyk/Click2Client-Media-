@@ -33,7 +33,7 @@ const PLAN_PROMPT = (task) => `Break this task into a short plan of 2 to 6 concr
 Reply with JSON only: {"goal": "<one sentence>", "steps": [{"title": "<short step>", "tool": "web_search|fetch_page|calculate|current_datetime|write_report|audit_site|run_seo_tool|search_knowledge|load_skill|none"}]}
 Task: ${task}`;
 
-const URL_RE = /https?:\/\/[^\s)\]}>"']+/g;
+const URL_RE = /https?:\/\/[^\s)\]}>"'`*]+/g;
 const RESEARCH = new Set(['web_search', 'fetch_page']);
 const REASONS = {
   quota_daily: 'the AI quota is used up', search_quota: 'the search quota was reached', rate_minute: 'too many requests', rate_limited: 'the service was busy',
@@ -64,11 +64,12 @@ export function assess(records, { stopped = '', hasText = true } = {}) {
   const unresolved = [...failed].filter((n) => RESEARCH.has(n) || !ok.has(n));
   const succeeded = real.filter((r) => r.status === 'ok').length;
   const blocked = real.some((r) => r.status === 'blocked');
+  const partialTool = real.some((r) => r.partial);
   let status = 'completed';
   if (blocked) status = 'waiting_for_approval';                       // an action was held for the owner, so the task is not finished
   else if (!hasText || (real.length && !succeeded)) status = 'failed';
-  else if (unresolved.length || stopped) status = 'partially_completed';
-  return { status, unresolved, researchFailed: unresolved.some((n) => RESEARCH.has(n)) };
+  else if (unresolved.length || stopped || partialTool) status = 'partially_completed';
+  return { status, partialTool, unresolved, researchFailed: unresolved.some((n) => RESEARCH.has(n)) };
 }
 
 const count = (records, pick) => {
@@ -84,7 +85,7 @@ export function disclosure(records, a, { sources = 0, report = null, stopped = '
   let head = '';
   if (a.status === 'waiting_for_approval') head = '> **Waiting for approval.** At least one action was held and was NOT performed. Nothing has been changed.\n\n';
   else if (a.status === 'failed') head = `> **This task could not be completed.** ${bad.length ? `Every tool call that was tried failed (${why}).` : 'No answer could be produced.'} Nothing below has been verified.\n\n`;
-  else if (a.status === 'partially_completed') head = `> **Partially completed.** ${a.researchFailed ? `Web research did not fully work (${why}), so parts of this answer are based on the AI's general knowledge and were not checked against sources from this run. ` : ''}${stopped ? `${stopped} ` : ''}${bad.length && !a.researchFailed ? `Some steps failed (${why}). ` : ''}Treat it as preliminary.\n\n`;
+  else if (a.status === 'partially_completed') head = `> **Partially completed.** ${a.researchFailed ? `Web research did not fully work (${why}), so parts of this answer are based on the AI's general knowledge and were not checked against sources from this run. ` : ''}${stopped ? `${stopped} ` : ''}${a.partialTool ? 'A tool finished only part of its work (for example an audit that stopped at its time limit). ' : ''}${bad.length && !a.researchFailed ? `Some steps failed (${why}). ` : ''}Treat it as preliminary.\n\n`;
   const worked = count(records, (r) => r.status === 'ok'), failed = count(records, (r) => r.status !== 'ok');
   const label = { completed: 'Completed', partially_completed: 'Partially completed', failed: 'Failed', waiting_for_approval: 'Waiting for approval' }[a.status];
   const foot = `\n\n---\n**Run summary**\n- Status: ${label}\n- Tools that worked: ${worked || 'none'}\n- Tools that failed: ${failed || 'none'}\n- Sources retrieved: ${sources}\n- Report: ${report ? (report.complete ? 'saved (complete)' : 'saved (preliminary)') : 'not saved'}`;
@@ -150,7 +151,7 @@ export async function runAgent({ task, history = [], emit, signal, mode = 'assis
         rec.endedAt = Date.now(); rec.ms = rec.endedAt - rec.startedAt;
         rec.status = result.ok ? 'ok' : result.skipped ? 'skipped' : result.approval ? 'blocked' : 'failed';
         rec.category = result.ok ? null : result.category || 'tool_error';
-        rec.retries = result.retries || 0; rec.deduped = !!result.deduped;
+        rec.retries = result.retries || 0; rec.deduped = !!result.deduped; rec.partial = !!(result.audit && result.audit.incomplete);
         rec.summary = clip(result.error || result.summary || result.title || (result.result !== undefined ? `= ${result.result}` : '') || (result.saved ? 'report saved' : 'done'), 240);
         if (result.ok && result.audit) rec.summary = `Score ${result.audit.score?.overall ?? 'n/a'}, ${result.audit.issueCount} issue(s), ${result.audit.pagesAnalyzed} page(s)${result.audit.incomplete ? ' (incomplete)' : ''}`;
         else if (result.ok && result.tool && result.name) rec.summary = `${result.name}${result.result?.status ? ': ' + result.result.status : ''}`;

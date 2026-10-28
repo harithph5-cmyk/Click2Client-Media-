@@ -70,7 +70,7 @@ export function createKnowledgeBase({ dir = DEFAULT_DIR } = {}) {
       const rel = path.relative(dir, file).split(path.sep).join('/');
       const raw = fs.readFileSync(file, 'utf8');
       const { meta, body } = parseFrontMatter(raw);
-      const area = rel.includes('/') ? rel.split('/')[0] : 'root';
+      const parts = rel.split('/'); const area = parts.length > 1 ? parts[0] : 'root'; const topic = parts.length > 2 ? parts[1] : '';
       const title = (/^#\s+(.+)$/m.exec(body)?.[1] || meta.name || rel).trim();
       const doc = { id: rel, path: rel, title, area, trust: trustFor(area), meta, bytes: raw.length };
       docs.push(doc);
@@ -82,7 +82,7 @@ export function createKnowledgeBase({ dir = DEFAULT_DIR } = {}) {
         const tokens = tokenize(`${title} ${s.heading} ${s.text}`);
         if (!tokens.length) continue;
         const tf = new Map(); for (const t of tokens) tf.set(t, (tf.get(t) || 0) + 1);
-        chunks.push({ docId: doc.id, path: rel, area, trust: doc.trust, title, heading: s.heading, text: s.text, tf, len: tokens.length, headTokens: new Set(tokenize(`${title} ${s.heading}`)) });
+        chunks.push({ docId: doc.id, path: rel, area, topic, trust: doc.trust, title, heading: s.heading, text: s.text, tf, len: tokens.length, headTokens: new Set(tokenize(`${title} ${s.heading}`)) });
       }
     }
   }
@@ -91,11 +91,12 @@ export function createKnowledgeBase({ dir = DEFAULT_DIR } = {}) {
   for (const c of chunks) for (const t of c.tf.keys()) df.set(t, (df.get(t) || 0) + 1);
 
   function search(query, { k = 5, area = null, maxChars = 1200 } = {}) {
+    const areaKey = area ? String(area).toLowerCase() : null;
     const q = [...new Set(tokenize(query))];
     if (!q.length) return [];
     const scored = [];
     for (const c of chunks) {
-      if (area && c.area !== area) continue;
+      if (areaKey && c.area.toLowerCase() !== areaKey && (c.topic || '').toLowerCase() !== areaKey) continue;     // matches the top folder (library) or the topic folder (TECHNICAL_SEO)
       let score = 0;
       for (const t of q) {
         const f = c.tf.get(t); if (!f) continue;

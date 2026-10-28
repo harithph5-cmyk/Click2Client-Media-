@@ -248,10 +248,10 @@ test('run_seo_tool validates the tool, returns compact untrusted-flagged results
 test('audit_site runs the real audit engine on a fixture site and reports honest, bounded results', async () => {
   await withFixture(async (base) => {
     const ctx = { mode: 'assisted', sources: new Map(), timeLeftMs: () => 80000 };
-    const r = await at.runAgentTool('audit_site', { url: base + '/', pages: 3 }, ctx);
+    const r = await at.runAgentTool('audit_site', { url: base + '/', pages: 5 }, ctx);
     assert.ok(r.ok, JSON.stringify(r).slice(0, 400));
     const a = r.audit;
-    assert.equal(a.domain, '127.0.0.1'); assert.ok(a.pagesAnalyzed >= 1 && a.pagesRequested <= 10);
+    assert.equal(a.domain, '127.0.0.1'); assert.equal(a.pagesAnalyzed, 1, 'agent audits cover the home page only'); assert.ok(a.notChecked.some((n) => /Pages other than the home page/.test(n)));
     assert.ok(Number.isFinite(a.score.overall) && a.score.overall >= 0 && a.score.overall <= 100);
     assert.ok(a.issueCount > 0 && a.topIssues.length <= 12 && a.topIssues.every((i) => i.title && i.priority));
     assert.ok(a.topIssues.some((i) => /title/i.test(i.title)), 'the page without a title is reported: ' + a.topIssues.map((i) => i.title).join(' | '));
@@ -286,7 +286,7 @@ test('end to end: skill, knowledge and a real audit produce a completed, fully l
   await withFixture(async (base) => {
     const store = new ts.MemoryTaskStore(); const rec = await ts.openTask({ goal: 'Audit my site', store }); const events = [];
     await runAgent({ task: `Audit ${base}/ and tell me what to fix first`, emit: (e) => events.push(e), signal: new AbortController().signal, mode: 'assisted', recorder: rec }, {
-      generate: scripted([PLAN, call('load_skill', { id: 'seo-technical-audit' }), call('audit_site', { url: base + '/', pages: 2 }), call('search_knowledge', { query: 'missing title tag' }),
+      generate: scripted([PLAN, call('load_skill', { id: 'seo-technical-audit' }), call('audit_site', { url: base + '/' }), call('search_knowledge', { query: 'missing title tag' }),
         { text: 'The site scored well on some checks. The about page has no title. See library/ON_PAGE_SEO/01_TITLE_TAGS.md.', parts: [] }]),
     });
     await rec.flush();
@@ -376,4 +376,31 @@ test('the status report lists the tools, skills and knowledge actually loaded', 
     assert.ok(s.agent.tools.every((t) => t.risk === 'low'), 'Stage 1 registers no write tools');
     assert.equal(s.agent.taskLog, 'memory');
   });
+});
+
+/* ---------- regressions found in the first live run ---------- */
+test('links wrapped in backticks or bold are verified, not removed', async () => {
+  const { verifyLinks } = await import('../server/baasha/agent.js');
+  const evidence = new Map([['https://example.org/', { title: 'x', url: 'https://example.org/' }]]);
+  for (const t of ['See `https://example.org` now', 'See **https://example.org/** now', 'See (https://example.org).', 'See https://example.org, then']) {
+    const v = verifyLinks(t, evidence); assert.equal(v.removed, 0, t); assert.equal(v.kept, 1, t);
+  }
+  assert.equal(verifyLinks('See `https://invented.example/x`', evidence).removed, 1, 'an unretrieved link is still removed');
+});
+
+test('the knowledge area filter accepts both the top folder and the topic folder', () => {
+  const t = kb.search('robots.txt noindex', { area: 'TECHNICAL_SEO' });
+  assert.ok(t.length > 0 && t.every((h) => h.source.path.startsWith('library/TECHNICAL_SEO/')), JSON.stringify(t.map((h) => h.source.path)));
+  assert.ok(kb.search('robots.txt noindex', { area: 'technical_seo' }).length > 0, 'case-insensitive');
+  assert.ok(kb.search('procedure', { area: 'skills' }).every((h) => h.source.area === 'skills'));
+  assert.deepEqual(kb.search('robots.txt', { area: 'NO_SUCH_AREA' }), []);
+});
+
+test('a tool that finishes only part of its work makes the task partially_completed', async () => {
+  at.registerTool({ name: 'half_tool', label: 'Half tool', risk: 'low', handler: async () => ({ ok: true, audit: { incomplete: true, score: { overall: 50 }, issueCount: 1, pagesAnalyzed: 1 } }), declaration: { name: 'half_tool', description: 't', parameters: { type: 'OBJECT', properties: {} } } });
+  try {
+    const events = [];
+    await runAgent({ task: 'run the half tool', emit: (e) => events.push(e), signal: new AbortController().signal }, { generate: scripted([PLAN, call('half_tool', {}), { text: 'Done.', parts: [] }]) });
+    const fin = events.at(-1); assert.equal(fin.status, 'partially_completed'); assert.match(fin.text, /only part of its work/);
+  } finally { at.unregisterTool('half_tool'); }
 });
