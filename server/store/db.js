@@ -68,6 +68,16 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, csrf TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, ip TEXT)`,
   `CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT NOT NULL, at TEXT NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip, at)`,
+  // Baasha AI agent: one row per task, plus an ordered event log (state changes, tool calls, outcomes). No page content or secrets.
+  `CREATE TABLE IF NOT EXISTS agent_tasks (
+    id TEXT PRIMARY KEY, kind TEXT NOT NULL, mode TEXT NOT NULL, status TEXT NOT NULL, goal TEXT, ip_hash TEXT,
+    workspace_id TEXT, summary TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT)`,
+  `CREATE INDEX IF NOT EXISTS idx_agent_tasks_created ON agent_tasks(created_at)`,
+  `CREATE TABLE IF NOT EXISTS agent_events (
+    task_id TEXT NOT NULL, seq INTEGER NOT NULL, at TEXT NOT NULL, type TEXT NOT NULL, data TEXT, PRIMARY KEY (task_id, seq))`,
+  // Server-only tables: row level security with no policy means the Supabase public API can read or write nothing here.
+  `ALTER TABLE agent_tasks ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE agent_events ENABLE ROW LEVEL SECURITY`,
   `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
   // Portfolio CMS. Images live in Supabase Storage; these tables only hold URLs.
   `CREATE TABLE IF NOT EXISTS portfolio_categories (

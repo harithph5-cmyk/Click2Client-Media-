@@ -10,7 +10,7 @@ const MODES = {
   research: {label: 'Research', hint: 'Searches the web and cites its sources.', ph: 'What should Baasha research?',
     ideas: [['travel_explore', 'Latest on AI tools', 'What are the most useful new AI tools for small businesses this month?'], ['analytics', 'Compare two options', 'Compare Shopify and WooCommerce for a small Indian online store.'], ['school', 'Explain with sources', 'How do Google Business Profile reviews affect local search ranking?']]},
   agent: {label: 'Agent', hint: 'Plans the task, uses tools, checks its work and reports.', ph: 'Describe a task for the agent...',
-    ideas: [['checklist', 'Competitor report', 'Find three competitors of a bakery in Chennai and write a short comparison report.'], ['calculate', 'EMI calculation', 'Calculate the monthly EMI for a loan of 500000 rupees at 9.5% a year for 36 months, show the working, and explain it simply.'], ['description', 'Page summary', 'Read https://example.com and summarise what the page says in five bullet points.']]},
+    ideas: [['checklist', 'Competitor report', 'Find three competitors of a bakery in Chennai and write a short comparison report.'], ['calculate', 'EMI calculation', 'Calculate the monthly EMI for a loan of 500000 rupees at 9.5% a year for 36 months, show the working, and explain it simply.'], ['checklist', 'Audit my website', 'Audit my website (type the address here) and tell me the most important SEO issues to fix first, with the evidence.']]},
 };
 const S = {chat: null, mode: 'chat', busy: false, ctl: null, file: null, status: undefined};   // status: undefined = loading, null = failed
 
@@ -152,7 +152,7 @@ function toolRow(c, ev) {
   r.append(el('span', 'st'), el('b', '', ev.label), el('small', '', ev.input ? ev.input.replace(/[{}"]/g, ' ').slice(0, 90) : ''));
   q(c, '.acts').appendChild(r); return r;
 }
-const runState = run => run.error || run.status === 'failed' ? 'error' : run.status === 'partially_completed' ? 'warn' : 'done';
+const runState = run => run.error || run.status === 'failed' ? 'error' : run.status === 'partially_completed' || run.status === 'waiting_for_approval' ? 'warn' : 'done';
 function runCardStatic(run) {          // for saved history: no animation delays
   const c = runShell(); c.classList.add('static'); c.dataset.state = runState(run);
   q(c, '.rtitle').textContent = run.error ? 'The agent stopped' : RUN_TITLES[run.status] || 'Agent finished'; q(c, '.rstatus').textContent = run.summary || '';

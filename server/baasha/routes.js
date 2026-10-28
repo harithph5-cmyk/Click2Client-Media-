@@ -4,6 +4,9 @@ import express from 'express';
 import { generate, stream, isConfigured, modelName, GeminiError, probeProvider, tripped, searchSeen } from './gemini.js';
 import { runAgent } from './agent.js';
 import { researchWithoutGrounding, SearchError, fallbackSeen } from './search.js';
+import { openTask, readTask, getTaskStore } from './taskstore.js';
+import { getKnowledgeBase } from './kb.js';
+import { toolCatalogue } from './agenttools.js';
 import { rateLimited, dailyCapReached, LIMITS } from './limits.js';
 
 const router = express.Router();
@@ -26,6 +29,14 @@ router.use((err, req, res, next) => (err?.type === 'entity.parse.failed' || err?
 
 // Real readiness, not just "the page loaded": the backend answers, the AI provider is configured and reachable
 // (checked with a cached, quota-free request), and web research is either untested, working or known to be blocked.
+// Read from the code that is actually loaded: what the agent can really do, not what a document says.
+async function agentInfo() {
+  const kb = getKnowledgeBase().stats();
+  let persistence = 'unknown';
+  try { persistence = (await getTaskStore()).kind; } catch { persistence = 'unavailable'; }
+  return { mode: 'assisted', tools: toolCatalogue(), skills: getKnowledgeBase().listSkills().map((s) => s.id), knowledge: { documents: kb.documents, sections: kb.sections }, taskLog: persistence };
+}
+
 export async function statusReport() {
   const configured = isConfigured();
   const p = await probeProvider();
@@ -42,6 +53,7 @@ export async function statusReport() {
     provider: { configured, reachable: p.reachable, problem },
     research: { available: researchOk, via: googleOk ? 'google' : 'web', state: !researchOk ? 'unavailable' : seen === true ? 'working' : 'untested', reason: researchOk ? null : sb?.error.kind || 'search_blocked' },
     modes: { chat: usable, research: researchOk, agent: usable }, limits: LIMITS, checkedAt: new Date().toISOString(),
+    agent: await agentInfo(),
   };
 }
 router.get('/status', async (req, res) => {
@@ -137,10 +149,26 @@ router.post('/agent', (req, res) => {
     const task = String(req.body?.task ?? '').replace(/\u0000/g, '').trim();
     if (task.length < 5 || task.length > 2000) return bad(res, 400, 'bad_request', 'Describe your task in 5 to 2000 characters.');
     const sse = openStream(req, res);
-    try { await runAgent({ task, history: cleanMessages(req.body?.context) || [], emit: ({ type, ...d }) => sse.send(type, d), signal: sse.signal }); sse.send('done', {}); }
-    catch (e) { if (e?.code !== 'cancelled') { console.error('[baasha] agent:', e?.kind || e?.code || 'error'); sse.send('error', publicError(e)); } }
-    finally { sse.end(); }
+    const rec = await openTask({ goal: task, mode: 'assisted', ip: req.ip });      // never throws; logging problems do not stop the task
+    sse.send('task', { id: rec.id, persistence: rec.persistence });
+    try { await runAgent({ task, history: cleanMessages(req.body?.context) || [], emit: ({ type, ...d }) => sse.send(type, d), signal: sse.signal, mode: 'assisted', recorder: rec }); sse.send('done', {}); }
+    catch (e) {
+      if (e?.code === 'cancelled') rec.finish('cancelled', { reason: 'client left or pressed stop' });
+      else { console.error('[baasha] agent:', e?.kind || e?.code || 'error'); rec.event('error', { kind: e?.kind || e?.code || 'internal' }); rec.finish('failed', { error: e?.kind || 'internal' }); sse.send('error', publicError(e)); }
+    }
+    finally { await rec.flush().catch(() => {}); sse.end(); }
   });
+});
+
+// Read back one task's state and audit log. The unguessable task id is the capability; the log holds no page content.
+router.get('/tasks/:id', async (req, res) => {
+  if (rateLimited(`tasks:${req.ip}`, 120)) return bad(res, 429, 'rate_limited', 'Too many requests. Please try again later.');
+  try {
+    const t = await readTask(req.params.id);
+    res.set({ 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
+    if (!t) return bad(res, 404, 'not_found', 'This task does not exist.');
+    res.json({ ok: true, task: t });
+  } catch (e) { console.error('[baasha] task read:', e?.code || 'error'); bad(res, 503, 'unavailable', 'The task log is unavailable right now.'); }
 });
 
 export default router;

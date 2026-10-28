@@ -49,4 +49,4 @@ export function addReport(reports, rep) {
   reports.unshift(rep); return rep;
 }
 
-export const RUN_TITLES = { completed: 'Agent finished', partially_completed: 'Agent finished with problems', failed: 'The agent could not finish' };
+export const RUN_TITLES = { completed: 'Agent finished', partially_completed: 'Agent finished with problems', failed: 'The agent could not finish', waiting_for_approval: 'Waiting for your approval' };
