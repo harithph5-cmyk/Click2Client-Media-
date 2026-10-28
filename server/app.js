@@ -274,6 +274,13 @@ admin.get('/me', h(async (req, res) => {
 }));
 admin.use(h(requireAdmin));
 
+// Baasha AI admin section (loaded lazily so a problem there can never take the admin portal down).
+let baashaAdmin;
+admin.use('/baasha', h(async (req, res, next) => {
+  try { baashaAdmin ||= (await import('./baasha/admin.js')).createAdminRouter(); } catch (e) { console.error('[baasha-admin] failed to load:', e?.message); return bad(res, 'unavailable', 'The Baasha AI admin section could not be loaded.', 503); }
+  return baashaAdmin(req, res, next);
+}));
+
 admin.get('/stats', h(async (req, res) => res.json(await store.stats())));
 admin.get('/leads', h(async (req, res) => res.json({ leads: await store.listLeads(), statuses: store.LEAD_STATUSES })));
 admin.patch('/leads/:id', h(async (req, res) => {

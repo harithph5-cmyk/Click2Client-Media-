@@ -51,6 +51,14 @@ export class MemoryTaskStore {
   async purge() { return 0; }
   async listByWorkspace(ws, limit = 50) { return [...this.tasks.values()].filter((t) => t.workspace_id === ws).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit).map((t) => ({ id: t.id, status: t.status, goal: t.goal, created_at: t.created_at, completed_at: t.completed_at || null, summary: t.summary || null })); }
   async deleteByWorkspace(ws) { for (const [k, t] of this.tasks) if (t.workspace_id === ws) this.tasks.delete(k); }
+  async listRecent({ limit = 50, status = null } = {}) { return [...this.tasks.values()].filter((t) => !status || t.status === status).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit).map((t) => ({ id: t.id, mode: t.mode, status: t.status, goal: t.goal, workspace_id: t.workspace_id || null, created_at: t.created_at, completed_at: t.completed_at || null, summary: t.summary || null })); }
+  async taskStats(now = Date.now()) {
+    const all = [...this.tasks.values()], byStatus = {}; for (const t of all) byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+    const since = (ms) => new Date(now - ms).toISOString();
+    return { total: all.length, last24h: all.filter((t) => t.created_at >= since(86400_000)).length, last7d: all.filter((t) => t.created_at >= since(7 * 86400_000)).length, signedIn: all.filter((t) => t.workspace_id).length, byStatus };
+  }
+  async countByWorkspace() { const m = {}; for (const t of this.tasks.values()) if (t.workspace_id) m[t.workspace_id] = (m[t.workspace_id] || 0) + 1; return m; }
+  async deleteIds(ids) { let n = 0; for (const id of ids) if (this.tasks.delete(id)) n++; return n; }
 }
 
 /* ---------- Postgres store ---------- */
@@ -63,6 +71,22 @@ export class PgTaskStore {
   async events(id, limit = 200) { return (await this.db.query('SELECT seq, at, type, data FROM agent_events WHERE task_id = ? ORDER BY seq LIMIT ?', [id, limit])); }
   async listByWorkspace(ws, limit = 50) { return (await this.db.query('SELECT id, status, goal, created_at, completed_at, summary FROM agent_tasks WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?', [ws, limit])).map((r) => ({ ...r, summary: r.summary ? JSON.parse(r.summary) : null })); }
   async deleteByWorkspace(ws) { await this.db.query('DELETE FROM agent_events WHERE task_id IN (SELECT id FROM agent_tasks WHERE workspace_id = ?)', [ws]); await this.db.query('DELETE FROM agent_tasks WHERE workspace_id = ?', [ws]); }
+  async listRecent({ limit = 50, status = null } = {}) {
+    const cols = 'id, mode, status, goal, workspace_id, created_at, completed_at, summary';
+    const rows = status ? await this.db.query(`SELECT ${cols} FROM agent_tasks WHERE status = ? ORDER BY created_at DESC LIMIT ?`, [status, limit]) : await this.db.query(`SELECT ${cols} FROM agent_tasks ORDER BY created_at DESC LIMIT ?`, [limit]);
+    return rows.map((r) => ({ ...r, summary: r.summary ? JSON.parse(r.summary) : null }));
+  }
+  async taskStats(now = Date.now()) {
+    const n = async (sql, p = []) => Number((await this.db.queryOne(sql, p))?.n || 0);
+    const byStatus = {}; for (const r of await this.db.query('SELECT status, COUNT(*) AS n FROM agent_tasks GROUP BY status')) byStatus[r.status] = Number(r.n);
+    return { total: await n('SELECT COUNT(*) AS n FROM agent_tasks'), last24h: await n('SELECT COUNT(*) AS n FROM agent_tasks WHERE created_at >= ?', [new Date(now - 86400_000).toISOString()]),
+      last7d: await n('SELECT COUNT(*) AS n FROM agent_tasks WHERE created_at >= ?', [new Date(now - 7 * 86400_000).toISOString()]), signedIn: await n('SELECT COUNT(*) AS n FROM agent_tasks WHERE workspace_id IS NOT NULL'), byStatus };
+  }
+  async countByWorkspace() { const m = {}; for (const r of await this.db.query('SELECT workspace_id, COUNT(*) AS n FROM agent_tasks WHERE workspace_id IS NOT NULL GROUP BY workspace_id')) m[r.workspace_id] = Number(r.n); return m; }
+  async deleteIds(ids) {
+    if (!ids.length) return 0; const ph = ids.map(() => '?').join(', ');
+    await this.db.query(`DELETE FROM agent_events WHERE task_id IN (${ph})`, ids); await this.db.query(`DELETE FROM agent_tasks WHERE id IN (${ph})`, ids); return ids.length;
+  }
   async purge(days) { const cut = new Date(Date.now() - days * 86400_000).toISOString(); await this.db.query('DELETE FROM agent_events WHERE task_id IN (SELECT id FROM agent_tasks WHERE created_at < ?)', [cut]); await this.db.query('DELETE FROM agent_tasks WHERE created_at < ?', [cut]); }
 }
 
@@ -117,11 +141,11 @@ export async function openTask({ goal, mode = 'assisted', ip = '', workspaceId =
 }
 
 // What the owner may read back about a task (never raw page content).
-export async function readTask(id, st = null, { workspaceId = null } = {}) {
+export async function readTask(id, st = null, { workspaceId = null, admin = false } = {}) {
   const s = st || await getTaskStore();
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(String(id || ''))) return null;
   const task = await s.get(id); if (!task) return null;
-  if (task.workspace_id && task.workspace_id !== workspaceId) return null;      // a workspace task is visible only to its own workspace
+  if (!admin && task.workspace_id && task.workspace_id !== workspaceId) return null;      // a workspace task is visible only to its own workspace
   delete task.workspace_id;
   const events = (await s.events(id, 200)).map((e) => ({ seq: e.seq, at: e.at, type: e.type, data: JSON.parse(e.data || '{}') }));
   return { ...task, persistence: s.kind, events };

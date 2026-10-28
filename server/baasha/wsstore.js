@@ -43,6 +43,16 @@ export class MemoryWsStore {
     return w ? w.id : null;
   }
   async purgeExpiredSessions(now = nowIso()) { for (const [k, s] of this.sessions) if (s.expiresAt <= now) this.sessions.delete(k); }
+  async adminSummary(now = nowIso()) {
+    const mems = [...this.memories.values()];
+    return { users: this.users.size, workspaces: this.workspaces.size, activeSessions: [...this.sessions.values()].filter((s) => s.expiresAt > now).length, memoriesApproved: mems.filter((m) => m.status === 'approved').length, memoriesProposed: mems.filter((m) => m.status === 'proposed').length };
+  }
+  async adminUsers() {
+    return [...this.users.values()].sort((a, b) => b.last_login_at.localeCompare(a.last_login_at)).map((u) => {
+      const w = [...this.workspaces.values()].find((x) => x.owner_user_id === u.id); const mine = w ? [...this.memories.values()].filter((m) => m.workspace_id === w.id) : [];
+      return { id: u.id, email: u.email, name: u.name, created_at: u.created_at, last_login_at: u.last_login_at, workspace_id: w?.id || null, approved: mine.filter((m) => m.status === 'approved').length, proposed: mine.filter((m) => m.status === 'proposed').length };
+    });
+  }
 }
 
 /* ---------- Postgres ---------- */
@@ -100,6 +110,16 @@ export class PgWsStore {
     return w ? w.id : null;
   }
   async purgeExpiredSessions(now = nowIso()) { await this.q('DELETE FROM baasha_sessions WHERE expires_at <= ?', [now]); }
+  async adminSummary(now = nowIso()) {
+    const n = async (sql, p = []) => Number((await this.one(sql, p))?.n || 0);
+    return { users: await n('SELECT COUNT(*) AS n FROM baasha_users'), workspaces: await n('SELECT COUNT(*) AS n FROM baasha_workspaces'), activeSessions: await n('SELECT COUNT(*) AS n FROM baasha_sessions WHERE expires_at > ?', [now]),
+      memoriesApproved: await n("SELECT COUNT(*) AS n FROM baasha_memories WHERE status = 'approved'"), memoriesProposed: await n("SELECT COUNT(*) AS n FROM baasha_memories WHERE status = 'proposed'") };
+  }
+  async adminUsers() {
+    const users = await this.q('SELECT u.id, u.email, u.name, u.created_at, u.last_login_at, w.id AS workspace_id FROM baasha_users u LEFT JOIN baasha_workspaces w ON w.owner_user_id = u.id ORDER BY u.last_login_at DESC LIMIT 500');
+    const counts = {}; for (const r of await this.q('SELECT workspace_id, status, COUNT(*) AS n FROM baasha_memories GROUP BY workspace_id, status')) (counts[r.workspace_id] ||= {})[r.status] = Number(r.n);
+    return users.map((u) => ({ ...u, approved: counts[u.workspace_id]?.approved || 0, proposed: counts[u.workspace_id]?.proposed || 0 }));
+  }
 }
 
 let store = null, chosen = null;

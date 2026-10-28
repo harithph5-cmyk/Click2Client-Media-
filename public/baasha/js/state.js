@@ -5,6 +5,7 @@
 export function statusView(s) {
   if (s === undefined) return { tone: 'wait', label: 'Checking...', lines: ['Checking Baasha AI...'], canRetry: false };
   if (s === null || s.ok === false || !s.state) return { tone: 'off', label: 'Cannot reach Baasha AI', lines: ['Baasha AI cannot be reached right now. Check your connection, then try again.'], canRetry: true };
+  if (s.enabled === false) return { tone: 'off', label: 'Switched off', lines: ['Baasha AI has been switched off for now by the site owner. Please check back later.'], canRetry: true };
   const lines = ['Backend: available.'];
   const p = s.provider || {}, r = s.research || {};
   const why = {

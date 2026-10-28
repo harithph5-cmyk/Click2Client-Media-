@@ -8,6 +8,7 @@ import { openTask, readTask, getTaskStore } from './taskstore.js';
 import { getKnowledgeBase } from './kb.js';
 import { accountRouter, accountsConfig, sessionFromRequest } from './accounts.js';
 import { getWsStore } from './wsstore.js';
+import { isEnabled } from './switch.js';
 import { toolCatalogue } from './agenttools.js';
 import { rateLimited, dailyCapReached, LIMITS } from './limits.js';
 
@@ -52,14 +53,15 @@ export async function statusReport() {
   const p = await probeProvider();
   const mb = tripped('model'), sb = tripped('search');
   const problem = !configured ? 'not_configured' : mb?.error.kind || p.problem || null;
-  const usable = configured && p.reachable !== false && !['auth', 'model', 'quota_daily', 'unreachable'].includes(problem);
+  const enabled = await isEnabled();
+  const usable = enabled && configured && p.reachable !== false && !['auth', 'model', 'quota_daily', 'unreachable'].includes(problem);
   // research works through Google Search when its quota allows, otherwise through the keyless web search
   const googleOk = !sb && searchSeen.ok !== false, webOk = fallbackSeen.ok !== false;
   const researchOk = usable && (googleOk || webOk);
   const seen = googleOk ? searchSeen.ok : fallbackSeen.ok;
   const state = !configured ? 'not_configured' : !usable ? 'down' : researchOk ? 'ready' : 'degraded';
   return {
-    ok: true, backend: 'up', state, configured, model: configured ? modelName() : null,
+    ok: true, backend: 'up', enabled, state, configured, model: configured ? modelName() : null,
     provider: { configured, reachable: p.reachable, problem },
     research: { available: researchOk, via: googleOk ? 'google' : 'web', state: !researchOk ? 'unavailable' : seen === true ? 'working' : 'untested', reason: researchOk ? null : sb?.error.kind || 'search_blocked' },
     modes: { chat: usable, research: researchOk, agent: usable }, limits: LIMITS, checkedAt: new Date().toISOString(),
@@ -86,7 +88,8 @@ export function cleanMessages(raw) {
 const toContents = (msgs) => msgs.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
 
 function guard(kind) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
+    if (!(await isEnabled())) return bad(res, 503, 'switched_off', 'Baasha AI has been switched off for now by the site owner. Please check back later.');
     if (!isConfigured()) return bad(res, 503, 'not_configured', 'Baasha AI is not switched on yet. Please check back soon.');
     if (rateLimited(`${kind}:${req.ip}`, LIMITS[kind])) return bad(res, 429, 'rate_limited', 'You have reached the hourly limit for this mode. Please try again later.');
     if (dailyCapReached()) return bad(res, 429, 'busy', 'Baasha AI has reached its daily capacity. Please try again tomorrow.');

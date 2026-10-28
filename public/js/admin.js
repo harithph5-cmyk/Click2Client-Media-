@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['products', 'Products'], ['software', 'Software Catalogue'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['baasha', 'Baasha AI'], ['pages', 'Page Content'], ['products', 'Products'], ['software', 'Software Catalogue'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, pages: pagesTab, products: (v) => contentTab(v, 'product'), software: (v) => contentTab(v, 'software'), courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, baasha: baashaTab, pages: pagesTab, products: (v) => contentTab(v, 'product'), software: (v) => contentTab(v, 'software'), courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -134,6 +134,7 @@ function selectionClick(e, view, opts) {
 // ── Overview / analytics ─────────────────────────────────────────────────
 async function overview(view) {
   const s = await api('/admin/stats');
+  const bsO = await api('/admin/baasha/overview').catch(() => null);
   setBadge(s.pendingVerification);
   const conv = s.freeAudits ? Math.round((100 * s.verifiedOrders) / s.freeAudits) : null;
   view.innerHTML = `${head('Dashboard', 'Overview', 'Leads, audits and revenue from the website.')}
@@ -148,6 +149,7 @@ async function overview(view) {
       <div class="kpi"><div class="n">${conv == null ? '—' : conv + '%'}</div><div class="l">Free → paid conversion</div></div>
       <div class="kpi"><div class="n" style="color:${scoreColor(s.avgScore)}">${s.avgScore ?? '—'}</div><div class="l">Average SEO score</div></div>
       <div class="kpi"><div class="n">${s.wonLeads}</div><div class="l">Leads won</div></div>
+      ${bsO ? `<div class="kpi"><div class="n">${bsO.tasks.last7d}</div><div class="l">Baasha AI tasks, last 7 days</div></div><div class="kpi"><div class="n">${bsO.accounts.users}</div><div class="l">Baasha AI accounts</div></div>` : ''}
     </div>
     <div class="two" style="margin-top:18px">
       <div class="card card-pad"><h3>Most requested services</h3>${bars(s.byService)}</div>
@@ -278,6 +280,122 @@ async function audits(view) {
     if (selectionClick(e, view, { kind: 'audits', noun: 'audit', warn: 'The audit report and its customer link will stop working. Linked orders and leads are kept.', reload: () => audits(view) })) return;
     const c = e.target.closest('[data-af]');
     if (c) { state.auditFilter = c.dataset.af; audits(view); }
+  };
+}
+
+// ── Baasha AI ────────────────────────────────────────────────────────────
+// Everything shown here comes from the running server: the loaded tools, skills and knowledge, the task log,
+// accounts, and sign-in setup. Memory text and sessions are never shown.
+const BS_STATUS = { completed: 'Completed', partial: 'Partly done', failed: 'Failed', waiting_for_approval: 'Waiting for approval', cancelled: 'Cancelled', queued: 'Queued', planning: 'Planning', running_read_only: 'Running', running_write: 'Running', verifying: 'Verifying' };
+const bsPill = (s) => `<span class="pill bs-${esc(s)}">${esc(BS_STATUS[s] || s)}</span>`;
+const bsKpi = (n, l, color) => `<div class="kpi"><div class="n"${color ? ` style="color:${color}"` : ''}>${n}</div><div class="l">${l}</div></div>`;
+const bsRow = (k, v) => `<tr><td class="small" style="width:42%"><b>${k}</b></td><td class="small">${v}</td></tr>`;
+
+async function baashaTab(view) {
+  const bs = (state.bs ||= { filter: 'all' });
+  const [o, t, a, k] = await Promise.all([
+    api('/admin/baasha/overview'),
+    api(`/admin/baasha/tasks${bs.filter === 'all' ? '' : `?status=${encodeURIComponent(bs.filter)}`}`),
+    api('/admin/baasha/accounts'),
+    api('/admin/baasha/knowledge'),
+  ]);
+  const st = o.status, tk = o.tasks, ac = o.accounts, by = tk.byStatus || {};
+  const done = tk.total ? Math.round((100 * (by.completed || 0)) / tk.total) : null;
+  const sc = { ready: 'pass', degraded: 'warn', down: 'fail', not_configured: 'fail' }[st.state] || 'info';
+  const redirect = `${location.origin}/api/baasha/auth/google/callback`;
+  const missing = st.accounts.missing || [];
+  const areas = {};
+  for (const d of k.documents) { const p = d.path.split('/'); const key = p.length > 2 ? `${p[0]}/${p[1]}` : p[0]; areas[key] = (areas[key] || 0) + 1; }
+  const F = [['all', 'All']].concat(t.statuses.filter((s) => ['completed', 'partial', 'failed', 'waiting_for_approval', 'cancelled'].includes(s)).map((s) => [s, BS_STATUS[s]]));
+  view.innerHTML = `${head('AI agent', 'Baasha AI', 'Usage, accounts, tools, knowledge and settings for the public AI assistant at /baasha-ai.', `<a class="btn sm" href="/baasha-ai" target="_blank" rel="noopener">Open Baasha AI</a>`)}
+    <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <div><b>${o.enabled ? 'Baasha AI is switched on' : 'Baasha AI is switched off'}</b><div class="muted small">${o.enabled ? 'Visitors can use Chat, Research and the Agent.' : 'Visitors see a "switched off" message and no AI provider is called.'}</div></div>
+      <span class="spacer"></span><button class="btn sm ${o.enabled ? 'danger' : 'accent'}" data-bs-switch="${o.enabled ? 'off' : 'on'}">${o.enabled ? 'Switch off now' : 'Switch on'}</button>
+    </div>
+    <div class="kpis">
+      ${bsKpi(tk.last7d, 'Agent tasks, last 7 days')}${bsKpi(tk.last24h, 'Agent tasks, last 24 hours')}${bsKpi(tk.total, 'Agent tasks, all time')}
+      ${bsKpi(done == null ? '—' : done + '%', 'Tasks completed')}${bsKpi(by.waiting_for_approval || 0, 'Waiting for approval', (by.waiting_for_approval || 0) ? 'var(--warn)' : '')}${bsKpi(by.failed || 0, 'Failed tasks', (by.failed || 0) ? 'var(--fail)' : '')}
+      ${bsKpi(ac.users, 'Accounts')}${bsKpi(ac.activeSessions, 'Active sign-ins')}${bsKpi(ac.memoriesApproved, 'Saved memories')}${bsKpi(ac.memoriesProposed, 'Memory proposals waiting')}
+    </div>
+    <div class="two" style="margin-top:18px">
+      <div class="card card-pad"><h3>System status</h3><table class="t"><tbody>
+        ${bsRow('Overall', `<span class="pill ${sc}">${esc(st.state.replace('_', ' '))}</span>`)}
+        ${bsRow('AI model', esc(st.model || 'not set'))}
+        ${bsRow('AI provider', st.provider.configured ? `configured, ${st.provider.reachable === false ? 'not reachable' : st.provider.reachable ? 'reachable' : 'not checked'}${st.provider.problem ? ` (${esc(st.provider.problem)})` : ''}` : 'not configured')}
+        ${bsRow('Web research', `${esc(st.research.state)} via ${esc(st.research.via === 'web' ? 'general web search' : 'Google Search')}${st.research.reason ? ` (${esc(st.research.reason)})` : ''}`)}
+        ${bsRow('Google sign-in', st.accounts.configured ? 'configured' : `<span class="pill warn">not configured</span>`)}
+        ${bsRow('Accounts storage', `${esc(st.accounts.storage)}, tables ${esc(st.accounts.schema)}`)}
+        ${bsRow('Task log storage', `${esc(o.agent.taskLog)} (kept ${o.agent.retentionDays} days)`)}
+        ${bsRow('Limits', `${o.limits.perHourPerVisitor.chat} chat, ${o.limits.perHourPerVisitor.research} research, ${o.limits.perHourPerVisitor.agent} agent per visitor per hour; ${o.limits.dailyCap} AI requests a day in total`)}
+      </tbody></table></div>
+      <div class="card card-pad"><h3>Tasks by status</h3>${bars(Object.entries(by).map(([label, n]) => ({ label: BS_STATUS[label] || label, n })))}</div>
+    </div>
+    ${st.accounts.configured ? '' : `<div class="card card-pad" style="margin-top:18px"><h3>Switch on Google sign-in</h3>
+      <p class="small">Accounts give visitors private memory and task history. Missing settings: <b>${missing.map(esc).join(', ') || 'none'}</b>.</p>
+      <ol class="small" style="margin:8px 0 0 18px;line-height:1.7">
+        <li>Google Cloud Console, create an OAuth client of type <b>Web application</b> (consent screen scopes: openid, email, profile).</li>
+        <li>Add this authorized redirect URI exactly: <code>${esc(redirect)}</code></li>
+        <li>Set <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> and <code>PUBLIC_URL</code> in the hosting environment, then redeploy.</li>
+      </ol></div>`}
+    <div class="card card-pad" style="margin-top:18px"><h3>Recent agent tasks</h3>
+      <div class="filters">${F.map(([key, l]) => `<button class="chip ${bs.filter === key ? 'on' : ''}" data-bs-f="${esc(key)}">${esc(l)}</button>`).join('')}</div>
+      ${t.tasks.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>When</th><th>Task</th><th>Who</th><th>Status</th><th>Tools used</th><th class="num">Seconds</th><th></th></tr></thead><tbody>
+        ${t.tasks.map((x) => `<tr data-id="${esc(x.id)}"><td class="small nowrap">${fmtDate(x.createdAt, true)}</td><td class="break small">${esc(x.goal)}</td><td class="small">${x.signedIn ? 'Signed in' : 'Anonymous'}</td><td>${bsPill(x.status)}</td>
+          <td class="small break">${x.tools.length ? esc([...new Set(x.tools)].join(', ')) : '—'}</td><td class="num">${x.seconds ?? '—'}</td>
+          <td class="nowrap"><button class="btn quiet sm" data-bs-log="${esc(x.id)}">Log</button> <button class="btn sm quiet del" data-bs-delt="${esc(x.id)}">Delete</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted small" style="margin-top:10px">No agent tasks in this view yet.</p>'}
+      <div id="bsLog" class="card card-pad" style="margin-top:12px" hidden></div>
+    </div>
+    <div class="card card-pad" style="margin-top:18px"><h3>Accounts (${a.accounts.length})</h3>
+      <p class="muted small">Stored in ${esc(a.storage)}. Saved memory text is private to each user and is not shown here.</p>
+      ${a.accounts.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Email</th><th>Name</th><th>Joined</th><th>Last sign-in</th><th class="num">Memories</th><th class="num">Proposals</th><th class="num">Tasks</th><th></th></tr></thead><tbody>
+        ${a.accounts.map((u) => `<tr><td class="break small"><b>${esc(u.email)}</b></td><td class="small">${esc(u.name || '')}</td><td class="small nowrap">${fmtDate(u.createdAt)}</td><td class="small nowrap">${fmtDate(u.lastLoginAt, true)}</td><td class="num">${u.memoriesApproved}</td><td class="num">${u.memoriesProposed}</td><td class="num">${u.tasks}</td>
+          <td><button class="btn sm quiet del" data-bs-delu="${esc(u.id)}" data-email="${esc(u.email)}">Delete account</button></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted small">No accounts yet.</p>'}
+    </div>
+    <div class="two" style="margin-top:18px">
+      <div class="card card-pad"><h3>Tools the agent can use (${o.agent.tools.length})</h3><div class="table-wrap"><table class="t"><thead><tr><th>Tool</th><th>Risk</th><th>Status</th><th>Needs</th></tr></thead><tbody>
+        ${o.agent.tools.map((x) => `<tr><td class="small"><code>${esc(x.name)}</code></td><td class="small">${esc(x.risk)}</td><td class="small">${esc(x.status)}</td><td class="small">${x.requires ? 'signed-in user' : '—'}</td></tr>`).join('')}
+      </tbody></table></div><p class="muted small">All tools are read-only. Anything above low risk is held for approval, and no write tool exists yet.</p></div>
+      <div class="card card-pad"><h3>Skills (${k.skills.length})</h3><div class="table-wrap"><table class="t"><thead><tr><th>Skill</th><th>Uses</th><th>Reviewed</th></tr></thead><tbody>
+        ${k.skills.map((x) => `<tr><td class="small"><b>${esc(x.name)}</b><br><span class="muted">${esc(x.id)} v${esc(x.version)}</span></td><td class="small break">${esc((x.tools || []).join(', '))}</td><td class="small nowrap">${esc(x.reviewed)}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    </div>
+    <div class="card card-pad" style="margin-top:18px"><h3>Knowledge base (${k.stats.documents} documents, ${k.stats.sections} sections)</h3>
+      <p class="muted small">Searched by the agent at run time from the <code>knowledge/</code> folder. Add a Markdown file there and restart to add knowledge.</p>
+      ${bars(Object.entries(areas).sort((x, y) => y[1] - x[1]).map(([label, n]) => ({ label, n })))}
+    </div>`;
+
+  view.onclick = async (e) => {
+    const sw = e.target.closest('[data-bs-switch]');
+    if (sw) {
+      const off = sw.dataset.bsSwitch === 'off';
+      if (off && !confirm('Switch Baasha AI off? Visitors will see a "switched off" message until you switch it back on.')) return;
+      try { await api('/admin/baasha/switch', { method: 'PUT', body: { enabled: !off } }); toast(off ? 'Baasha AI is switched off' : 'Baasha AI is switched on'); baashaTab(view); } catch (ex) { toast(ex.message); }
+      return;
+    }
+    const f = e.target.closest('[data-bs-f]'); if (f) { bs.filter = f.dataset.bsF; baashaTab(view); return; }
+    const lg = e.target.closest('[data-bs-log]');
+    if (lg) {
+      const box = document.getElementById('bsLog'); box.hidden = false; box.textContent = 'Loading...';
+      try {
+        const { task } = await api(`/admin/baasha/tasks/${encodeURIComponent(lg.dataset.bsLog)}`);
+        const line = (ev) => { const d = ev.data || {}; return ev.type === 'state' ? `state: ${d.from} → ${d.to}` : ev.type === 'tool' ? `tool ${d.tool}: ${d.status}${d.category ? ` (${d.category})` : ''}, ${d.ms ?? '?'} ms` : ev.type === 'policy' ? `policy ${d.tool}: ${d.decision} (${d.risk}, ${d.mode})` : ev.type === 'approval_requested' ? `approval requested for ${d.tool}` : ev.type; };
+        box.innerHTML = `<b>Task log</b> <span class="muted small">${esc(task.status)} · ${esc(task.mode)} · stored in ${esc(task.persistence)}</span><p class="small break">${esc(task.goal)}</p><ol class="small" style="margin-left:18px;line-height:1.6">${task.events.map((ev) => `<li><span class="muted">${fmtDate(ev.at, true)}</span> ${esc(line(ev))}</li>`).join('')}</ol>`;
+      } catch (ex) { box.textContent = ex.message; }
+      return;
+    }
+    const dt = e.target.closest('[data-bs-delt]');
+    if (dt) {
+      if (!confirm('Delete this task and its log permanently?')) return;
+      try { await api('/admin/baasha/tasks/delete', { method: 'POST', body: { ids: [dt.dataset.bsDelt] } }); toast('Task deleted'); baashaTab(view); } catch (ex) { toast(ex.message); }
+      return;
+    }
+    const du = e.target.closest('[data-bs-delu]');
+    if (du) {
+      if (!confirm(`Delete the account ${du.dataset.email} and ALL its saved memory, memory history and task history? This cannot be undone.`)) return;
+      try { await api('/admin/baasha/accounts/delete', { method: 'POST', body: { userId: du.dataset.bsDelu } }); toast('Account deleted'); baashaTab(view); } catch (ex) { toast(ex.message); }
+    }
   };
 }
 

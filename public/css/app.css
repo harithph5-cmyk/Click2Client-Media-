@@ -1,8 +1,10 @@
 /* Workspace-specific styles */
 .topbar { position: sticky; top: 0; z-index: 30; background: rgba(248, 250, 252, .85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .topbar-in { display: flex; align-items: center; gap: 24px; height: 62px; padding: 0 24px; max-width: 1440px; margin: 0 auto; }
-.tabs { display: flex; gap: 4px; }
-.tabs a { text-decoration: none; font: 600 14px var(--body); color: var(--ink-3); padding: 8px 12px; border-radius: 7px; }
+.tabs { display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+@media (min-width: 821px) { .topbar-in > .btn, .topbar-in > .logo-box, .topbar-in > .spacer { flex: none; } }
+.tabs a { flex: none; white-space: nowrap; text-decoration: none; font: 600 14px var(--body); color: var(--ink-3); padding: 8px 12px; border-radius: 7px; }
 .tabs a:hover { color: var(--ink); background: var(--surface-2); }
 .tabs a.on { color: var(--ink); background: var(--surface-3); }
 .acct { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 99px; padding: 3px 12px 3px 3px; cursor: pointer; font: 600 13px var(--body); color: var(--ink-2); }
@@ -10,7 +12,7 @@
 @media (max-width: 820px) {
   .topbar { backdrop-filter: none; background: var(--bg); }
   .topbar-in { gap: 10px; padding: 0 16px; }
-  .tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--line); justify-content: space-around; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); z-index: 40; }
+  .tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--line); justify-content: flex-start; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); z-index: 40; }
   .acct-lbl, .brand-sub { display: none; }
   body { padding-bottom: 64px; }
 }

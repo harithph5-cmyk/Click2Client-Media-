@@ -89,6 +89,7 @@ Statuses: Payment Pending · Screenshot Received · Payment Under Verification �
 - **Leads:** every form, free audit and order, with statuses (New, Contacted, Qualified, Proposal Sent, Won, Lost) and CSV export.
 - **SEO Audits:** filter by Free, Paid, 25-page, 50-page or Internal, and open the customer view or the full data.
 - **Page Content:** every heading, paragraph, button, list item and image on the public pages (Home, SEO Audit, SEO Tools, Services, Products, About, Blog, Contact, legal pages), plus each page's Google title and description. Saved edits go live immediately; **Reset** restores the original copy. The editable pieces are marked in `views/*.html` with `<!--@key-->…<!--/@key-->` comments — after adding new copy to a view, run `node scripts/mark-editable.js` to make it editable.
+- **Baasha AI:** usage (agent tasks by status, last 24 hours and 7 days), the loaded tools, skills and knowledge, system status (AI model, provider, web research, Google sign-in setup and what is missing), recent agent tasks with the full event log, accounts (counts only; memory text is never shown) with delete-account, task deletion, and an **on/off switch** that stops chat, research and the agent without calling the AI provider. API: `/api/admin/baasha/*` (admin session and CSRF required).
 - **Settings:** phone, WhatsApp, email, Instagram/Facebook, UPI ID, payment QR upload, testimonials, report footer. Changes apply site-wide immediately.
 
 ### Security

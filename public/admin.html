@@ -30,6 +30,12 @@
   .pill.ps-rejected { background: var(--fail-soft); color: var(--fail); }
   .badge-n { background: var(--fail); color: #fff; border-radius: 99px; font: 700 10.5px var(--body); padding: 2px 6px; margin-left: 4px; }
   td .who b { color: var(--ink); }
+  .two > * { min-width: 0; }
+  #view code { overflow-wrap: anywhere; }
+  .pill.bs-completed { background: var(--pass-soft); color: var(--pass); }
+  .pill.bs-partial, .pill.bs-waiting_for_approval { background: var(--warn-soft); color: var(--warn); }
+  .pill.bs-failed { background: var(--fail-soft); color: var(--fail); }
+  .pill.bs-cancelled, .pill.bs-queued, .pill.bs-planning, .pill.bs-running_read_only, .pill.bs-running_write, .pill.bs-verifying { background: var(--info-soft); color: var(--info); }
   .qr-prev { width: 160px; height: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
   .bulk { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--fail-soft); border-bottom: 1px solid #F3C9C6; position: sticky; left: 0; }
   .bulk[hidden] { display: none; }

@@ -118,6 +118,7 @@ export function createKnowledgeBase({ dir = DEFAULT_DIR } = {}) {
     listSkills: () => [...skills.values()].map(({ body, ...s }) => s),
     getSkill: (id) => skills.get(String(id)) || null,
     areas: () => [...new Set(docs.map((d) => d.area))].sort(),
+    docs: () => docs.map(({ path: p, title, area, trust, bytes }) => ({ path: p, title, area, trust, bytes })),
     stats: () => ({ documents: docs.length, sections: chunks.length, skills: skills.size, areas: [...new Set(docs.map((d) => d.area))].sort() }),
   };
 }
