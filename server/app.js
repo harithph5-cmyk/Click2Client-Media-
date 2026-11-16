@@ -472,7 +472,7 @@ app.get('/seo-tools/:slug', h(async (req, res, next) => {
 }));
 
 // The portfolio was retired: old links go to the home page (products to /products)
-app.get('/portfolio/featured', (req, res) => res.redirect(301, '/products'));
+app.get(['/portfolio/featured', '/products'], (req, res) => res.redirect(301, '/'));
 app.get(['/portfolio', '/portfolio/*rest'], (req, res) => res.redirect(301, '/'));
 
 app.get('/blog/:slug', h(async (req, res, next) => {
