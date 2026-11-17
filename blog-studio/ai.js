@@ -14,7 +14,7 @@ export async function llm(provider, system, user, { json = true, maxTokens = 800
   if (!providers()[provider]) throw Object.assign(new Error(`${provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY'} is not set in blog-studio/.env.`), { status: 400 });
   let text;
   if (provider === 'gemini') {
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
     const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { 'x-goog-api-key': process.env.GEMINI_API_KEY }, {
       systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }],
       generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7, ...(json ? { responseMimeType: 'application/json' } : {}) },
