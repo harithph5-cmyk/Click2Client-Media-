@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
     "dev": "node --watch --env-file-if-exists=.env server/index.js",
+    "studio": "node --env-file-if-exists=blog-studio/.env blog-studio/server.js",
     "audit": "node --env-file-if-exists=.env scripts/cli-audit.js",
     "test": "node --test"
   },

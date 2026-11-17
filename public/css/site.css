@@ -760,6 +760,11 @@ select.input { appearance: auto; }
 .bl-prose li::marker { color: var(--accent); }
 .bl-prose blockquote { margin-left: 0; padding: 4px 0 4px 22px; border-left: 3px solid var(--accent); font: 600 20px/1.6 var(--display); color: var(--ink); }
 .bl-prose img { display: block; max-width: 100%; height: auto; border-radius: 16px; }
+.bl-table { overflow-x: auto; }
+.bl-table table { border-collapse: collapse; width: 100%; font-size: 16px; }
+.bl-table th, .bl-table td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line, #e5e7eb); }
+.bl-table th { color: var(--ink); font-weight: 700; }
+.bl-faq h2 { margin-top: 1.9em; }
 .bl-end { margin-top: 48px; }
 .bl-share-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding: 24px; border-radius: 20px; background: var(--accent-soft); border: 1px solid #D3E4FF; }
 .bl-share-cta > div:first-child { display: grid; gap: 4px; max-width: 420px; }

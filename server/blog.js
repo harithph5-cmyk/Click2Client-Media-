@@ -4,6 +4,7 @@
 
 import assert from 'node:assert';
 import * as store from './store/db.js';
+import { formatBody, faqHtml } from './md.js';
 
 const clean = (v, n) => String(v ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, ' ').trim().slice(0, n);
 const slugify = (s) => clean(s, 90).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -13,8 +14,42 @@ export const getBlog = async () => (await store.getSetting('blog', null)) || { p
 const save = (b) => store.setSetting('blog', b);
 const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
 
+// A post is live when published and its (optional) scheduled time has passed —
+// so scheduled posts go live on their own, with no cron job.
+export const isLive = (p, now = Date.now()) => Boolean(p.published) && (!p.publishAt || Date.parse(p.publishAt) <= now);
+export const statusOf = (p) => (!p.published ? 'draft' : isLive(p) ? 'published' : 'scheduled');
+
 export async function publishedPosts() {
-  return (await getBlog()).posts.filter((p) => p.published).sort(byDate);
+  return (await getBlog()).posts.filter((p) => isLive(p)).sort(byDate);
+}
+
+// Full-fidelity upsert used by the token-secured Blog Studio API. Unlike the
+// admin form it also carries SEO metadata, FAQs, tags and a schedule.
+export async function upsertRich(id, b) {
+  const blog = await getBlog();
+  const title = clean(b.title, 140);
+  if (!title) throw Object.assign(new Error('Title is required.'), { status: 400 });
+  const slug = slugify(id || b.slug || title) || 'post';
+  const i = blog.posts.findIndex((p) => p.id === slug);
+  const prev = i >= 0 ? blog.posts[i] : {};
+  const status = ['draft', 'published', 'scheduled'].includes(b.status) ? b.status : 'draft';
+  const publishAt = status === 'scheduled' ? new Date(b.publishAt).toISOString() : '';
+  if (status === 'scheduled' && !(Date.parse(b.publishAt) > Date.now())) throw Object.assign(new Error('Schedule time must be in the future.'), { status: 400 });
+  const date = status === 'scheduled' ? publishAt.slice(0, 10) : prev.published && prev.date ? prev.date : new Date().toISOString().slice(0, 10);
+  const canonical = /^https:\/\/[^\s]+$/.test(b.canonical || '') ? b.canonical : '';
+  const rec = {
+    ...prev, id: slug, title,
+    excerpt: clean(b.excerpt, 300), category: clean(b.category, 40), author: clean(b.author, 60) || 'Hari',
+    body: String(b.body ?? '').slice(0, 60000),
+    published: status !== 'draft', publishAt, date, updated: new Date().toISOString(),
+    metaTitle: clean(b.metaTitle, 120), metaDescription: clean(b.metaDescription, 320), canonical,
+    imageAlt: clean(b.imageAlt, 200), keyword: clean(b.keyword, 80),
+    tags: (Array.isArray(b.tags) ? b.tags : []).map((t) => clean(t, 40)).filter(Boolean).slice(0, 12),
+    faqs: (Array.isArray(b.faqs) ? b.faqs : []).map((f) => ({ q: clean(f.q, 200), a: clean(f.a, 1200) })).filter((f) => f.q && f.a).slice(0, 15),
+  };
+  if (i >= 0) blog.posts[i] = rec; else blog.posts.push(rec);
+  await save(blog);
+  return rec;
 }
 
 export async function upsertPost(id, body) {
@@ -80,39 +115,7 @@ export const coverUrl = (p) => (p.cover ? `/blog-img/${encodeURIComponent(p.id)}
 // allow http(s) or site-relative URLs.
 //   ## Heading   ### Sub-heading   - list   1. list   > quote
 //   **bold**   *italic*   [text](https://…)   ![alt](https://…image)
-function inline(s) {
-  return esc(s)
-    .replace(/!\[([^\]]*)\]\(((?:https:\/\/|\/)[^\s)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">')
-    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s)]+)\)/g, (_, t, u) => `<a href="${u}"${u.startsWith('/') ? '' : ' target="_blank" rel="noopener"'}>${t}</a>`)
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>');
-}
-
-export function formatBody(text) {
-  const out = [];
-  let list = null;
-  let para = [];
-  const flushPara = () => { if (para.length) out.push(`<p>${para.map(inline).join('<br>')}</p>`); para = []; };
-  const flushList = () => { if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`); list = null; };
-  for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
-    const line = raw.trim();
-    let m;
-    if (!line) { flushPara(); flushList(); continue; }
-    if ((m = /^(#{2,3})\s+(.+)$/.exec(line))) { flushPara(); flushList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
-    if ((m = /^([-*]|\d+[.)])\s+(.+)$/.exec(line))) {
-      flushPara();
-      const tag = /\d/.test(m[1]) ? 'ol' : 'ul';
-      if (list && list.tag !== tag) flushList();
-      (list ||= { tag, items: [] }).items.push(m[2]);
-      continue;
-    }
-    if ((m = /^>\s?(.*)$/.exec(line))) { flushPara(); flushList(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
-    flushList();
-    para.push(line);
-  }
-  flushPara(); flushList();
-  return out.join('\n');
-}
+export { formatBody };
 
 const words = (t) => (String(t || '').match(/\S+/g) || []).length;
 export const readMins = (t) => Math.max(1, Math.round(words(t) / 200));
@@ -144,7 +147,7 @@ export async function postVars(p, base) {
     'post.title': esc(p.title),
     'post.meta': meta(p) + `<span class="bl-author">By ${esc(p.author || 'Hari')}</span>`,
     'post.cover': img ? `<figure class="bl-hero-img"><img src="${img}" alt="${esc(p.title)}" fetchpriority="high"></figure>` : '',
-    'post.body': formatBody(p.body),
+    'post.body': formatBody(p.body) + faqHtml(p.faqs),
     'post.related': others.length ? `<section class="section tint" aria-labelledby="rel-h"><div class="wrap"><div class="sec-head reveal"><span class="eyebrow">Keep reading</span><h2 id="rel-h">More from the blog</h2></div><div class="bl-grid">${others.map((o) => `<article class="bl-card reveal"><a class="bl-cover" href="/blog/${esc(o.id)}" tabindex="-1" aria-hidden="true">${cover(o)}</a><div class="bl-body">${meta(o)}<h3><a href="/blog/${esc(o.id)}">${esc(o.title)}</a></h3></div></article>`).join('')}</div></div></section>` : '',
     'ogImage': esc(img ? base + img : `${base}/img/click2client-media-logo.webp`),
     'ogType': 'article',
@@ -162,6 +165,8 @@ if (process.argv[1]?.endsWith('blog.js')) {
   assert.ok(!h.includes('href="javascript'));
   assert.match(h, /<ul><li>one<\/li><li>two<\/li><\/ul>\n<ol><li>a<\/li><\/ol>/);
   assert.match(h, /<blockquote>q &lt;script&gt;<\/blockquote>/);
+  assert.match(formatBody('| A | B |\n|---|---|\n| 1 | **2** |'), /<th>A<\/th><th>B<\/th>.*<td>1<\/td><td><strong>2<\/strong><\/td>/);
+  assert.ok(isLive({ published: true }) && !isLive({ published: true, publishAt: '2999-01-01T00:00:00Z' }) && !isLive({ published: false }));
   console.log('blog format ok');
   process.exit(0);
 }

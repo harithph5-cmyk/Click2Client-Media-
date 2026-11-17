@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Click2Client Blog Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23c8147a'/%3E%3Cpath d='M9 22V10h8M9 16h6M21 12v10' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <form class="card login-card" id="loginForm">
+    <div class="brand"><span class="logo">C2</span> Blog Studio</div>
+    <p class="muted">Sign in to create and publish articles.</p>
+    <label>Email<input name="email" type="email" autocomplete="username" required></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="err" id="loginErr"></p>
+    <button class="btn primary">Sign in</button>
+  </form>
+</div>
+<div id="app" class="shell" hidden>
+  <aside class="side">
+    <div class="brand"><span class="logo">C2</span> Blog Studio</div>
+    <nav id="nav"></nav>
+    <a class="site-link" id="siteLink" target="_blank" rel="noopener">View website ↗</a>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
