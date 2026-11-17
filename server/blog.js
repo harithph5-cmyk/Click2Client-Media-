@@ -3,6 +3,7 @@
 // /blog and /blog/<slug> so search engines index the full article.
 
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import * as store from './store/db.js';
 import { formatBody, faqHtml } from './md.js';
 
@@ -23,6 +24,17 @@ export async function publishedPosts() {
   return (await getBlog()).posts.filter((p) => isLive(p)).sort(byDate);
 }
 
+// SEO / AEO / GEO fields shared by the admin form and the Blog Studio API.
+// Only fields present in the request are returned, so older clients never wipe them.
+export const richFields = (b) => {
+  const o = {};
+  for (const [k, n] of Object.entries({ metaTitle: 120, metaDescription: 320, imageAlt: 200, keyword: 80 })) if (b[k] !== undefined) o[k] = clean(b[k], n);
+  if (b.canonical !== undefined) o.canonical = /^https:\/\/\S+$/.test(b.canonical) ? b.canonical : '';
+  if (b.tags !== undefined) o.tags = (Array.isArray(b.tags) ? b.tags : String(b.tags).split(',')).map((t) => clean(t, 40)).filter(Boolean).slice(0, 12);
+  if (b.faqs !== undefined) o.faqs = (Array.isArray(b.faqs) ? b.faqs : []).map((f) => ({ q: clean(f?.q, 200), a: clean(f?.a, 1200) })).filter((f) => f.q && f.a).slice(0, 15);
+  return o;
+};
+
 // Full-fidelity upsert used by the token-secured Blog Studio API. Unlike the
 // admin form it also carries SEO metadata, FAQs, tags and a schedule.
 export async function upsertRich(id, b) {
@@ -36,16 +48,12 @@ export async function upsertRich(id, b) {
   const publishAt = status === 'scheduled' ? new Date(b.publishAt).toISOString() : '';
   if (status === 'scheduled' && !(Date.parse(b.publishAt) > Date.now())) throw Object.assign(new Error('Schedule time must be in the future.'), { status: 400 });
   const date = status === 'scheduled' ? publishAt.slice(0, 10) : prev.published && prev.date ? prev.date : new Date().toISOString().slice(0, 10);
-  const canonical = /^https:\/\/[^\s]+$/.test(b.canonical || '') ? b.canonical : '';
   const rec = {
     ...prev, id: slug, title,
     excerpt: clean(b.excerpt, 300), category: clean(b.category, 40), author: clean(b.author, 60) || 'Hari',
     body: String(b.body ?? '').slice(0, 60000),
     published: status !== 'draft', publishAt, date, updated: new Date().toISOString(),
-    metaTitle: clean(b.metaTitle, 120), metaDescription: clean(b.metaDescription, 320), canonical,
-    imageAlt: clean(b.imageAlt, 200), keyword: clean(b.keyword, 80),
-    tags: (Array.isArray(b.tags) ? b.tags : []).map((t) => clean(t, 40)).filter(Boolean).slice(0, 12),
-    faqs: (Array.isArray(b.faqs) ? b.faqs : []).map((f) => ({ q: clean(f.q, 200), a: clean(f.a, 1200) })).filter((f) => f.q && f.a).slice(0, 15),
+    ...richFields(b),
   };
   if (i >= 0) blog.posts[i] = rec; else blog.posts.push(rec);
   await save(blog);
@@ -73,6 +81,7 @@ export async function upsertPost(id, body) {
     published: Boolean(body.published),
     date,
     updated: new Date().toISOString(),
+    ...richFields(body),
   };
   if (i >= 0) b.posts[i] = rec; else b.posts.push(rec);
   await save(b);
@@ -81,6 +90,16 @@ export async function upsertPost(id, body) {
     await store.setSetting(`bimg:${prev.id}`, null);
   }
   return rec;
+}
+
+// In-article image: stored like a cover under a content-hash id and served by /blog-img/:id.
+export async function saveMedia(dataUrl) {
+  const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+  if (!m) throw new Error('Upload a PNG, JPG or WebP image.');
+  if (m[3].length > 1_400_000) throw new Error('Image is too large — please use one under 1 MB.');
+  const id = 'media-' + crypto.createHash('sha256').update(m[3]).digest('hex').slice(0, 12);
+  await store.setSetting(`bimg:${id}`, { mime: m[1], data: m[3] });
+  return id;
 }
 
 export async function deletePost(id) {
@@ -166,6 +185,7 @@ if (process.argv[1]?.endsWith('blog.js')) {
   assert.match(h, /<ul><li>one<\/li><li>two<\/li><\/ul>\n<ol><li>a<\/li><\/ol>/);
   assert.match(h, /<blockquote>q &lt;script&gt;<\/blockquote>/);
   assert.match(formatBody('| A | B |\n|---|---|\n| 1 | **2** |'), /<th>A<\/th><th>B<\/th>.*<td>1<\/td><td><strong>2<\/strong><\/td>/);
+  assert.deepEqual(richFields({ tags: 'a, b', faqs: [{ q: 'x', a: 'y' }, { q: '', a: 'z' }], canonical: 'http://no' }), { tags: ['a', 'b'], faqs: [{ q: 'x', a: 'y' }], canonical: '' });
   assert.ok(isLive({ published: true }) && !isLive({ published: true, publishAt: '2999-01-01T00:00:00Z' }) && !isLive({ published: false }));
   console.log('blog format ok');
   process.exit(0);

@@ -4,7 +4,7 @@
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['baasha', 'Baasha AI'], ['pages', 'Page Content'], ['products', 'Products'], ['software', 'Software Catalogue'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
+const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
@@ -68,7 +68,7 @@ async function route() {
   document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
   try {
-    const fn = { overview, payments, leads, audits, baasha: baashaTab, pages: pagesTab, products: (v) => contentTab(v, 'product'), software: (v) => contentTab(v, 'software'), courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
+    const fn = { overview, payments, leads, audits, pages: pagesTab, courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
     await fn(view);
   } catch (e) {
     if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
@@ -134,7 +134,6 @@ function selectionClick(e, view, opts) {
 // ── Overview / analytics ─────────────────────────────────────────────────
 async function overview(view) {
   const s = await api('/admin/stats');
-  const bsO = await api('/admin/baasha/overview').catch(() => null);
   setBadge(s.pendingVerification);
   const conv = s.freeAudits ? Math.round((100 * s.verifiedOrders) / s.freeAudits) : null;
   view.innerHTML = `${head('Dashboard', 'Overview', 'Leads, audits and revenue from the website.')}
@@ -149,7 +148,6 @@ async function overview(view) {
       <div class="kpi"><div class="n">${conv == null ? '—' : conv + '%'}</div><div class="l">Free → paid conversion</div></div>
       <div class="kpi"><div class="n" style="color:${scoreColor(s.avgScore)}">${s.avgScore ?? '—'}</div><div class="l">Average SEO score</div></div>
       <div class="kpi"><div class="n">${s.wonLeads}</div><div class="l">Leads won</div></div>
-      ${bsO ? `<div class="kpi"><div class="n">${bsO.tasks.last7d}</div><div class="l">Baasha AI tasks, last 7 days</div></div><div class="kpi"><div class="n">${bsO.accounts.users}</div><div class="l">Baasha AI accounts</div></div>` : ''}
     </div>
     <div class="two" style="margin-top:18px">
       <div class="card card-pad"><h3>Most requested services</h3>${bars(s.byService)}</div>
@@ -280,122 +278,6 @@ async function audits(view) {
     if (selectionClick(e, view, { kind: 'audits', noun: 'audit', warn: 'The audit report and its customer link will stop working. Linked orders and leads are kept.', reload: () => audits(view) })) return;
     const c = e.target.closest('[data-af]');
     if (c) { state.auditFilter = c.dataset.af; audits(view); }
-  };
-}
-
-// ── Baasha AI ────────────────────────────────────────────────────────────
-// Everything shown here comes from the running server: the loaded tools, skills and knowledge, the task log,
-// accounts, and sign-in setup. Memory text and sessions are never shown.
-const BS_STATUS = { completed: 'Completed', partial: 'Partly done', failed: 'Failed', waiting_for_approval: 'Waiting for approval', cancelled: 'Cancelled', queued: 'Queued', planning: 'Planning', running_read_only: 'Running', running_write: 'Running', verifying: 'Verifying' };
-const bsPill = (s) => `<span class="pill bs-${esc(s)}">${esc(BS_STATUS[s] || s)}</span>`;
-const bsKpi = (n, l, color) => `<div class="kpi"><div class="n"${color ? ` style="color:${color}"` : ''}>${n}</div><div class="l">${l}</div></div>`;
-const bsRow = (k, v) => `<tr><td class="small" style="width:42%"><b>${k}</b></td><td class="small">${v}</td></tr>`;
-
-async function baashaTab(view) {
-  const bs = (state.bs ||= { filter: 'all' });
-  const [o, t, a, k] = await Promise.all([
-    api('/admin/baasha/overview'),
-    api(`/admin/baasha/tasks${bs.filter === 'all' ? '' : `?status=${encodeURIComponent(bs.filter)}`}`),
-    api('/admin/baasha/accounts'),
-    api('/admin/baasha/knowledge'),
-  ]);
-  const st = o.status, tk = o.tasks, ac = o.accounts, by = tk.byStatus || {};
-  const done = tk.total ? Math.round((100 * (by.completed || 0)) / tk.total) : null;
-  const sc = { ready: 'pass', degraded: 'warn', down: 'fail', not_configured: 'fail' }[st.state] || 'info';
-  const redirect = `${location.origin}/api/baasha/auth/google/callback`;
-  const missing = st.accounts.missing || [];
-  const areas = {};
-  for (const d of k.documents) { const p = d.path.split('/'); const key = p.length > 2 ? `${p[0]}/${p[1]}` : p[0]; areas[key] = (areas[key] || 0) + 1; }
-  const F = [['all', 'All']].concat(t.statuses.filter((s) => ['completed', 'partial', 'failed', 'waiting_for_approval', 'cancelled'].includes(s)).map((s) => [s, BS_STATUS[s]]));
-  view.innerHTML = `${head('AI agent', 'Baasha AI', 'Usage, accounts, tools, knowledge and settings for the public AI assistant at /baasha-ai.', `<a class="btn sm" href="/baasha-ai" target="_blank" rel="noopener">Open Baasha AI</a>`)}
-    <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <div><b>${o.enabled ? 'Baasha AI is switched on' : 'Baasha AI is switched off'}</b><div class="muted small">${o.enabled ? 'Visitors can use Chat, Research and the Agent.' : 'Visitors see a "switched off" message and no AI provider is called.'}</div></div>
-      <span class="spacer"></span><button class="btn sm ${o.enabled ? 'danger' : 'accent'}" data-bs-switch="${o.enabled ? 'off' : 'on'}">${o.enabled ? 'Switch off now' : 'Switch on'}</button>
-    </div>
-    <div class="kpis">
-      ${bsKpi(tk.last7d, 'Agent tasks, last 7 days')}${bsKpi(tk.last24h, 'Agent tasks, last 24 hours')}${bsKpi(tk.total, 'Agent tasks, all time')}
-      ${bsKpi(done == null ? '—' : done + '%', 'Tasks completed')}${bsKpi(by.waiting_for_approval || 0, 'Waiting for approval', (by.waiting_for_approval || 0) ? 'var(--warn)' : '')}${bsKpi(by.failed || 0, 'Failed tasks', (by.failed || 0) ? 'var(--fail)' : '')}
-      ${bsKpi(ac.users, 'Accounts')}${bsKpi(ac.activeSessions, 'Active sign-ins')}${bsKpi(ac.memoriesApproved, 'Saved memories')}${bsKpi(ac.memoriesProposed, 'Memory proposals waiting')}
-    </div>
-    <div class="two" style="margin-top:18px">
-      <div class="card card-pad"><h3>System status</h3><table class="t"><tbody>
-        ${bsRow('Overall', `<span class="pill ${sc}">${esc(st.state.replace('_', ' '))}</span>`)}
-        ${bsRow('AI model', esc(st.model || 'not set'))}
-        ${bsRow('AI provider', st.provider.configured ? `configured, ${st.provider.reachable === false ? 'not reachable' : st.provider.reachable ? 'reachable' : 'not checked'}${st.provider.problem ? ` (${esc(st.provider.problem)})` : ''}` : 'not configured')}
-        ${bsRow('Web research', `${esc(st.research.state)} via ${esc(st.research.via === 'web' ? 'general web search' : 'Google Search')}${st.research.reason ? ` (${esc(st.research.reason)})` : ''}`)}
-        ${bsRow('Google sign-in', st.accounts.configured ? 'configured' : `<span class="pill warn">not configured</span>`)}
-        ${bsRow('Accounts storage', `${esc(st.accounts.storage)}, tables ${esc(st.accounts.schema)}`)}
-        ${bsRow('Task log storage', `${esc(o.agent.taskLog)} (kept ${o.agent.retentionDays} days)`)}
-        ${bsRow('Limits', `${o.limits.perHourPerVisitor.chat} chat, ${o.limits.perHourPerVisitor.research} research, ${o.limits.perHourPerVisitor.agent} agent per visitor per hour; ${o.limits.dailyCap} AI requests a day in total`)}
-      </tbody></table></div>
-      <div class="card card-pad"><h3>Tasks by status</h3>${bars(Object.entries(by).map(([label, n]) => ({ label: BS_STATUS[label] || label, n })))}</div>
-    </div>
-    ${st.accounts.configured ? '' : `<div class="card card-pad" style="margin-top:18px"><h3>Switch on Google sign-in</h3>
-      <p class="small">Accounts give visitors private memory and task history. Missing settings: <b>${missing.map(esc).join(', ') || 'none'}</b>.</p>
-      <ol class="small" style="margin:8px 0 0 18px;line-height:1.7">
-        <li>Google Cloud Console, create an OAuth client of type <b>Web application</b> (consent screen scopes: openid, email, profile).</li>
-        <li>Add this authorized redirect URI exactly: <code>${esc(redirect)}</code></li>
-        <li>Set <code>GOOGLE_CLIENT_ID</code>, <code>GOOGLE_CLIENT_SECRET</code> and <code>PUBLIC_URL</code> in the hosting environment, then redeploy.</li>
-      </ol></div>`}
-    <div class="card card-pad" style="margin-top:18px"><h3>Recent agent tasks</h3>
-      <div class="filters">${F.map(([key, l]) => `<button class="chip ${bs.filter === key ? 'on' : ''}" data-bs-f="${esc(key)}">${esc(l)}</button>`).join('')}</div>
-      ${t.tasks.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>When</th><th>Task</th><th>Who</th><th>Status</th><th>Tools used</th><th class="num">Seconds</th><th></th></tr></thead><tbody>
-        ${t.tasks.map((x) => `<tr data-id="${esc(x.id)}"><td class="small nowrap">${fmtDate(x.createdAt, true)}</td><td class="break small">${esc(x.goal)}</td><td class="small">${x.signedIn ? 'Signed in' : 'Anonymous'}</td><td>${bsPill(x.status)}</td>
-          <td class="small break">${x.tools.length ? esc([...new Set(x.tools)].join(', ')) : '—'}</td><td class="num">${x.seconds ?? '—'}</td>
-          <td class="nowrap"><button class="btn quiet sm" data-bs-log="${esc(x.id)}">Log</button> <button class="btn sm quiet del" data-bs-delt="${esc(x.id)}">Delete</button></td></tr>`).join('')}
-      </tbody></table></div>` : '<p class="muted small" style="margin-top:10px">No agent tasks in this view yet.</p>'}
-      <div id="bsLog" class="card card-pad" style="margin-top:12px" hidden></div>
-    </div>
-    <div class="card card-pad" style="margin-top:18px"><h3>Accounts (${a.accounts.length})</h3>
-      <p class="muted small">Stored in ${esc(a.storage)}. Saved memory text is private to each user and is not shown here.</p>
-      ${a.accounts.length ? `<div class="table-wrap"><table class="t"><thead><tr><th>Email</th><th>Name</th><th>Joined</th><th>Last sign-in</th><th class="num">Memories</th><th class="num">Proposals</th><th class="num">Tasks</th><th></th></tr></thead><tbody>
-        ${a.accounts.map((u) => `<tr><td class="break small"><b>${esc(u.email)}</b></td><td class="small">${esc(u.name || '')}</td><td class="small nowrap">${fmtDate(u.createdAt)}</td><td class="small nowrap">${fmtDate(u.lastLoginAt, true)}</td><td class="num">${u.memoriesApproved}</td><td class="num">${u.memoriesProposed}</td><td class="num">${u.tasks}</td>
-          <td><button class="btn sm quiet del" data-bs-delu="${esc(u.id)}" data-email="${esc(u.email)}">Delete account</button></td></tr>`).join('')}
-      </tbody></table></div>` : '<p class="muted small">No accounts yet.</p>'}
-    </div>
-    <div class="two" style="margin-top:18px">
-      <div class="card card-pad"><h3>Tools the agent can use (${o.agent.tools.length})</h3><div class="table-wrap"><table class="t"><thead><tr><th>Tool</th><th>Risk</th><th>Status</th><th>Needs</th></tr></thead><tbody>
-        ${o.agent.tools.map((x) => `<tr><td class="small"><code>${esc(x.name)}</code></td><td class="small">${esc(x.risk)}</td><td class="small">${esc(x.status)}</td><td class="small">${x.requires ? 'signed-in user' : '—'}</td></tr>`).join('')}
-      </tbody></table></div><p class="muted small">All tools are read-only. Anything above low risk is held for approval, and no write tool exists yet.</p></div>
-      <div class="card card-pad"><h3>Skills (${k.skills.length})</h3><div class="table-wrap"><table class="t"><thead><tr><th>Skill</th><th>Uses</th><th>Reviewed</th></tr></thead><tbody>
-        ${k.skills.map((x) => `<tr><td class="small"><b>${esc(x.name)}</b><br><span class="muted">${esc(x.id)} v${esc(x.version)}</span></td><td class="small break">${esc((x.tools || []).join(', '))}</td><td class="small nowrap">${esc(x.reviewed)}</td></tr>`).join('')}
-      </tbody></table></div></div>
-    </div>
-    <div class="card card-pad" style="margin-top:18px"><h3>Knowledge base (${k.stats.documents} documents, ${k.stats.sections} sections)</h3>
-      <p class="muted small">Searched by the agent at run time from the <code>knowledge/</code> folder. Add a Markdown file there and restart to add knowledge.</p>
-      ${bars(Object.entries(areas).sort((x, y) => y[1] - x[1]).map(([label, n]) => ({ label, n })))}
-    </div>`;
-
-  view.onclick = async (e) => {
-    const sw = e.target.closest('[data-bs-switch]');
-    if (sw) {
-      const off = sw.dataset.bsSwitch === 'off';
-      if (off && !confirm('Switch Baasha AI off? Visitors will see a "switched off" message until you switch it back on.')) return;
-      try { await api('/admin/baasha/switch', { method: 'PUT', body: { enabled: !off } }); toast(off ? 'Baasha AI is switched off' : 'Baasha AI is switched on'); baashaTab(view); } catch (ex) { toast(ex.message); }
-      return;
-    }
-    const f = e.target.closest('[data-bs-f]'); if (f) { bs.filter = f.dataset.bsF; baashaTab(view); return; }
-    const lg = e.target.closest('[data-bs-log]');
-    if (lg) {
-      const box = document.getElementById('bsLog'); box.hidden = false; box.textContent = 'Loading...';
-      try {
-        const { task } = await api(`/admin/baasha/tasks/${encodeURIComponent(lg.dataset.bsLog)}`);
-        const line = (ev) => { const d = ev.data || {}; return ev.type === 'state' ? `state: ${d.from} → ${d.to}` : ev.type === 'tool' ? `tool ${d.tool}: ${d.status}${d.category ? ` (${d.category})` : ''}, ${d.ms ?? '?'} ms` : ev.type === 'policy' ? `policy ${d.tool}: ${d.decision} (${d.risk}, ${d.mode})` : ev.type === 'approval_requested' ? `approval requested for ${d.tool}` : ev.type; };
-        box.innerHTML = `<b>Task log</b> <span class="muted small">${esc(task.status)} · ${esc(task.mode)} · stored in ${esc(task.persistence)}</span><p class="small break">${esc(task.goal)}</p><ol class="small" style="margin-left:18px;line-height:1.6">${task.events.map((ev) => `<li><span class="muted">${fmtDate(ev.at, true)}</span> ${esc(line(ev))}</li>`).join('')}</ol>`;
-      } catch (ex) { box.textContent = ex.message; }
-      return;
-    }
-    const dt = e.target.closest('[data-bs-delt]');
-    if (dt) {
-      if (!confirm('Delete this task and its log permanently?')) return;
-      try { await api('/admin/baasha/tasks/delete', { method: 'POST', body: { ids: [dt.dataset.bsDelt] } }); toast('Task deleted'); baashaTab(view); } catch (ex) { toast(ex.message); }
-      return;
-    }
-    const du = e.target.closest('[data-bs-delu]');
-    if (du) {
-      if (!confirm(`Delete the account ${du.dataset.email} and ALL its saved memory, memory history and task history? This cannot be undone.`)) return;
-      try { await api('/admin/baasha/accounts/delete', { method: 'POST', body: { userId: du.dataset.bsDelu } }); toast('Account deleted'); baashaTab(view); } catch (ex) { toast(ex.message); }
-    }
   };
 }
 
@@ -566,7 +448,7 @@ function pickMedia({ multiple = false, title = 'Choose an image', project = {}, 
   });
 }
 
-// ── Editable content: Products & Brands ─────────────────────────────────
+// ── Editable content: Courses & Brands ─────────────────────────────────
 // The fields come from the server (content.js KINDS), so both tabs share one editor.
 const ctState = state.ct ||= {};
 async function contentTab(view, kind) {
@@ -574,7 +456,7 @@ async function contentTab(view, kind) {
   const st = (ctState[kind] ||= { edit: null });
   const editing = st.edit === 'new' ? { title: '', data: {}, published: true } : items.find((x) => x.id === st.edit);
   if (editing) return contentForm(view, kind, schema, editing);
-  const publicUrl = { product: '/products', software: '/products#catalogue', course: '/courses' }[kind] || '/#br-h';
+  const publicUrl = { course: '/courses' }[kind] || '/#br-h';
   const thumb = (x) => (x.image ? `<img src="${esc(x.image)}" alt="" loading="lazy" style="width:72px;height:46px;object-fit:${kind === 'brand' ? 'contain' : 'cover'};border-radius:8px;border:1px solid var(--line);background:#fff;display:block">` : `<span class="pf-noimg" style="width:72px;height:46px">${kind === 'brand' ? 'No logo' : 'No image'}</span>`);
   view.innerHTML = `${head('Website', schema.label, esc(schema.hint), `<a class="btn ghost sm" href="${publicUrl}" target="_blank">View on site ↗</a><button class="btn sm accent" data-new>+ Add ${esc(schema.singular)}</button>`)}
     ${media.configured ? '' : '<div class="pf-note"><span><b>Supabase images not connected.</b> Add <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_ROLE_KEY</code> in your hosting environment variables to upload images. You can paste image links meanwhile.</span></div>'}
@@ -813,35 +695,107 @@ async function blogTab(view) {
   };
 }
 
+// Readiness checks shown live while writing. They flag common problems; they do not
+// predict rankings, and nothing here guarantees Google or AI assistants will cite a post.
+const wordCount = (t) => (String(t).match(/\S+/g) || []).length;
+function blogChecks(v) {
+  const body = v.body || '', kw = (v.keyword || '').toLowerCase().trim();
+  const has = (t) => Boolean(kw) && String(t || '').toLowerCase().includes(kw);
+  const heads = [...body.matchAll(/^(#{2,3})\s+(.+)$/gm)].map((m) => ({ l: m[1].length, t: m[2].trim() }));
+  const links = [...body.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
+  const internal = links.filter((u) => u.startsWith('/') || u.includes(location.host));
+  const external = links.filter((u) => /^https?:\/\//.test(u) && !u.includes(location.host));
+  const faqs = (v.faqs || []).filter((f) => f.q && f.a);
+  const firstSection = (body.split(/^##\s.*$/m)[1] || '').trim().split(/\n\s*\n/)[0] || '';
+  const unsourced = body.split(/\n\s*\n/).filter((p) => /\d+(\.\d+)?\s?%/.test(p) && !/\]\(https?:/.test(p) && !/according to|source:/i.test(p));
+  const len = (s, a, b) => (s || '').length >= a && (s || '').length <= b;
+  const c = (l, ok, tip) => ({ l, ok: Boolean(ok), tip });
+  return {
+    seo: [
+      c('Main keyword in the title', has(v.title), 'Work the keyword into the title naturally.'),
+      c('Keyword in the URL slug', has((v.slug || '').replace(/-/g, ' ')), 'Use a short slug built from the keyword.'),
+      c('Meta title is 30–60 characters', len(v.metaTitle, 30, 60), 'Write a 30–60 character SEO title.'),
+      c('Meta description is 70–160 characters', len(v.metaDescription, 70, 160), 'Summarise the page in 70–160 characters.'),
+      c('At least 2 “##” section headings', heads.filter((h) => h.l === 2).length >= 2, 'Split the article into clear sections.'),
+      c('At least 2 internal links', internal.length >= 2, 'Link to other pages on this site, e.g. [our SEO services](/services).'),
+      c('Canonical URL set', /^https:\/\//.test(v.canonical || ''), 'Click “Use default” under Canonical URL.'),
+    ],
+    aeo: [
+      c('3 or more FAQs', faqs.length >= 3, 'Add the real questions customers ask.'),
+      c('FAQ answers are short (60 words or fewer)', faqs.length && faqs.every((f) => wordCount(f.a) <= 60), 'Give a direct one-or-two-sentence answer.'),
+      c('A heading phrased as a question', heads.some((h) => /\?$/.test(h.t)), 'e.g. “## How do I get more Google reviews?”'),
+      c('First section opens with a short direct answer', firstSection && wordCount(firstSection) <= 60, 'Start the first “##” section with a 1–2 sentence answer, then explain.'),
+    ],
+    geo: [
+      c('Author named', v.author, 'Add the author name.'),
+      c('Clear definition near the top', /\b(is a|is an|is the|refers to|means)\b/i.test(body.slice(0, 1200)), 'Define the main concept in one plain sentence.'),
+      c('2 or more external source links', external.length >= 2, 'Link reputable sources that back up your claims.'),
+      c('Every statistic has a source', !unsourced.length, unsourced.length ? `Add a source or remove: “${unsourced[0].slice(0, 60)}…”` : ''),
+      c('Descriptive headings (not just “Introduction”/“Conclusion”)', heads.length && !heads.some((h) => /^(introduction|conclusion|overview|summary)$/i.test(h.t)), 'Make each heading say what the section answers.'),
+      c('Brand mentioned where relevant', /click2client/i.test(body), 'Mention Click2Client Media in an example or the closing call to action.'),
+    ],
+  };
+}
+function checksHtml(ch) {
+  const grp = (k, title, note) => { const a = ch[k], pct = Math.round((100 * a.filter((x) => x.ok).length) / a.length); return `<div style="margin-top:14px"><div class="row" style="justify-content:space-between"><b>${title}</b><span class="pill ${pct >= 80 ? 'pass' : 'unavailable'}">${pct}%</span></div><p class="tiny muted" style="margin:2px 0 6px">${note}</p>${a.map((x) => `<div class="small" style="padding:3px 0">${x.ok ? '✅' : '❌'} ${esc(x.l)}${x.ok || !x.tip ? '' : `<div class="tiny muted" style="margin-left:22px">${esc(x.tip)}</div>`}</div>`).join('')}</div>`; };
+  return grp('seo', 'SEO', 'Can search engines read and understand this page?') + grp('aeo', 'AEO — answer engines', 'Short, direct answers to real questions.') + grp('geo', 'GEO — AI search', 'Clear, sourced and trustworthy. No setting guarantees AI assistants will cite a post.');
+}
+
 function blogForm(view, p) {
   const isNew = !p.id;
   const F = (k, l, hint = '', extra = '') => `<div class="field"><label for="b-${k}">${l}</label><input class="input" id="b-${k}" name="${k}" value="${esc(p[k] || '')}" ${extra}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
+  const faqRow = (f = {}) => `<div class="faq-row stack" style="gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px"><input class="input" data-fq placeholder="Question, e.g. How much does local SEO cost?" value="${esc(f.q || '')}"><textarea class="input" data-fa rows="2" placeholder="Short, direct answer (1–2 sentences)">${esc(f.a || '')}</textarea><button class="btn sm ghost del" type="button" data-faq-del style="justify-self:start">Remove</button></div>`;
   view.innerHTML = `${head('Blog', isNew ? 'New post' : 'Edit post', '', '<button class="btn ghost sm" data-back>← All posts</button>')}
     <div class="two" style="align-items:start;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)">
       <form class="card card-pad stack" id="bf" style="gap:14px">
         ${F('title', 'Title *', '', 'required maxlength="140"')}
-        ${F('excerpt', 'Summary', 'One or two sentences. Shown on the blog page and used as the Google description.', 'maxlength="300"')}
-        <div class="field"><label for="b-body">Article</label><textarea class="input" id="b-body" name="body" rows="22" style="font:15px/1.6 var(--mono)">${esc(p.body || '')}</textarea>
-          <span class="hint">Leave a blank line between paragraphs. <code>## Heading</code> · <code>### Sub-heading</code> · <code>- bullet</code> · <code>1. numbered</code> · <code>&gt; quote</code> · <code>**bold**</code> · <code>*italic*</code> · <code>[link text](https://…)</code> · <code>![image description](https://…)</code></span></div>
+        ${F('excerpt', 'Summary', 'One or two sentences. Shown on the blog page.', 'maxlength="300"')}
+        <div class="field"><div class="row" style="justify-content:space-between"><label for="b-body">Article</label><label class="btn sm accent" style="cursor:pointer">⬆ Upload image into article<input type="file" data-inline accept="image/png,image/jpeg,image/webp" hidden></label></div><textarea class="input" id="b-body" name="body" rows="22" style="font:15px/1.6 var(--mono)">${esc(p.body || '')}</textarea>
+          <span class="hint">Leave a blank line between paragraphs. <code>## Heading</code> · <code>### Sub-heading</code> · <code>- bullet</code> · <code>1. numbered</code> · <code>&gt; quote</code> · <code>**bold**</code> · <code>*italic*</code> · <code>[link text](https://…)</code> · table: <code>| A | B |</code> then <code>|---|---|</code>. Use the upload button to add a picture where your cursor is.</span></div>
         <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
           ${F('category', 'Category', 'e.g. SEO, Meta Ads, Websites', 'maxlength="40"')}
-          ${F('author', 'Author', '', 'placeholder="Hari"')}
+          ${F('author', 'Author', 'Named authors build trust with readers and AI search.', 'placeholder="Hari"')}
           ${F('date', 'Publish date', '', 'type="date"')}
           ${F('slug', 'URL slug', 'Leave empty to create it from the title.', `placeholder="${esc(p.id || 'auto')}"`)}
         </div>
+        <h3 style="margin-top:6px">SEO</h3>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
+          ${F('keyword', 'Main keyword', 'The phrase this post should be found for.', 'maxlength="80"')}
+          ${F('tags', 'Tags', 'Comma separated.', 'maxlength="200"')}
+        </div>
+        <div class="field"><label for="b-metaTitle">SEO title <span class="hint" data-count="metaTitle"></span></label><input class="input" id="b-metaTitle" name="metaTitle" value="${esc(p.metaTitle || '')}" maxlength="120"><span class="hint">Shown in Google results. 30–60 characters. Leave empty to use the post title.</span></div>
+        <div class="field"><label for="b-metaDescription">SEO description <span class="hint" data-count="metaDescription"></span></label><textarea class="input" id="b-metaDescription" name="metaDescription" rows="2" maxlength="320">${esc(p.metaDescription || '')}</textarea><span class="hint">70–160 characters. Leave empty to use the summary.</span></div>
+        <div class="field"><label for="b-canonical">Canonical URL</label><div class="row"><input class="input" id="b-canonical" name="canonical" value="${esc(p.canonical || '')}" style="flex:1" placeholder="https://…"><button class="btn sm ghost" type="button" data-canon>Use default</button></div></div>
+        <div class="field"><label for="b-imageAlt">Cover image ALT text</label><input class="input" id="b-imageAlt" name="imageAlt" value="${esc(p.imageAlt || '')}" maxlength="200"><span class="hint">Describe the cover image for screen readers and search.</span></div>
+        <h3 style="margin-top:6px">AEO — FAQs for answer engines</h3>
+        <p class="small muted" style="margin:-8px 0 0">Shown at the end of the post and added as FAQ structured data. Answers must be supported by the article.</p>
+        <div class="stack" id="faqs" style="gap:8px">${(p.faqs || []).map(faqRow).join('')}</div>
+        <div><button class="btn sm ghost" type="button" data-faq-add>＋ Add FAQ</button></div>
         <label class="small" style="display:inline-flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${p.published ? 'checked' : ''}> <b>Published</b> — visible on the website (unticked = draft)</label>
         <div class="row"><button class="btn accent" type="submit">${isNew ? 'Create post' : 'Save post'}</button></div>
       </form>
-      <div class="card card-pad"><h3>Cover image</h3><p class="small muted" style="margin-top:4px">Shown on the blog page, at the top of the article and when the link is shared. Wide images (16:9) work best. Resized automatically.</p>
-        ${isNew ? '<p class="small" style="margin-top:12px">Save the post first, then add a cover image.</p>' : `<div style="margin-top:12px">${p.cover ? `<img src="/blog-img/${esc(p.id)}?v=${p.cover}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : '<div class="small muted" style="aspect-ratio:16/9;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:10px">No cover yet</div>'}</div>
-        <div class="row wrap-row" style="margin-top:12px"><label class="btn sm accent" style="cursor:pointer">${p.cover ? 'Replace' : 'Upload'} cover<input type="file" data-cover accept="image/png,image/jpeg,image/webp" hidden></label>${p.cover ? '<button class="btn sm ghost" type="button" data-cover-del>Remove</button>' : ''}</div>`}
+      <div class="stack" style="gap:18px">
+        <div class="card card-pad"><h3>Cover image</h3><p class="small muted" style="margin-top:4px">Shown on the blog page, at the top of the article and when the link is shared. Wide images (16:9) work best. Resized automatically.</p>
+          ${isNew ? '<p class="small" style="margin-top:12px">Save the post first, then add a cover image.</p>' : `<div style="margin-top:12px">${p.cover ? `<img src="/blog-img/${esc(p.id)}?v=${p.cover}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : '<div class="small muted" style="aspect-ratio:16/9;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:10px">No cover yet</div>'}</div>
+          <div class="row wrap-row" style="margin-top:12px"><label class="btn sm accent" style="cursor:pointer">${p.cover ? 'Replace' : 'Upload'} cover<input type="file" data-cover accept="image/png,image/jpeg,image/webp" hidden></label>${p.cover ? '<button class="btn sm ghost" type="button" data-cover-del>Remove</button>' : ''}</div>`}
+        </div>
+        <div class="card card-pad" style="position:sticky;top:12px"><h3>Readiness checks</h3><p class="tiny muted" style="margin-top:4px">Updates as you type. These catch common problems — they are not ranking guarantees.</p><div id="bchk"></div></div>
       </div>
     </div>`;
   if (!p.slug) view.querySelector('#b-slug').value = p.id || '';
-  document.getElementById('bf').onsubmit = async (e) => {
+  const form = document.getElementById('bf');
+  const values = () => ({ ...Object.fromEntries(new FormData(form)), faqs: [...form.querySelectorAll('.faq-row')].map((r) => ({ q: r.querySelector('[data-fq]').value, a: r.querySelector('[data-fa]').value })) });
+  const refresh = () => {
+    const v = values();
+    for (const k of ['metaTitle', 'metaDescription']) { const el = form.querySelector(`[data-count="${k}"]`); if (el) el.textContent = `(${(v[k] || '').length})`; }
+    document.getElementById('bchk').innerHTML = checksHtml(blogChecks({ ...v, slug: v.slug || p.id || '' }));
+  };
+  refresh();
+  form.addEventListener('input', refresh);
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const body = { ...Object.fromEntries(f), published: f.has('published') };
+    const body = { ...values(), published: f.has('published') };
     try {
       const r = await api(isNew ? '/admin/blog' : `/admin/blog/${encodeURIComponent(p.id)}`, { method: isNew ? 'POST' : 'PUT', body });
       toast(r.published ? 'Saved and published' : 'Saved as draft');
@@ -851,11 +805,30 @@ function blogForm(view, p) {
   };
   view.onclick = async (e) => {
     if (e.target.closest('[data-back]')) { state.blogEdit = null; return blogTab(view); }
+    if (e.target.closest('[data-faq-add]')) { form.querySelector('#faqs').insertAdjacentHTML('beforeend', faqRow()); return refresh(); }
+    if (e.target.closest('[data-faq-del]')) { e.target.closest('.faq-row').remove(); return refresh(); }
+    if (e.target.closest('[data-canon]')) {
+      const slug = form.querySelector('#b-slug').value.trim() || form.querySelector('#b-title').value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      form.querySelector('#b-canonical').value = `${location.origin}/blog/${slug}`; return refresh();
+    }
     if (e.target.closest('[data-cover-del]') && confirm('Remove the cover image?')) {
       try { await api(`/admin/blog/${encodeURIComponent(p.id)}/cover`, { method: 'DELETE' }); toast('Cover removed'); blogTab(view); } catch (ex) { toast(ex.message); }
     }
   };
   view.onchange = async (e) => {
+    if (e.target.matches('[data-inline]')) { // picture inside the article, at the cursor
+      const file = e.target.files[0]; e.target.value = '';
+      if (!file) return;
+      try {
+        toast('Uploading…');
+        const r = await api('/admin/blog/media', { method: 'POST', body: { dataUrl: await shrinkImage(file) } });
+        const ta = form.querySelector('#b-body'), at = ta.selectionEnd ?? ta.value.length;
+        ta.setRangeText(`\n\n![Describe this image](${r.url})\n\n`, at, at, 'end');
+        toast('Image added — replace “Describe this image” with a short description (ALT text).');
+        refresh();
+      } catch (ex) { toast(ex.message || 'Could not read that image.'); }
+      return;
+    }
     const file = e.target.matches('[data-cover]') && e.target.files[0];
     if (!file) return;
     try {

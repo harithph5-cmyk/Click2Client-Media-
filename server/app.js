@@ -394,6 +394,7 @@ admin.get('/blog', h(async (req, res) => res.json(await blog.getBlog())));
 admin.post('/blog', h(async (req, res) => { try { res.status(201).json(await blog.upsertPost(null, req.body || {})); } catch (e) { pfErr(res, e); } }));
 admin.put('/blog/:id', h(async (req, res) => { try { res.json(await blog.upsertPost(req.params.id, req.body || {})); } catch (e) { pfErr(res, e); } }));
 admin.delete('/blog/:id', h(async (req, res) => { await blog.deletePost(req.params.id); res.json({ ok: true }); }));
+admin.post('/blog/media', h(async (req, res) => { try { const id = await blog.saveMedia(req.body?.dataUrl); res.status(201).json({ id, url: `/blog-img/${id}` }); } catch (e) { pfErr(res, e); } }));
 admin.put('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 admin.delete('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 
