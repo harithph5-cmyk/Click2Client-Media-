@@ -113,7 +113,7 @@ app.post('/api/articles/:id/restore', h(async (req, res) => { const a = D.restor
 app.post('/api/analyze', h(async (req, res) => res.json(analyze({ title: '', slug: '', body: '', metaTitle: '', metaDescription: '', author: '', canonical: '', imageAlt: '', keyword: '', tags: [], faqs: [], manual: {}, ...req.body }, pub.siteBase()))));
 
 // ── AI ──────────────────────────────────────────────────────────────────
-const prov = (b) => (['claude', 'gemini'].includes(b?.provider) ? b.provider : ai.providers().claude ? 'claude' : 'gemini');
+const prov = (b) => (['openai', 'gemini'].includes(b?.provider) ? b.provider : ai.providers().openai ? 'openai' : 'gemini');
 app.post('/api/ai/generate', h(async (req, res) => {
   const b = req.body || {};
   need(b, 'topic', 'keyword');

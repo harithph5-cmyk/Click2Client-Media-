@@ -165,9 +165,9 @@ function aiPage(m) {
     <label>Secondary keywords<input name="secondary" placeholder="comma separated (optional)"></label>
     <label>Search intent<select name="intent"><option>informational</option><option>commercial</option><option>transactional</option><option>navigational</option></select></label>
     <label>Target audience<input name="audience" placeholder="small business owners in India"></label>
-    <label>AI provider<select name="provider"><option value="claude" ${S.providers.claude ? '' : 'disabled'}>Claude ${S.providers.claude ? '' : '(no key)'}</option><option value="gemini" ${S.providers.gemini ? '' : 'disabled'}>Gemini ${S.providers.gemini ? '' : '(no key)'}</option></select></label>
+    <label>AI provider<select name="provider"><option value="openai" ${S.providers.openai ? '' : 'disabled'}>ChatGPT ${S.providers.openai ? '' : '(no key)'}</option><option value="gemini" ${S.providers.gemini ? '' : 'disabled'}>Gemini ${S.providers.gemini ? '' : '(no key)'}</option></select></label>
     <div class="full"><button class="btn primary big" id="go">Generate article</button> <span class="hint" id="gs"></span></div></form>
-    ${!S.providers.claude && !S.providers.gemini ? '<div class="notice bad" style="margin-top:14px">No AI key found. Add ANTHROPIC_API_KEY and/or GEMINI_API_KEY to blog-studio/.env and restart.</div>' : ''}
+    ${!S.providers.openai && !S.providers.gemini ? '<div class="notice bad" style="margin-top:14px">No AI key found. Add OPENAI_API_KEY and/or GEMINI_API_KEY to blog-studio/.env and restart.</div>' : ''}
     <p class="hint">AI is told never to invent statistics or sources; you still verify every claim before publishing.</p></div>`;
   $('#gen', m).onsubmit = async (ev) => {
     ev.preventDefault();
@@ -205,7 +205,7 @@ async function google(m) {
 function settings(m) {
   const chip = (ok, l) => `<span class="pill ${ok ? 'published' : 'draft'}">${ok ? '●' : '○'} ${l}</span>`;
   m.innerHTML = head('Settings', 'Connections and integrations.', '<button class="btn" id="out">Sign out</button>') + `<div class="grid cols-2">
-    <div class="card"><h2>Connections</h2><p>${chip(S.publisher, 'Website publishing API')} ${chip(S.providers.claude, 'Claude')} ${chip(S.providers.gemini, 'Gemini')} ${chip(S.google, 'Google')}</p>
+    <div class="card"><h2>Connections</h2><p>${chip(S.publisher, 'Website publishing API')} ${chip(S.providers.openai, 'ChatGPT')} ${chip(S.providers.gemini, 'Gemini')} ${chip(S.google, 'Google')}</p>
     <p class="hint">Keys and tokens live only in <b>blog-studio/.env</b> on the server; they are never sent to the browser.</p>
     <p>Website: <b>${e(S.site)}</b></p>
     <h3 style="margin-top:14px">Website-side setup (one time)</h3><ol class="hint" style="line-height:1.8"><li>Deploy the website with the new <code>server/blog-api.js</code> (already in this repo).</li><li>Generate a token: <code>node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"</code></li><li>Set it as <code>BLOG_API_TOKEN</code> in the website's environment (Hostinger hPanel) <i>and</i> in <code>blog-studio/.env</code>.</li><li>Restart both. This page then shows “Website publishing API” as connected.</li></ol>
@@ -360,7 +360,7 @@ function renderPanel() {
 
 function aiPanel(b) {
   const x = A.manual?.ai || {};
-  b.innerHTML = `<h2>AI writing</h2><div class="fields"><label class="full">Provider<select id="prov"><option value="claude" ${S.providers.claude ? '' : 'disabled'}>Claude</option><option value="gemini" ${S.providers.gemini ? '' : 'disabled'}>Gemini</option></select></label></div>
+  b.innerHTML = `<h2>AI writing</h2><div class="fields"><label class="full">Provider<select id="prov"><option value="openai" ${S.providers.openai ? '' : 'disabled'}>ChatGPT</option><option value="gemini" ${S.providers.gemini ? '' : 'disabled'}>Gemini</option></select></label></div>
   <p><button class="btn primary" id="regen" ${A.keyword && A.topic ? '' : 'disabled'}>${A.body ? 'Regenerate whole article' : 'Generate article'}</button> <span class="hint">${A.keyword && A.topic ? '' : 'Fill topic and primary keyword first.'}</span></p>
   ${A.body ? '<p class="hint" style="color:var(--bad)">Regenerating replaces the title, body, FAQs and metadata (a revision is kept).</p>' : ''}
   <h3 style="margin-top:14px">Rewrite a section</h3><p class="hint">Put the cursor inside a section (or select text) in the editor, then describe the change.</p>
@@ -371,7 +371,7 @@ function aiPanel(b) {
   ${x.internalLinks?.length ? `<h3>Internal link suggestions</h3><ul class="ckl">${x.internalLinks.map((l) => `<li><span></span><span><b>${e(l.anchor)}</b> → <code>${e(l.url)}</code><small>${e(l.reason)}</small></span></li>`).join('')}</ul>` : ''}
   ${x.externalSources?.length ? `<h3>External sources to consider</h3><div class="notice">AI suggested these. Open each one and confirm it says what you claim before linking.</div><ul class="ckl" style="margin-top:6px">${x.externalSources.map((l) => `<li><span></span><span><b>${e(l.name)}</b>${l.url ? ` — <a href="${e(l.url)}" target="_blank" rel="noopener">${e(l.url)}</a>` : ''}<small>${e(l.why)}</small></span></li>`).join('')}</ul>` : ''}
   ${x.needsSources?.length ? `<h3>Claims needing a verified source</h3><ul class="ckl">${x.needsSources.map((l) => `<li><span class="i">!</span><span>${e(l)}</span></li>`).join('')}</ul>` : ''}`;
-  $('#prov', b).value = x.provider || (S.providers.claude ? 'claude' : 'gemini');
+  $('#prov', b).value = ['openai', 'gemini'].includes(x.provider) && S.providers[x.provider] ? x.provider : S.providers.openai ? 'openai' : 'gemini';
   $('#regen', b).onclick = async () => {
     if (A.body && !confirm('Replace the current article with a newly generated one?')) return;
     const btn = $('#regen', b); btn.disabled = true; btn.textContent = 'Writing… (30–90s)';
@@ -414,11 +414,11 @@ function optPanel(b, k) {
   $('#rv', b).onchange = (ev) => { A.review[k] = ev.target.value; api(`/articles/${A.id}`, 'PUT', { review: { [k]: ev.target.value } }).then(() => toast('Review status saved.')); };
   $$('[data-man]', b).forEach((c) => (c.onchange = () => { A.manual = { ...A.manual, [c.dataset.man]: c.checked }; patch({ manual: A.manual }); }));
   const sug = $('#sug', b);
-  if (sug) sug.onclick = async () => { sug.disabled = true; try { const r2 = await api('/ai/improve', 'POST', { provider: S.providers.claude ? 'claude' : 'gemini', article: { title: A.title, body: A.body }, panel: k, failing }); $('#sugout', b).innerHTML = `<ul class="ckl" style="margin-top:8px">${(r2.suggestions || []).map((s) => `<li><span class="i">→</span><span><b>${e(s.issue)}</b><small>${e(s.fix)}</small></span></li>`).join('')}</ul>`; } catch (er) { $('#sugout', b).innerHTML = `<div class="notice bad">${e(er.message)}</div>`; } sug.disabled = false; };
+  if (sug) sug.onclick = async () => { sug.disabled = true; try { const r2 = await api('/ai/improve', 'POST', { provider: S.providers.openai ? 'openai' : 'gemini', article: { title: A.title, body: A.body }, panel: k, failing }); $('#sugout', b).innerHTML = `<ul class="ckl" style="margin-top:8px">${(r2.suggestions || []).map((s) => `<li><span class="i">→</span><span><b>${e(s.issue)}</b><small>${e(s.fix)}</small></span></li>`).join('')}</ul>`; } catch (er) { $('#sugout', b).innerHTML = `<div class="notice bad">${e(er.message)}</div>`; } sug.disabled = false; };
   const mk = $('#mkfaq', b);
   if (mk) mk.onclick = async () => {
     mk.disabled = true; mk.textContent = 'Generating…';
-    try { const r2 = await api('/ai/faqs', 'POST', { provider: S.providers.claude ? 'claude' : 'gemini', article: { title: A.title, keyword: A.keyword, body: A.body } }); A.faqs = r2.faqs.filter((f) => f.q && f.a); patch({ faqs: A.faqs }, true); renderFaqs(); renderLive(); b.insertAdjacentHTML('beforeend', `<h3 style="margin-top:14px">Conversational queries</h3><ul class="hint">${(r2.conversational || []).map((q) => `<li>${e(q)}</li>`).join('')}</ul>`); toast('FAQs added — review the answers against your article.'); } catch (er) { toast(er.message, true); }
+    try { const r2 = await api('/ai/faqs', 'POST', { provider: S.providers.openai ? 'openai' : 'gemini', article: { title: A.title, keyword: A.keyword, body: A.body } }); A.faqs = r2.faqs.filter((f) => f.q && f.a); patch({ faqs: A.faqs }, true); renderFaqs(); renderLive(); b.insertAdjacentHTML('beforeend', `<h3 style="margin-top:14px">Conversational queries</h3><ul class="hint">${(r2.conversational || []).map((q) => `<li>${e(q)}</li>`).join('')}</ul>`); toast('FAQs added — review the answers against your article.'); } catch (er) { toast(er.message, true); }
     mk.disabled = false; mk.textContent = 'Generate FAQs from article';
   };
 }
