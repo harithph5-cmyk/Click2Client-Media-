@@ -1,7 +1,7 @@
-// Claude + Gemini over plain REST. Keys come from the environment only and are
+// ChatGPT (OpenAI) + Gemini over plain REST. Keys come from the environment only and are
 // never sent to the browser.
 
-export const providers = () => ({ claude: Boolean(process.env.ANTHROPIC_API_KEY), gemini: Boolean(process.env.GEMINI_API_KEY) });
+export const providers = () => ({ openai: Boolean(process.env.OPENAI_API_KEY), gemini: Boolean(process.env.GEMINI_API_KEY) });
 
 async function post(url, headers, body) {
   const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(170_000) });
@@ -11,7 +11,7 @@ async function post(url, headers, body) {
 }
 
 export async function llm(provider, system, user, { json = true, maxTokens = 8000 } = {}) {
-  if (!providers()[provider]) throw Object.assign(new Error(`${provider === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY'} is not set in blog-studio/.env.`), { status: 400 });
+  if (!providers()[provider]) throw Object.assign(new Error(`${provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY'} is not set in blog-studio/.env.`), { status: 400 });
   let text;
   if (provider === 'gemini') {
     const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -21,10 +21,11 @@ export async function llm(provider, system, user, { json = true, maxTokens = 800
     });
     text = j.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
   } else {
-    const j = await post('https://api.anthropic.com/v1/messages', { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' }, {
-      model: process.env.CLAUDE_MODEL || 'claude-sonnet-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }],
+    const j = await post('https://api.openai.com/v1/chat/completions', { authorization: `Bearer ${process.env.OPENAI_API_KEY}` }, {
+      model: process.env.OPENAI_MODEL || 'gpt-4o', max_completion_tokens: maxTokens, ...(json ? { response_format: { type: 'json_object' } } : {}),
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
     });
-    text = j.content?.map((b) => b.text || '').join('') || '';
+    text = j.choices?.[0]?.message?.content || '';
   }
   if (!text.trim()) throw Object.assign(new Error('The AI returned an empty response. Try again.'), { status: 502 });
   if (!json) return text.trim();
