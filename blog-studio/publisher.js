@@ -37,6 +37,7 @@ export async function push(a, mode, publishAt) {
   return { url: post.url, status: post.status, verified };
 }
 
+export const uploadImage = (dataUrl) => call('POST', '/images', { dataUrl });
 export const list = () => call('GET', '/posts');
 export const remove = (slug) => call('DELETE', `/posts/${encodeURIComponent(slug)}`);
 export const siteBase = base;

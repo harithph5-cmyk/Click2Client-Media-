@@ -20,9 +20,9 @@ let toastT;
 function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (bad ? ' bad' : ''); t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), bad ? 6000 : 2800); }
 
 // ── Icons / nav ──────────────────────────────────────────────────────────
-const IC = { grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', plus: 'M12 5v14M5 12h14', list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4', spark: 'M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z', search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4', msg: 'M4 5h16v11H9l-5 4z', globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18', chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2', gear: 'M12 9a3 3 0 100 6 3 3 0 000-6zM19 12l2-1-2-4-2 .5-1.5-1L15 4H9l-.5 2.5-1.5 1L5 7l-2 4 2 1v1l-2 1 2 4 2-.5 1.5 1L9 20h6l.5-2.5 1.5-1 2 .5 2-4-2-1z' };
+const IC = { grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z', plus: 'M12 5v14M5 12h14', list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01', cal: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4', spark: 'M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z', search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM20 20l-4-4', msg: 'M4 5h16v11H9l-5 4z', globe: 'M12 3a9 9 0 100 18 9 9 0 000-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18', chart: 'M4 20V10M10 20V4M16 20v-8M22 20H2', img: 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M9 9h.01', gear: 'M12 9a3 3 0 100 6 3 3 0 000-6zM19 12l2-1-2-4-2 .5-1.5-1L15 4H9l-.5 2.5-1.5 1L5 7l-2 4 2 1v1l-2 1 2 4 2-.5 1.5 1L9 20h6l.5-2.5 1.5-1 2 .5 2-4-2-1z' };
 const ico = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="${IC[k]}"/></svg>`;
-const NAV = [['dashboard', 'Dashboard', 'grid'], ['create', 'Create Blog', 'plus'], ['blogs', 'All Blogs', 'list'], ['calendar', 'Content Calendar', 'cal'], ['ai', 'AI Article Generator', 'spark'], ['seo', 'SEO Optimization', 'search'], ['aeo', 'AEO Optimization', 'msg'], ['geo', 'GEO Optimization', 'globe'], ['google', 'Google Performance', 'chart'], ['settings', 'Settings', 'gear']];
+const NAV = [['dashboard', 'Dashboard', 'grid'], ['create', 'Create Blog', 'plus'], ['blogs', 'All Blogs', 'list'], ['media', 'Media Library', 'img'], ['calendar', 'Content Calendar', 'cal'], ['ai', 'AI Article Generator', 'spark'], ['seo', 'SEO Optimization', 'search'], ['aeo', 'AEO Optimization', 'msg'], ['geo', 'GEO Optimization', 'globe'], ['google', 'Google Performance', 'chart'], ['settings', 'Settings', 'gear']];
 
 // ── Login ────────────────────────────────────────────────────────────────
 function showLogin() { $('#app').hidden = true; $('#login').hidden = false; }
@@ -48,7 +48,7 @@ async function route() {
   const active = page === 'edit' ? 'create' : page;
   $('#nav').innerHTML = NAV.map(([k, l, i]) => `<a href="#/${k}" class="${k === active ? 'on' : ''}">${ico(i)}${l}</a>`).join('');
   stopEditor();
-  const fn = { dashboard, create, blogs, calendar, ai: aiPage, seo: (m) => optPage(m, 'seo'), aeo: (m) => optPage(m, 'aeo'), geo: (m) => optPage(m, 'geo'), google, settings, edit: (m) => editor(m, arg, params.get('tab')) }[page] || dashboard;
+  const fn = { dashboard, create, blogs, media, calendar, ai: aiPage, seo: (m) => optPage(m, 'seo'), aeo: (m) => optPage(m, 'aeo'), geo: (m) => optPage(m, 'geo'), google, settings, edit: (m) => editor(m, arg, params.get('tab')) }[page] || dashboard;
   const main = $('#main');
   main.innerHTML = '<p class="muted" style="padding:30px">Loading…</p>';
   try { await fn(main); } catch (er) { if (er.message !== 'Signed out') main.innerHTML = `<div class="card"><div class="notice bad">${e(er.message)}</div></div>`; }
@@ -257,7 +257,7 @@ async function editor(m, id, startTab) {
       <div id="imgprev" style="margin:10px 0">${A.image ? `<img src="${e(A.image)}" style="max-width:100%;max-height:180px;border-radius:14px">` : ''}</div>
       <label>Image ALT text<input data-f="imageAlt" value="${e(A.imageAlt)}" placeholder="Describe the image for screen readers and search"></label></div>
     <div class="card"><h2>Article content</h2>
-      <div class="toolbar" id="tb"><button data-a="h2">H2</button><button data-a="h3">H3</button><button data-a="b"><b>B</b></button><button data-a="i"><i>I</i></button><button data-a="ul">• List</button><button data-a="ol">1. List</button><button data-a="q">❝ Quote</button><button data-a="link">🔗 Link</button><button data-a="img">🖼 Image</button><button data-a="table">▦ Table</button><span class="sp"></span><button data-m="write" class="on">Write</button><button data-m="split">Split</button><button data-m="prev">Preview</button></div>
+      <div class="toolbar" id="tb"><button data-a="h2">H2</button><button data-a="h3">H3</button><button data-a="b"><b>B</b></button><button data-a="i"><i>I</i></button><button data-a="ul">• List</button><button data-a="ol">1. List</button><button data-a="q">❝ Quote</button><button data-a="link">🔗 Link</button><button data-a="upload">⬆ Upload image</button><button data-a="img">🖼 Image URL</button><button data-a="table">▦ Table</button><span class="sp"></span><button data-m="write" class="on">Write</button><button data-m="split">Split</button><button data-m="prev">Preview</button></div>
       <div class="write" id="wr"><textarea id="body" spellcheck="true">${e(A.body)}</textarea><div class="live" id="live"></div></div>
       <p class="hint">Headings, lists, tables, links and images use simple Markdown — the live preview shows exactly how the website renders it. FAQs are added below.</p></div>
     <div class="card"><div class="row" style="justify-content:space-between"><h2>FAQ section</h2><button class="btn sm" id="addfaq">＋ Add question</button></div><div id="faqs"></div></div>
@@ -307,6 +307,7 @@ function tool(kind) {
   if (kind === 'b') return ins(`**${sel || 'bold text'}**`, 2, 2 + (sel || 'bold text').length);
   if (kind === 'i') return ins(`*${sel || 'italic text'}*`, 1, 1 + (sel || 'italic text').length);
   if (kind === 'link') { const u = prompt('Link URL (https://… or /page)'); if (u) ins(`[${sel || 'link text'}](${u})`); return; }
+  if (kind === 'upload') return pickImage((url, alt) => ins(`![${alt}](${url})`));
   if (kind === 'img') { const u = prompt('Image URL (must be https://…)'); if (u) ins(`![${prompt('ALT text') || ''}](${u})`); return; }
   if (kind === 'table') return ins('\n| Column 1 | Column 2 | Column 3 |\n|---|---|---|\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n');
 }
@@ -328,12 +329,42 @@ function renderMeta() {
   $('#su').textContent = (A.canonical || url).replace(/^https?:\/\//, '').replace(/\//g, ' › '); $('#st2').textContent = mt.slice(0, 62) || 'Meta title'; $('#sd').textContent = md.slice(0, 160) || 'Meta description';
 }
 
-async function loadImage(file) {
+async function resizeImage(file) {
   const img = new Image(); img.src = URL.createObjectURL(file);
   await img.decode().catch(() => {});
   let w = Math.min(1400, img.width), q = 0.85, out;
   for (let i = 0; i < 5; i++) { const c = document.createElement('canvas'); c.width = w; c.height = Math.round((img.height * w) / img.width); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); out = c.toDataURL('image/jpeg', q); if (out.length < 1_200_000) break; w = Math.round(w * 0.8); q -= 0.08; }
+  return out;
+}
+async function loadImage(file) {
+  const out = await resizeImage(file);
   patch({ image: out }, true); $('#imgprev').innerHTML = `<img src="${out}" style="max-width:100%;max-height:180px;border-radius:14px">`; $('#imgx').hidden = false;
+}
+
+// Upload an image to the website's media store; returns its public URL.
+const uploadMedia = async (file, alt) => api('/media', 'POST', { dataUrl: await resizeImage(file), alt, name: file.name });
+function pickImage(cb) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp';
+  inp.onchange = async () => {
+    if (!inp.files[0]) return;
+    const alt = prompt('ALT text for this image (describe what it shows):', '') ?? '';
+    try { toast('Uploading…'); const r = await uploadMedia(inp.files[0], alt); cb(r.url, alt); toast('Image uploaded to your website and inserted.'); } catch (er) { toast(er.message, true); }
+  };
+  inp.click();
+}
+
+async function media(m) {
+  const { media: items } = await api('/media');
+  const card = (x) => `<div class="card"><img src="${e(x.url)}" alt="${e(x.alt)}" style="width:100%;height:140px;object-fit:cover;border-radius:14px"><p class="hint">${e(x.alt || '(no ALT text)')}</p><div class="row"><button class="btn sm" data-copy="${e('![' + x.alt + '](' + x.url + ')')}">Copy Markdown</button><button class="btn sm danger" data-rm="${x.id}">Remove</button></div></div>`;
+  m.innerHTML = head('Media Library', 'Images hosted on your website, ready to use inside articles.') + `<div class="card"><div class="row"><input type="file" id="mf" accept="image/png,image/jpeg,image/webp" style="max-width:300px"><input id="ma" placeholder="ALT text (describe the image)" style="max-width:340px"><button class="btn primary" id="mu">Upload</button></div>
+    <p class="hint">PNG, JPG or WebP. Images are resized and stored on ${e(S.site)}. In an article, use the “⬆ Upload image” toolbar button, or paste the Markdown from here.</p></div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin-top:16px">${items.map(card).join('') || '<p class="muted">No images yet.</p>'}</div>`;
+  $('#mu', m).onclick = async () => { const f = $('#mf', m).files[0]; if (!f) return toast('Choose an image first.', true); $('#mu', m).disabled = true; try { await uploadMedia(f, $('#ma', m).value); toast('Uploaded.'); route(); } catch (er) { toast(er.message, true); $('#mu', m).disabled = false; } };
+  m.onclick = async (ev) => {
+    const c = ev.target.closest('[data-copy]'), r = ev.target.closest('[data-rm]');
+    if (c) { await navigator.clipboard.writeText(c.dataset.copy); toast('Markdown copied.'); }
+    if (r && confirm('Remove from the library list? (The image file stays on the website, so articles using it keep working.)')) { await api('/media/' + r.dataset.rm, 'DELETE'); route(); }
+  };
 }
 
 async function revisions() {

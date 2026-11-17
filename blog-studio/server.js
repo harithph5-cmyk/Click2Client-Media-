@@ -184,6 +184,17 @@ app.put('/api/calendar/:id', h(async (req, res) => { // plan / reschedule
   res.json(D.save(a.id, { plannedDate: req.body.date }));
 }));
 
+// ── Media library: images are hosted by the website (/blog-img/<id>) ─────
+app.get('/api/media', h(async (req, res) => res.json({ media: D.db.prepare('SELECT * FROM media ORDER BY created_at DESC').all() })));
+app.post('/api/media', h(async (req, res) => {
+  const { dataUrl, alt, name } = req.body || {};
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(dataUrl || '')) throw bad('Upload a PNG, JPG or WebP image.');
+  const r = await pub.uploadImage(dataUrl).catch((e) => { throw bad(`Not uploaded — the website said: ${e.message}`, e.status || 502); });
+  D.db.prepare('INSERT OR REPLACE INTO media (id,url,alt,name,created_at) VALUES (?,?,?,?,?)').run(r.id, r.url, String(alt || '').slice(0, 200), String(name || '').slice(0, 120), new Date().toISOString());
+  res.status(201).json({ id: r.id, url: r.url, alt: String(alt || '') });
+}));
+app.delete('/api/media/:id', h(async (req, res) => { D.db.prepare('DELETE FROM media WHERE id=?').run(req.params.id); res.json({ ok: true }); })); // removes from the library list only
+
 // ── Settings / Google ───────────────────────────────────────────────────
 app.put('/api/settings', h(async (req, res) => { D.setSetting('gsc_site', req.body?.gscSite || ''); D.setSetting('ga4_property', req.body?.ga4 || ''); res.json({ ok: true }); }));
 const needGoogle = (k) => { if (!google.configured()) throw bad('Google service account is not configured (see blog-studio/.env.example).', 409); if (!D.getSetting(k)) throw bad(k === 'gsc_site' ? 'Set your Search Console property in Settings first.' : 'Set your GA4 property ID in Settings first.', 409); };

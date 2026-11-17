@@ -34,6 +34,7 @@ export function blogApi(siteUrl) {
   r.post('/posts', h(async (req, res) => res.status(201).json(view(req, await blog.upsertRich(null, req.body || {})))));
   r.put('/posts/:id', h(async (req, res) => res.json(view(req, await blog.upsertRich(req.params.id, req.body || {})))));
   r.delete('/posts/:id', h(async (req, res) => { await blog.deletePost(req.params.id); res.json({ ok: true }); }));
+  r.post('/images', h(async (req, res) => { const id = await blog.saveMedia(req.body?.dataUrl); res.status(201).json({ id, url: `${siteUrl(req)}/blog-img/${id}` }); }));
   r.put('/posts/:id/cover', h(async (req, res) => { await blog.setCover(req.params.id, req.body?.dataUrl ?? null); res.json({ ok: true }); }));
   return r;
 }

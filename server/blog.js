@@ -95,8 +95,8 @@ export async function upsertPost(id, body) {
 // In-article image: stored like a cover under a content-hash id and served by /blog-img/:id.
 export async function saveMedia(dataUrl) {
   const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
-  if (!m) throw new Error('Upload a PNG, JPG or WebP image.');
-  if (m[3].length > 1_400_000) throw new Error('Image is too large — please use one under 1 MB.');
+  if (!m) throw Object.assign(new Error('Upload a PNG, JPG or WebP image.'), { status: 400 });
+  if (m[3].length > 1_400_000) throw Object.assign(new Error('Image is too large — please use one under 1 MB.'), { status: 400 });
   const id = 'media-' + crypto.createHash('sha256').update(m[3]).digest('hex').slice(0, 12);
   await store.setSetting(`bimg:${id}`, { mime: m[1], data: m[3] });
   return id;
