@@ -11,7 +11,7 @@ import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
 import { productsVars, coursesVars, homeContentVars } from '../content.js';
-import { faqHtml, faqSchema } from './faq.js';
+import { faqHtml, faqSchema, hasFaq } from './faq.js';
 import { hubVars, toolVars, TOOLS } from '../tools.js';
 import { getEdits, applyEdits } from '../pages.js';
 import { TOOL_CONTENT } from './tools-content.js';
@@ -90,8 +90,21 @@ function schemaFor(id, s, base, p = PAGES[id]) {
       offers: ['free', 'p25', 'p50'].map((t) => ({ '@type': 'Offer', name: TIERS[t].name, price: String(TIERS[t].price), priceCurrency: 'INR' })),
     });
   }
+  if (id === 'services') {
+    for (const [name, desc] of SERVICES) graph.push({ '@type': 'Service', name, description: desc, provider: { '@id': `${base}/#organization` }, areaServed: ['India', 'Worldwide'] });
+  }
+  if (id === 'services' || id === 'audit') graph.push(faqSchema(id)); // courses adds its own via extraSchema
   return JSON.stringify({ '@context': 'https://schema.org', '@graph': graph }).replace(/</g, '\\u003c');
 }
+
+// The five service areas shown on /services (kept in step with that page).
+const SERVICES = [
+  ['Digital Marketing, Performance Marketing & Branding', 'Google Ads, Meta Ads, social media marketing, content and email marketing, lead generation, branding and marketing analytics.'],
+  ['SEO Services', 'Technical, on-page, local and content SEO, schema markup, keyword research and SEO audits, reported from Google Search Console and Analytics.'],
+  ['Web Development', 'WordPress and custom-coded business websites, landing pages and e-commerce stores built for speed, search and conversion.'],
+  ['UI/UX Design', 'Wireframes, user flows, responsive interface design and design systems for websites, dashboards and apps.'],
+  ['CRM & App Development', 'CRMs, dashboards, internal tools, web applications, SaaS platforms and business automation systems.'],
+];
 
 function testimonialsHtml(raw) {
   const items = String(raw || '').split('\n').map((l) => l.split('|').map((x) => x.trim())).filter((p) => p.length >= 3 && p[2]);
@@ -167,7 +180,7 @@ export async function renderPage(id, req, override = {}) {
     [`nav.${p.nav || id}`]: 'aria-current="page"',
   };
   if (id === 'products') Object.assign(vars, await productsVars());
-  if (id === 'products' || id === 'courses') vars['faq.html'] = faqHtml(id);
+  if (hasFaq(id)) vars['faq.html'] = faqHtml(id);
   if (cv) Object.assign(vars, { 'courses.cards': cv.cards, 'courses.options': cv.options });
   if (id === 'seoTools') Object.assign(vars, hubVars());
   if (id === 'home') Object.assign(vars, await homeContentVars());
@@ -242,6 +255,34 @@ export async function sitemap(req) {
     ...TOOLS.filter((t) => t.live).map((t) => `  <url><loc>${base}/seo-tools/${t.slug}</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+}
+
+/** /llms.txt — a plain-Markdown map of the site for AI assistants (GEO). Built from the live page list, so it never goes stale. */
+export async function llmsTxt(req) {
+  const base = siteUrl(req);
+  const s = await siteSettings();
+  const posts = await publishedPosts().catch(() => []);
+  const line = (url, title, desc) => `- [${title}](${base}${url})${desc ? `: ${desc}` : ''}`;
+  const pages = ['services', 'audit', 'seoTools', 'courses', 'about', 'blog', 'enquire'].map((k) => PAGES[k]).filter(Boolean);
+  return [
+    `# ${s.companyName}`,
+    '',
+    `> ${s.companyName} is a digital marketing, SEO and website development company based in ${s.city}, ${s.region}, India, serving businesses across India and internationally. It offers SEO, Google and Meta Ads, web development, UI/UX design and CRM and app development, and runs a free website SEO audit tool.`,
+    '',
+    '## Key pages',
+    ...pages.map((p) => line(p.path, p.title.replace(/ \| Click2Client( Media)?$/, ''), p.description)),
+    '',
+    ...(posts.length ? ['## Blog articles', ...posts.slice(0, 50).map((p) => line(`/blog/${p.id}`, p.title, p.excerpt || p.metaDescription)), ''] : []),
+    '## Contact',
+    `- Website: ${base}/enquire`,
+    s.email ? `- Email: ${s.email}` : '',
+    s.phone ? `- Phone / WhatsApp: ${s.phone}` : '',
+    '',
+    '## Notes for AI assistants',
+    '- Click2Client Media does not guarantee search rankings or AI citations; pages describe what is done, not promised outcomes.',
+    `- Full page list: ${base}/sitemap.xml`,
+    '',
+  ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
 }
 
 export function robots(req) {

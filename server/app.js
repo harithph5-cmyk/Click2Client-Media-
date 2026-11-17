@@ -18,7 +18,7 @@ import * as store from './store/db.js';
 import { TIERS, publicTiers, shapeAudit, rateLimited, refreshPricing, savePricing } from './commerce/plans.js';
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
-import { renderPage, renderPost, renderTool, PAGES, sitemap, robots, siteSettings, siteUrl } from './site/render.js';
+import { renderPage, renderPost, renderTool, PAGES, sitemap, robots, llmsTxt, siteSettings, siteUrl } from './site/render.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
 import * as pages from './pages.js';
 import * as media from './media.js';
@@ -491,6 +491,7 @@ app.get('/blog-img/:id', h(async (req, res) => {
 
 app.get('/sitemap.xml', h(async (req, res) => res.type('application/xml').send(await sitemap(req))));
 app.get('/robots.txt', (req, res) => res.type('text/plain').send(robots(req)));
+app.get('/llms.txt', h(async (req, res) => res.type('text/plain').set('cache-control', 'public, max-age=3600').send(await llmsTxt(req))));
 
 const privatePage = (file) => (req, res) => res.set('x-robots-tag', 'noindex, nofollow').sendFile(path.join(pub, file));
 app.get('/audit/:id', privatePage('audit.html'));

@@ -3,7 +3,27 @@
 // Answers lead with the direct answer, then add detail, which suits AI answer
 // engines. Course facts come from the supplied course plans — keep them in sync.
 
+import { TIERS } from '../commerce/plans.js';
+
 const FAQS = {
+  services: [
+    ['What services does Click2Client Media offer?', 'Click2Client Media offers digital marketing (Google Ads, Meta Ads, social media and branding), SEO, web development on WordPress and custom code, UI/UX design, and CRM and app development. It is based in Madurai, Tamil Nadu, and works with businesses across India and internationally.'],
+    ['What is included in your SEO services?', 'SEO services cover technical SEO, on-page SEO, schema markup, internal linking, local and e-commerce SEO, off-page SEO, keyword research, competitor analysis, content SEO and strategy. Work starts with an evidence-based audit, and progress is reported from Google Search Console and Google Analytics.'],
+    ['Do you guarantee first-page Google rankings?', 'No. Nobody can honestly guarantee Google rankings. We fix what is holding your website back, show you the evidence, and report on real results such as visibility, traffic and enquiries.'],
+    ['What kinds of websites do you build?', 'We build WordPress websites (business, corporate, landing pages and WooCommerce e-commerce stores) and custom-coded websites using HTML, CSS, JavaScript and modern frameworks. They are built to load fast on mobile and to be search-friendly from the start.'],
+    ['Do you build CRMs and custom business software?', 'Yes. We build CRMs, dashboards, internal tools, web applications, SaaS platforms and business automation systems that replace spreadsheets and manual follow-ups.'],
+    ['How does a project work?', 'Every project follows five steps: discover your business and goals, audit your current digital presence, build the right strategy, execute across SEO, marketing and technology, then measure, optimise and scale.'],
+    ['Do you work with businesses outside Madurai?', 'Yes. We are based in Madurai, Tamil Nadu, and work with businesses across India and internationally.'],
+    ['How do I get started?', 'Run the free 10-page SEO audit or send an enquiry. We will reply with honest next steps.'],
+  ],
+  audit: [
+    ['What does the free SEO audit include?', 'The free audit crawls up to 10 pages of your live website and gives you an overall SEO score with category scores. It checks titles, meta descriptions, headings, image ALT text, broken links, canonical tags, your sitemap and robots.txt, indexability, HTTPS, and speed and mobile indicators, with evidence for every finding.'],
+    ['What do the paid audits add?', 'The 25-page audit (₹{p25}) checks 25 pages and adds how to fix every issue, with platform-specific steps. The 50-page SEO Growth Audit (₹{p50}) checks 50 pages and adds priority, impact and difficulty for every issue, a personalised 4-week roadmap and a downloadable PDF report.'],
+    ['What does the SEO audit check?', 'It checks technical SEO (robots.txt, XML sitemap, canonical tags, index and noindex, HTTP status, redirects, broken links, HTTPS and crawlability), on-page SEO (titles, meta descriptions, heading structure, image ALT text and links), and performance and schema (Core Web Vitals where Google has data, and Organization, LocalBusiness, Product, Article, FAQ and Breadcrumb schema).'],
+    ['How is the SEO score calculated?', 'A rule engine scores the checks that could be verified on your live pages out of 100. If something cannot be verified, for example Core Web Vitals for a site Google has no data on, the report says so instead of guessing.'],
+    ['Do you guarantee first-page rankings?', 'No. Nobody can honestly guarantee Google rankings. The audit shows you the evidence for what is holding your website back, so you can fix it or have our team do it.'],
+    ['Can you fix the issues the audit finds?', 'Yes. Our team handles SEO implementation, website fixes and redesigns, so the same people who find the problems can solve them.'],
+  ],
   courses: [
     ['What will I learn in the SEO and digital marketing course?', 'The AI-Powered Digital Marketing & Growth Engineering course covers SEO, Local SEO, GEO and AEO, content strategy, social media marketing, Meta Ads, Google Ads, LinkedIn advertising, email and WhatsApp marketing, and analytics with GA4, Google Search Console and Google Tag Manager. It also includes WordPress, AI content workflows and a capstone project.'],
     ['What will I learn in the AI Practitioner & Business Automation course?', 'You learn to use AI tools and apply them to business work: prompt engineering, ChatGPT, Claude and Google Workspace, AI image, video and voice creation, AI vibe coding, APIs and webhooks, automation with n8n, Make.com and Zapier, AI agents, custom chatbots, RAG and voice agents, plus AI testing, privacy and governance.'],
@@ -29,5 +49,9 @@ const FAQS = {
 
 const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-export const faqHtml = (id) => FAQS[id].map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('');
-export const faqSchema = (id) => ({ '@type': 'FAQPage', mainEntity: FAQS[id].map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) });
+// Audit prices are editable in the admin, so answers carry {p25}/{p50} placeholders.
+const fill = (s) => s.replace(/\{(p25|p50)\}/g, (_, k) => TIERS[k].price);
+
+export const hasFaq = (id) => Object.hasOwn(FAQS, id);
+export const faqHtml = (id) => FAQS[id].map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${esc(fill(a))}</p></details>`).join('');
+export const faqSchema = (id) => ({ '@type': 'FAQPage', mainEntity: FAQS[id].map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: fill(a) } })) });
