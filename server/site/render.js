@@ -76,7 +76,8 @@ function schemaFor(id, s, base, p = PAGES[id]) {
   const graph = [org, { '@type': 'WebSite', '@id': `${base}/#website`, url: `${base}/`, name: s.companyName, publisher: { '@id': `${base}/#organization` } }];
   if (p.post) {
     graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: 'Blog', item: `${base}/blog` }, { '@type': 'ListItem', position: 3, name: p.post.title, item: `${base}${p.path}` }] });
-    graph.push({ '@type': 'BlogPosting', headline: p.post.title, description: p.description, datePublished: p.post.date, dateModified: p.post.updated || p.post.date, author: { '@type': 'Person', name: p.post.author || 'Hari' }, publisher: { '@id': `${base}/#organization` }, mainEntityOfPage: `${base}${p.path}`, ...(p.image ? { image: p.image } : {}) });
+    graph.push({ '@type': 'BlogPosting', headline: p.post.title, description: p.description, datePublished: p.post.date, dateModified: p.post.updated || p.post.date, author: { '@type': 'Person', name: p.post.author || 'Hari' }, publisher: { '@id': `${base}/#organization` }, mainEntityOfPage: `${base}${p.path}`, ...(p.image ? { image: p.image } : {}), ...(p.post.tags?.length ? { keywords: p.post.tags.join(', ') } : {}) });
+    if (p.post.faqs?.length) graph.push({ '@type': 'FAQPage', mainEntity: p.post.faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) });
   } else if (p.trail) {
     graph.push({ '@type': 'BreadcrumbList', itemListElement: p.trail.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, item: `${base}${t.path}` })) });
     if (p.extraSchema) graph.push(p.extraSchema);
@@ -106,7 +107,7 @@ export async function renderPage(id, req, override = {}) {
   const vars = {
     'title': esc(p.title),
     'description': esc(p.description),
-    'canonical': esc(base + p.path),
+    'canonical': esc(p.canonical || base + p.path),
     'base': esc(base),
     'company': esc(s.companyName),
     'phone': esc(s.phone),
@@ -146,7 +147,7 @@ export async function renderPage(id, req, override = {}) {
 export async function renderPost(req, post) {
   const base = siteUrl(req);
   const v = await postVars(post, base);
-  const page = { path: `/blog/${post.id}`, file: 'blog-post', nav: 'blog', title: `${post.title} | Click2Client Media Blog`, description: post.excerpt || post.title, post, image: post.cover ? v.ogImage : '' };
+  const page = { path: `/blog/${post.id}`, file: 'blog-post', nav: 'blog', title: post.metaTitle || `${post.title} | Click2Client Media Blog`, description: post.metaDescription || post.excerpt || post.title, canonical: post.canonical, post, image: post.cover ? v.ogImage : '' };
   return renderPage('blogPost', req, { page, vars: v });
 }
 

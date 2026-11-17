@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
     "dev": "node --watch --env-file-if-exists=.env server/index.js",
-    "audit": "node --env-file-if-exists=.env scripts/cli-audit.js"
+    "studio": "node --env-file-if-exists=blog-studio/.env blog-studio/server.js",
+    "audit":"node --env-file-if-exists=.env scripts/cli-audit.js"
   },
   "engines": {
     "node": ">=22.13"

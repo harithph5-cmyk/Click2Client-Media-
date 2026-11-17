@@ -25,6 +25,7 @@ import * as media from './media.js';
 import * as content from './content.js';
 import * as tools from './tools.js';
 import * as blog from './blog.js';
+import { blogApi } from './blog-api.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pub = path.join(here, '..', 'public');
@@ -367,6 +368,7 @@ admin.put('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(r
 admin.delete('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 
 app.use('/api/admin', admin);
+app.use('/api/blog-api', blogApi(siteUrl));
 
 // ── Internal audit workspace API (admin only) ───────────────────────────
 const ws = express.Router();
