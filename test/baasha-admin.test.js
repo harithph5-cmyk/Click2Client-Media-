@@ -155,10 +155,8 @@ test('the real admin API refuses the Baasha admin endpoints without an admin ses
     }
   } finally { srv.close(); }
 });
-test('the admin page has the Baasha AI tab wired to the new endpoints', () => {
+test('the Baasha AI tab was removed from the admin page (server endpoints stay protected)', () => {
   const js = fs.readFileSync(new URL('../public/js/admin.js', import.meta.url), 'utf8');
-  assert.match(js, /\['baasha', 'Baasha AI'\]/); assert.match(js, /baasha: baashaTab/);
-  for (const ep of ['/admin/baasha/overview', '/admin/baasha/tasks', '/admin/baasha/accounts', '/admin/baasha/knowledge', '/admin/baasha/switch', '/admin/baasha/accounts/delete', '/admin/baasha/tasks/delete']) assert.ok(js.includes(ep), ep);
-  assert.ok(!/innerHTML = [^;]*\$\{[a-z.]*\.goal\}/.test(js.replace(/\$\{esc\([^)]*\)\}/g, '')), 'task text is always escaped');
-  const html = fs.readFileSync(new URL('../public/admin.html', import.meta.url), 'utf8'); assert.match(html, /\.pill\.bs-completed/);
+  assert.ok(!/baasha/i.test(js), 'admin.js no longer references Baasha');
+  assert.ok(!/\['(products|software)',/.test(js), 'Products / Software Catalogue tabs are gone');
 });
