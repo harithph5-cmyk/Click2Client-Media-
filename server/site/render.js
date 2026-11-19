@@ -11,7 +11,8 @@ import * as store from '../store/db.js';
 import { TIERS } from '../commerce/plans.js';
 import { portfolioVars, homeWorkHtml, projectVars, listProjects } from '../portfolio.js';
 import { blogListVars, postVars, publishedPosts } from '../blog.js';
-import { productsVars, homeContentVars } from '../content.js';
+import { productsVars, coursesVars, homeContentVars } from '../content.js';
+import { faqHtml, faqSchema } from './faq.js';
 import { hubVars, toolVars, TOOLS } from '../tools.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +46,7 @@ export const PAGES = {
   audit: { path: '/seo-audit', file: 'seo-audit', title: 'Free SEO Audit Tool & Website SEO Analysis | Click2Client', description: "Analyze your website with Click2Client Media's SEO audit tool. Find technical, on-page and performance issues with 10, 25 and 50-page SEO audits.", priority: '0.9', crumb: 'SEO Audit' },
   portfolio: { path: '/portfolio', file: 'portfolio', title: 'Portfolio — Websites, SEO, Social Media, Ads & UI/UX Work | Click2Client Media', description: 'A curated showcase of websites, SEO campaigns, social media strategies, advertising campaigns and UI/UX experiences created by Click2Client Media for brands and businesses.', priority: '0.8', crumb: 'Portfolio' },
   seoTools: { path: '/seo-tools', file: 'seo-tools', nav: 'audit', title: 'Free SEO Tools — Website SEO Checker, Meta Tags, Robots.txt & More | Click2Client Media', description: 'Free SEO tools to analyze, optimize and improve your website: SEO checker, SEO score, meta tags, headings, image ALT, canonical, robots.txt, sitemap, schema, Open Graph, links and redirects.', priority: '0.9', crumb: 'SEO Tools' },
-  products: { path: '/products', file: 'products', title: 'Products — ATS, AI Quiz, Productivity & CRM Systems | Click2Client Media', description: 'Ready-made digital systems from Click2Client Media: an ATS for recruitment, an AI quiz system, a productivity / to-do system and a CRM for managing leads and customers.', priority: '0.8', crumb: 'Products' },
+  courses: { path: '/courses', file: 'courses', title: 'SEO & Digital Marketing Courses Online in India | Click2Client', description: 'Online SEO and digital marketing courses with AI, GEO and AEO training, plus an AI and business automation course. Live online options and practical projects.', priority: '0.8', crumb: 'Courses' },
   about: { path: '/about', file: 'about', title: 'About Click2Client Media — Digital Marketing, SEO & Web Development, Madurai', description: 'Click2Client Media is a Madurai-based digital growth company for SEO, performance marketing, websites and web applications, founded by Hari.', priority: '0.6', crumb: 'About' },
   blog: { path: '/blog', file: 'blog', title: 'Blog — SEO, Digital Marketing & Website Tips | Click2Client Media', description: 'Practical guides on SEO, Google and Meta Ads, websites and lead generation from Click2Client Media, a digital marketing agency in Madurai.', priority: '0.8', crumb: 'Blog' },
   services: { path: '/services', file: 'services', title: 'Digital Marketing, SEO & Website Development Services | Click2Client Media', description: 'SEO services, Google Ads and Meta Ads management, WordPress and custom website development, web applications and UI/UX design for businesses in India and internationally.', priority: '0.9', crumb: 'Services' },
@@ -80,7 +81,7 @@ function schemaFor(id, s, base, p = PAGES[id]) {
     if (p.post.faqs?.length) graph.push({ '@type': 'FAQPage', mainEntity: p.post.faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })) });
   } else if (p.trail) {
     graph.push({ '@type': 'BreadcrumbList', itemListElement: p.trail.map((t, i) => ({ '@type': 'ListItem', position: i + 1, name: t.name, item: `${base}${t.path}` })) });
-    if (p.extraSchema) graph.push(p.extraSchema);
+    if (p.extraSchema) graph.push(...[].concat(p.extraSchema));
   } else if (p.crumb) graph.push({ '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: 'Home', item: `${base}/` }, { '@type': 'ListItem', position: 2, name: p.crumb, item: `${base}${p.path}` }] });
   if (id === 'audit') {
     graph.push({
@@ -99,14 +100,17 @@ function testimonialsHtml(raw) {
 }
 
 export async function renderPage(id, req, override = {}) {
-  const p = override.page || PAGES[id];
   const s = await siteSettings();
   const base = siteUrl(req);
+  const cv = id === 'courses' ? await coursesVars(base) : null;
+  const p = override.page || (cv ? { ...PAGES.courses, trail: [{ name: 'Home', path: '/' }, { name: 'Courses', path: '/courses' }], extraSchema: [cv.schema, faqSchema('courses')] } : PAGES[id]);
+  // CRM → Page Content: per-page title/description and exact-text replacements.
+  const ov = override.page ? {} : (((await store.getSetting('page_overrides', {}).catch(() => ({}))) || {})[id] || {});
   const tel = s.phone.replace(/[^\d+]/g, '');
   const wa = s.whatsapp.replace(/\D/g, '');
   const vars = {
-    'title': esc(p.title),
-    'description': esc(p.description),
+    'title': esc(ov.title || p.title),
+    'description': esc(ov.description || p.description),
     'canonical': esc(p.canonical || base + p.path),
     'base': esc(base),
     'company': esc(s.companyName),
@@ -132,6 +136,8 @@ export async function renderPage(id, req, override = {}) {
   };
   if (id === 'portfolio') Object.assign(vars, await portfolioVars());
   if (id === 'products') Object.assign(vars, await productsVars());
+  if (id === 'products' || id === 'courses') vars['faq.html'] = faqHtml(id);
+  if (cv) Object.assign(vars, { 'courses.cards': cv.cards, 'courses.options': cv.options });
   if (id === 'seoTools') Object.assign(vars, hubVars());
   if (id === 'home') Object.assign(vars, await homeContentVars());
   if (id === 'blog') Object.assign(vars, await blogListVars());
@@ -140,6 +146,7 @@ export async function renderPage(id, req, override = {}) {
   let html = read(p.file);
   html = html.replace(/<!--#include (\w+)-->/g, (_, n) => read('_' + n));
   html = html.replace(/\{\{([\w.]+)\}\}/g, (_, k) => vars[k] ?? '');
+  for (const r of ov.replacements || []) if (r.from) html = html.split(esc(r.from)).join(esc(r.to ?? ''));
   return html;
 }
 

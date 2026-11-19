@@ -6,6 +6,7 @@
 import crypto from 'node:crypto';
 import { config } from '../config.js';
 import * as store from '../store/db.js';
+import { loadActor, log } from '../crm/rbac.js';
 
 const COOKIE = 'c2c_admin';
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -17,7 +18,7 @@ export function hashPassword(password) {
   return `scrypt$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
-function verifyPassword(password, stored) {
+export function verifyPassword(password, stored) {
   const [alg, saltHex, hashHex] = String(stored).split('$');
   if (alg !== 'scrypt' || !saltHex || !hashHex) return false;
   const expected = Buffer.from(hashHex, 'hex');
@@ -54,7 +55,12 @@ export async function login(req, res) {
   if ((await store.recentFailedLogins(ip, 15)) >= 5) {
     return res.status(429).json({ error: { code: 'rate_limited', message: 'Too many attempts. Please wait 15 minutes and try again.' } });
   }
-  const ok = typeof req.body?.password === 'string' && req.body.password.length <= 200 && verifyPassword(req.body.password, adminHash());
+  const pw = req.body?.password;
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase().slice(0, 200) : '';
+  // Team members sign in with email + password; the founder password alone still works.
+  let user = null;
+  if (email) user = await store.queryOne('SELECT id, name, password_hash FROM users WHERE LOWER(email) = ? AND active = TRUE', [email]);
+  const ok = typeof pw === 'string' && pw.length <= 200 && (email ? Boolean(user) && verifyPassword(pw, user.password_hash) : verifyPassword(pw, adminHash()));
   if (!ok) {
     await store.recordFailedLogin(ip);
     return res.status(401).json({ error: { code: 'invalid_credentials', message: 'Incorrect password.' } });
@@ -62,7 +68,9 @@ export async function login(req, res) {
   await store.clearFailedLogins(ip);
   const token = crypto.randomBytes(32).toString('base64url');
   const csrf = crypto.randomBytes(24).toString('base64url');
-  await store.createSession(sha256(token), csrf, config.admin.sessionHours, ip);
+  await store.createSession(sha256(token), csrf, config.admin.sessionHours, ip, user?.id || null);
+  if (user) await store.query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+  log({ actor: { name: user?.name || 'Founder', role: user ? 'user' : 'founder' }, ip }, 'login');
   res.setHeader('Set-Cookie', `${COOKIE}=${token}; ${cookieAttrs(req, config.admin.sessionHours * 3600)}`);
   res.json({ ok: true, csrf });
 }
@@ -85,6 +93,8 @@ export async function requireAdmin(req, res, next) {
     }
   }
   req.adminSession = s;
+  req.actor = await loadActor(s);
+  if (!req.actor) return res.status(401).json({ error: { code: 'unauthorized', message: 'This account is disabled.' } });
   next();
 }
 

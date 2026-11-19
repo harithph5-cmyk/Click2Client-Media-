@@ -7,6 +7,11 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
 import { attachDatabasePool } from '@vercel/functions';
+import { CRM_SCHEMA } from '../crm/schema.js';
+
+// DATE columns stay 'YYYY-MM-DD' strings (no timezone shift); NUMERIC becomes a number.
+pg.types.setTypeParser(1082, (v) => v);
+pg.types.setTypeParser(1700, (v) => parseFloat(v));
 
 // Connection URL, in order of preference:
 //  1. database_POSTGRES_URL — set by this project's Vercel ↔ Neon integration
@@ -144,7 +149,7 @@ async function migrate() {
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [MIGRATION_LOCK]);
-    for (const s of SCHEMA) await client.query(s);
+    for (const s of [...SCHEMA, ...CRM_SCHEMA]) await client.query(s);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -320,7 +325,7 @@ export async function updateOrder(id, fields) {
 }
 
 // ── Leads ────────────────────────────────────────────────────────────────
-export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'proposal_sent', 'won', 'lost'];
+export const LEAD_STATUSES = ['new', 'contacted', 'qualified', 'proposal_sent', 'negotiation', 'won', 'lost'];
 export async function createLead(l) {
   const id = newId(8);
   await q(`INSERT INTO leads (id, created_at, name, email, phone, whatsapp, company, website, service, message, source, audit_id, order_id)
@@ -373,9 +378,9 @@ export async function deleteOrders(ids, { withLeads = true } = {}) {
 }
 
 // ── Admin sessions & login throttling (stored in the DB so they work across serverless instances)
-export async function createSession(tokenHash, csrf, hours, ip) {
+export async function createSession(tokenHash, csrf, hours, ip, userId = null) {
   await q('DELETE FROM sessions WHERE expires_at < ?', [now()]);
-  await q('INSERT INTO sessions (token_hash, csrf, created_at, expires_at, ip) VALUES (?,?,?,?,?)', [tokenHash, csrf, now(), new Date(Date.now() + hours * 3600_000).toISOString(), ip]);
+  await q('INSERT INTO sessions (token_hash, csrf, created_at, expires_at, ip, user_id) VALUES (?,?,?,?,?,?)', [tokenHash, csrf, now(), new Date(Date.now() + hours * 3600_000).toISOString(), ip, userId]);
 }
 export const getSession = (tokenHash) => one('SELECT * FROM sessions WHERE token_hash = ? AND expires_at > ?', [tokenHash, now()]);
 export const deleteSession = (tokenHash) => q('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]);

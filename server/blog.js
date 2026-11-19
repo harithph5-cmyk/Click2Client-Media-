@@ -3,6 +3,7 @@
 // /blog and /blog/<slug> so search engines index the full article.
 
 import assert from 'node:assert';
+import crypto from 'node:crypto';
 import * as store from './store/db.js';
 import { formatBody, faqHtml } from './md.js';
 
@@ -17,7 +18,7 @@ const byDate = (a, b) => String(b.date).localeCompare(String(a.date));
 // A post is live when published and its (optional) scheduled time has passed —
 // so scheduled posts go live on their own, with no cron job.
 export const isLive = (p, now = Date.now()) => Boolean(p.published) && (!p.publishAt || Date.parse(p.publishAt) <= now);
-export const statusOf = (p) => (!p.published ? 'draft' : isLive(p) ? 'published' : 'scheduled');
+export const statusOf = (p) => (!p.published ? (p.pending ? 'pending' : 'draft') : isLive(p) ? 'published' : 'scheduled');
 
 export async function publishedPosts() {
   return (await getBlog()).posts.filter((p) => isLive(p)).sort(byDate);
@@ -71,8 +72,17 @@ export async function upsertPost(id, body) {
     author: clean(body.author, 60) || 'Hari',
     body: String(body.body ?? '').slice(0, 60000),
     published: Boolean(body.published),
+    // CRM extras: submit-for-approval flag, SEO / AEO / GEO fields (only touched when sent)
+    pending: !body.published && Boolean(body.pending),
     date,
     updated: new Date().toISOString(),
+    ...(body.metaTitle !== undefined && { metaTitle: clean(body.metaTitle, 120) }),
+    ...(body.metaDescription !== undefined && { metaDescription: clean(body.metaDescription, 320) }),
+    ...(body.keyword !== undefined && { keyword: clean(body.keyword, 80) }),
+    ...(body.imageAlt !== undefined && { imageAlt: clean(body.imageAlt, 200) }),
+    ...(body.canonical !== undefined && { canonical: /^https:\/\/[^\s]+$/.test(body.canonical || '') ? body.canonical : '' }),
+    ...(body.tags !== undefined && { tags: (Array.isArray(body.tags) ? body.tags : String(body.tags).split(',')).map((t) => clean(t, 40)).filter(Boolean).slice(0, 12) }),
+    ...(body.faqs !== undefined && { faqs: (Array.isArray(body.faqs) ? body.faqs : []).map((x) => ({ q: clean(x.q, 200), a: clean(x.a, 1200) })).filter((x) => x.q && x.a).slice(0, 15) }),
   };
   if (i >= 0) b.posts[i] = rec; else b.posts.push(rec);
   await save(b);
@@ -108,6 +118,16 @@ export async function setCover(id, dataUrl) {
 }
 
 export const getCover = (id) => store.getSetting(`bimg:${id}`, null);
+
+// In-article image (Blog Studio media library): stored like a cover, served by /blog-img/:id.
+export async function saveMedia(dataUrl) {
+  const m = /^data:(image\/(png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl || '');
+  if (!m) throw Object.assign(new Error('Upload a PNG, JPG or WebP image.'), { status: 400 });
+  if (m[3].length > 1_400_000) throw Object.assign(new Error('Image is too large — please use one under 1 MB.'), { status: 400 });
+  const id = 'media-' + crypto.createHash('sha256').update(m[3]).digest('hex').slice(0, 12);
+  await store.setSetting(`bimg:${id}`, { mime: m[1], data: m[3] });
+  return id;
+}
 export const coverUrl = (p) => (p.cover ? `/blog-img/${encodeURIComponent(p.id)}?v=${p.cover}` : null);
 
 // ── Article formatting ───────────────────────────────────────────────────
