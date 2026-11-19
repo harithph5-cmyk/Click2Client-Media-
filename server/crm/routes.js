@@ -264,6 +264,17 @@ ${inv.notes ? `<p class="muted">${esc(inv.notes)}</p>` : ''}${s.upiId ? `<p clas
   }));
 
   // ── Dashboard & reports ──
+  // Off-Page command center: one shared workspace document (articles, comment queue, backlink pipeline).
+  // ponytail: whole-document save, last write wins; split into tables if several people edit at once.
+  r.get('/offpage', need('seo'), wrap(async (req, res) => res.json({ workspace: await store.getSetting('offpage_workspace_v1', null) })));
+  r.put('/offpage', need('seo'), wrap(async (req, res) => {
+    const w = req.body?.workspace;
+    if (!w || !Array.isArray(w.articles) || !Array.isArray(w.comments) || !Array.isArray(w.backlinks)) return bad(res, 'Invalid workspace.');
+    if (JSON.stringify(w).length > 1_500_000) return bad(res, 'Workspace is too large.', 413);
+    await store.setSetting('offpage_workspace_v1', { articles: w.articles, comments: w.comments, backlinks: w.backlinks });
+    log(req, 'update', 'offpage');
+    res.json({ ok: true });
+  }));
   r.get('/dashboard', need('dashboard'), wrap(async (req, res) => res.json(await dashboard(req.actor, req.query))));
   r.get('/reports/:key', wrap(async (req, res) => {
     const out = await report(req.actor, req.params.key, req.query);

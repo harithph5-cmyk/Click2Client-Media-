@@ -103,3 +103,17 @@ select.mini, input.mini { height: 36px; border: 1px solid var(--line-2); border-
   .grid2, .grid3 { grid-template-columns: 1fr; } .fgrid { grid-template-columns: 1fr; } .items .ir { grid-template-columns: 1fr 56px 90px 24px; } .calg .c { min-height: 70px; } .calg .ev { font-size: 10px; padding: 1px 4px; }
   .view { padding: 18px 14px 60px; }
 }
+
+/* Off-Page Command Center */
+.op-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.op-tab { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font: 600 13.5px var(--body); color: var(--ink-3); cursor: pointer; margin-bottom: -1px; }
+.op-tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.op-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; }
+.op-kpi { font: 700 28px var(--display); margin: 6px 0 2px; }
+.op-act { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); } .op-act > span:nth-child(2) { flex: 1; min-width: 0; }
+.op-split { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+.op-list { max-height: 520px; overflow-y: auto; } .op-art { display: block; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 12px 14px; cursor: pointer; font: 13px var(--body); }
+.op-art b { display: block; font-weight: 600; } .op-art small { color: var(--ink-3); } .op-art.on { background: var(--surface-2); box-shadow: inset 3px 0 var(--accent); }
+.op-checks { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; } .op-checks span { padding: 4px 10px; border-radius: 99px; background: var(--surface-2); color: var(--ink-3); } .op-checks span.ok { background: #E4F7EC; color: #0F7A3D; }
+.op-bar { height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; } .op-bar i { display: block; height: 100%; background: var(--accent); }
+@media (max-width: 900px) { .op-kpis { grid-template-columns: 1fr 1fr; } .op-split { grid-template-columns: 1fr; } }

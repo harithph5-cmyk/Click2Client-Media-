@@ -11,13 +11,14 @@ import { leadsTab } from './admin/leads.js';
 import { invoicesTab, financeTab } from './admin/finance.js';
 import { blogTab, calendarTab } from './admin/content.js';
 import { reportsTab, teamTab, logsTab } from './admin/reports.js';
+import { offpageTab } from './admin/offpage.js';
 const root = document.getElementById('root');
 // Sidebar: [group, [[route, label, icon, permission]]]. Items a role cannot use are hidden.
 const NAV = [
   ['', [['dashboard', 'Dashboard', 'home', 'dashboard']]],
   ['CRM', [['leads', 'Leads & Enquiries', 'users', 'crm'], ['contacts', 'Contacts', 'user', 'crm'], ['companies', 'Companies', 'building', 'crm'], ['deals', 'Deals (Pipeline)', 'deal', 'crm'], ['clients', 'Clients', 'shield', 'crm'], ['tasks', 'Tasks & Follow-ups', 'check', 'crm']]],
   ['Sales & Payments', [['payments', 'Payments', 'card', 'payments'], ['invoices', 'Invoices', 'file', 'finance'], ['subscriptions', 'Subscriptions', 'repeat', 'finance'], ['finance', 'Revenue & Expenses', 'wallet', 'finance']]],
-  ['Marketing & SEO', [['audits', 'SEO Audits', 'search', 'seo'], ['seo', 'SEO Agent', 'chart', 'seo'], ['projects', 'Client Websites', 'globe', 'seo'], ['keywords', 'Keywords & Rankings', 'tag', 'seo'], ['backlinks', 'Backlinks', 'list', 'seo'], ['aeo', 'AEO (AI Search)', 'spark', 'seo'], ['geo', 'GEO (Generative)', 'pin', 'seo'], ['campaigns', 'Campaigns', 'mega', 'seo']]],
+  ['Marketing & SEO', [['audits', 'SEO Audits', 'search', 'seo'], ['seo', 'SEO Agent', 'chart', 'seo'], ['projects', 'Client Websites', 'globe', 'seo'], ['keywords', 'Keywords & Rankings', 'tag', 'seo'], ['backlinks', 'Backlinks', 'list', 'seo'], ['aeo', 'AEO (AI Search)', 'spark', 'seo'], ['geo', 'GEO (Generative)', 'pin', 'seo'], ['campaigns', 'Campaigns', 'mega', 'seo'], ['offpage', 'Off-Page Command Center', 'spark', 'seo']]],
   ['Content', [['blog', 'Blog (SEO / AEO / GEO)', 'pen', 'content'], ['calendar', 'Content Calendar', 'cal', 'content'], ['pages', 'Page Content', 'layout', 'content'], ['courses', 'Courses', 'book', 'content'], ['brands', 'Brands', 'tag', 'content']]],
   ['Management', [['reports', 'Reports & Analytics', 'bars', 'reports'], ['team', 'Team Management', 'users', 'team'], ['logs', 'Activity Log', 'clock', 'team'], ['settings', 'Settings', 'gear', 'settings']]],
 ];
@@ -123,7 +124,7 @@ async function route() {
   view.onclick = null; view.onchange = null;
   const ctx = { state, meta: state.meta };
   try {
-    const fn = { dashboard: (v) => dashboardTab(v, ctx), leads: (v) => leadsTab(v, ctx), payments, audits, courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: (v) => blogTab(v, ctx), seo: (v) => seoTab(v, { head, state }), settings,
+    const fn = { dashboard: (v) => dashboardTab(v, ctx), leads: (v) => leadsTab(v, ctx), payments, audits, courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: (v) => blogTab(v, ctx), seo: (v) => seoTab(v, { head, state }), offpage: (v) => offpageTab(v, ctx), settings,
       invoices: (v) => invoicesTab(v, ctx), finance: (v) => financeTab(v, ctx), calendar: (v) => calendarTab(v, ctx), pages: pagesTab, reports: (v) => reportsTab(v, ctx), team: (v) => teamTab(v, ctx), logs: (v) => logsTab(v, ctx),
       ...Object.fromEntries(Object.entries(ENT).map(([r, key]) => [r, (v) => entityTab(v, key, ctx)])) }[state.tab] || ((v) => dashboardTab(v, ctx));
     await fn(view);
