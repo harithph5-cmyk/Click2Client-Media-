@@ -19,12 +19,16 @@ import { TIERS, publicTiers, shapeAudit, rateLimited, refreshPricing, savePricin
 import { upiLink } from './commerce/payments.js';
 import { login, logout, requireAdmin, requireAdminPage, currentSession } from './security/auth.js';
 import { renderPage, renderPost, renderTool, PAGES, sitemap, robots, llmsTxt, siteSettings, siteUrl } from './site/render.js';
+import { crmRouter, autoAssign } from './crm/routes.js';
+import { webhookRouter } from './crm/webhooks.js';
+import { loadActor, need, log as auditLog } from './crm/rbac.js';
 import { reportReadyEmail, notifyOwner, forwardLead } from './notify.js';
 import * as pages from './pages.js';
 import * as media from './media.js';
 import * as content from './content.js';
 import * as tools from './tools.js';
 import * as blog from './blog.js';
+import * as seo from './seo-agent.js';
 import { blogApi } from './blog-api.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +36,7 @@ const pub = path.join(here, '..', 'public');
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '1.5mb' })); // allows a QR image upload in settings
+app.use(express.json({ limit: '1.5mb', verify: (req, _res, buf) => { if (req.url.startsWith('/api/webhooks/')) req.rawBody = buf; } })); // QR upload in settings; raw body kept only for webhook signatures
 // Audit prices are editable in the admin; keep this instance's copy fresh (cached 30 s).
 app.use((req, res, next) => { refreshPricing().finally(next); });
 
@@ -119,6 +123,7 @@ function tierInput(plan, extra) {
 
 async function saveLead(l) {
   const id = await store.createLead(l);
+  await autoAssign(id);
   forwardLead({ id, ...l }, () => store.markLeadForwarded(id));
   notifyOwner(`New lead: ${l.name} (${l.source})`, [`${l.name} · ${l.email || ''} · ${l.phone || ''}`, `Website: ${l.website || '—'}`, `Service: ${l.service || '—'}`, l.message || '']);
   return id;
@@ -262,6 +267,7 @@ pubApi.post('/tools/:slug', h(async (req, res) => {
   try { res.json(await tools.runTool(req.params.slug, req.body || {})); } catch (e) { if (!e.status) throw e; bad(res, 'invalid', e.message, e.status); }
 }));
 app.use('/api/public', pubApi);
+app.use('/api/webhooks', webhookRouter(h, saveLead));
 app.post('/api/leads', leadHandler); // used by the shared lead modal
 
 // ═════════════════════════════ ADMIN API ══════════════════════════════════
@@ -271,10 +277,29 @@ admin.post('/logout', h(logout));
 admin.get('/me', h(async (req, res) => {
   const s = await currentSession(req);
   if (!s) return bad(res, 'unauthorized', 'Please sign in.', 401);
-  res.json({ ok: true, csrf: s.csrf });
+  const a = await loadActor(s);
+  if (!a) return bad(res, 'unauthorized', 'This account is disabled.', 401);
+  res.json({ ok: true, csrf: s.csrf, user: { name: a.name, role: a.role, permissions: a.permissions } });
 }));
 admin.use(h(requireAdmin));
 
+// Role gate for the original admin routes (the CRM router guards itself).
+const GUARD = [['/stats', 'dashboard'], ['/leads', 'crm'], ['/orders', 'payments'], ['/audits', 'seo'], ['/seo', 'seo'], ['/settings', 'settings'], ['/pricing', 'settings'], ['/pages', 'content'], ['/media', 'content'], ['/baasha', 'settings'], ['/content', 'content'], ['/blog', 'content']];
+admin.use((req, res, next) => {
+  const hit = GUARD.find(([p]) => req.path === p || req.path.startsWith(p + '/'));
+  return hit ? need(hit[1])(req, res, next) : next();
+});
+// Writers can draft but not publish: a publish request becomes "pending approval".
+admin.use('/blog', (req, res, next) => {
+  if (['POST', 'PUT'].includes(req.method) && req.body && req.body.published && !(req.actor.permissions.includes('*') || req.actor.permissions.includes('publish'))) { req.body.published = false; req.body.pending = true; }
+  next();
+});
+// Audit trail: every successful admin write is logged with who did it.
+admin.use((req, res, next) => {
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && !req.path.startsWith('/crm/')) res.on('finish', () => { if (res.statusCode < 400) auditLog(req, req.method.toLowerCase(), req.path.split('/')[1], req.path.split('/')[2] || null); });
+  next();
+});
+admin.use('/crm', crmRouter(h));
 // Baasha AI admin section (loaded lazily so a problem there can never take the admin portal down).
 let baashaAdmin;
 admin.use('/baasha', h(async (req, res, next) => {
@@ -311,6 +336,7 @@ admin.patch('/orders/:id', h(async (req, res) => {
   if (typeof req.body?.note === 'string') fields.admin_note = clean(req.body.note, 500);
   if (status === 'verified' && o.payment_status !== 'verified') fields.verified_at = new Date().toISOString();
   await store.updateOrder(o.id, fields);
+  if (status && status !== o.payment_status) notifyOwner(`Payment ${status.replace('_', ' ')}: ${o.business || o.name}`, [`₹${o.amount} · ${o.plan} · ${o.transaction_id || 'no UTR'}`]);
   let auditId = o.audit_id;
   // Only an admin marking the payment VERIFIED unlocks and starts the paid audit.
   if (status === 'verified' && !auditId) {
@@ -398,7 +424,26 @@ admin.post('/blog/media', h(async (req, res) => { try { const id = await blog.sa
 admin.put('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, req.body?.dataUrl ?? null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 admin.delete('/blog/:id/cover', h(async (req, res) => { try { await blog.setCover(req.params.id, null); res.json({ ok: true }); } catch (e) { pfErr(res, e); } }));
 
+// SEO / GEO / AEO agent (admin only). Long AI jobs run in the background; the UI polls /seo.
+const bg = (p) => { const x = p.catch((e) => console.error('[seo]', e.message)); try { waitUntil(x); } catch {} };
+admin.get('/seo', h(async (req, res) => res.json(await seo.overview())));
+admin.put('/seo/config', h(async (req, res) => res.json(await seo.saveConfig(req.body || {}))));
+admin.post('/seo/research', h(async (req, res) => res.json({ added: await seo.research() })));
+admin.post('/seo/audit', h(async (req, res) => res.json({ added: await seo.audit() })));
+admin.post('/seo/tasks/:id/write', h(async (req, res) => { bg(seo.writeTask(req.params.id)); res.status(202).json({ ok: true }); }));
+admin.post('/seo/tasks/:id/publish', h(async (req, res) => { await seo.publishTask(req.params.id, { force: req.body?.force === true }); res.json({ ok: true }); }));
+admin.patch('/seo/tasks/:id', h(async (req, res) => { await seo.patchTask(req.params.id, req.body?.status); res.json({ ok: true }); }));
+admin.delete('/seo/tasks/:id', h(async (req, res) => { await seo.deleteTask(req.params.id); res.json({ ok: true }); }));
+
 app.use('/api/admin', admin);
+
+// Daily cron (cPanel / cron-job.org): POST /api/seo/cron  with  Authorization: Bearer $SEO_CRON_TOKEN
+app.post('/api/seo/cron', h(async (req, res) => {
+  const t = process.env.SEO_CRON_TOKEN;
+  if (!t || req.get('authorization') !== `Bearer ${t}`) return bad(res, 'unauthorized', 'Invalid token.', 401);
+  bg(seo.tick()); res.status(202).json({ ok: true });
+}));
+app.get('/llms.txt', h(async (req, res) => res.type('text/plain').send(await seo.llmsTxt(siteUrl(req)))));
 app.use('/api/blog-api', blogApi(siteUrl));
 
 // ── Internal audit workspace API (admin only) ───────────────────────────

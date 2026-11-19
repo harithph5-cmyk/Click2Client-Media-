@@ -3,20 +3,42 @@
 
 import { api, setCsrf, esc, fmtDate, hostOf, toast, scoreColor, ICON, modal } from './common.js';
 
+import { seoTab } from './seo.js';
+import { icon, debounce } from './admin/ui.js';
+import { dashboardTab } from './admin/dashboard.js';
+import { entityTab } from './admin/entity.js';
+import { leadsTab } from './admin/leads.js';
+import { invoicesTab, financeTab } from './admin/finance.js';
+import { blogTab, calendarTab } from './admin/content.js';
+import { reportsTab, teamTab, logsTab } from './admin/reports.js';
 const root = document.getElementById('root');
-const TABS = [['overview', 'Overview'], ['payments', 'Payment Verification'], ['leads', 'Leads'], ['audits', 'SEO Audits'], ['pages', 'Page Content'], ['courses', 'Courses'], ['brands', 'Brands'], ['blog', 'Blog'], ['settings', 'Settings']];
+// Sidebar: [group, [[route, label, icon, permission]]]. Items a role cannot use are hidden.
+const NAV = [
+  ['', [['dashboard', 'Dashboard', 'home', 'dashboard']]],
+  ['CRM', [['leads', 'Leads & Enquiries', 'users', 'crm'], ['contacts', 'Contacts', 'user', 'crm'], ['companies', 'Companies', 'building', 'crm'], ['deals', 'Deals (Pipeline)', 'deal', 'crm'], ['clients', 'Clients', 'shield', 'crm'], ['tasks', 'Tasks & Follow-ups', 'check', 'crm']]],
+  ['Sales & Payments', [['payments', 'Payments', 'card', 'payments'], ['invoices', 'Invoices', 'file', 'finance'], ['subscriptions', 'Subscriptions', 'repeat', 'finance'], ['finance', 'Revenue & Expenses', 'wallet', 'finance']]],
+  ['Marketing & SEO', [['audits', 'SEO Audits', 'search', 'seo'], ['seo', 'SEO Agent', 'chart', 'seo'], ['projects', 'Client Websites', 'globe', 'seo'], ['keywords', 'Keywords & Rankings', 'tag', 'seo'], ['backlinks', 'Backlinks', 'list', 'seo'], ['aeo', 'AEO (AI Search)', 'spark', 'seo'], ['geo', 'GEO (Generative)', 'pin', 'seo'], ['campaigns', 'Campaigns', 'mega', 'seo']]],
+  ['Content', [['blog', 'Blog (SEO / AEO / GEO)', 'pen', 'content'], ['calendar', 'Content Calendar', 'cal', 'content'], ['pages', 'Page Content', 'layout', 'content'], ['courses', 'Courses', 'book', 'content'], ['brands', 'Brands', 'tag', 'content']]],
+  ['Management', [['reports', 'Reports & Analytics', 'bars', 'reports'], ['team', 'Team Management', 'users', 'team'], ['logs', 'Activity Log', 'clock', 'team'], ['settings', 'Settings', 'gear', 'settings']]],
+];
+// Routes backed by the generic module page: route -> entity key
+const ENT = { contacts: 'contacts', companies: 'companies', deals: 'deals', clients: 'clients', tasks: 'tasks', subscriptions: 'subscriptions', projects: 'seo_projects', keywords: 'seo_keywords', backlinks: 'backlinks', aeo: 'aeo', geo: 'geo', campaigns: 'campaigns' };
 const PS = { pending: 'Payment Pending', screenshot_received: 'Screenshot Received', under_verification: 'Payment Under Verification', verified: 'Payment Verified', rejected: 'Payment Rejected' };
 const LS = { new: 'New', contacted: 'Contacted', qualified: 'Qualified', proposal_sent: 'Proposal Sent', won: 'Won', lost: 'Lost' };
 const PLAN = { free: 'Free 10-page', p25: '25-page', p50: '50-page Growth', internal: 'Internal' };
 const planLabel = (p, amount) => (PLAN[p] || p) + ((p === 'p25' || p === 'p50') && amount ? ` · ₹${amount}` : '');
 const SRC = { free_audit: 'Free audit', order_p25: '25-page audit order', order_p50: '50-page audit order', enquiry_page: 'Enquiry form', home_form: 'Home page form', seo_implementation: 'Implementation request (report)', website: 'Website' };
-const state = { tab: location.hash.slice(1) || 'overview', leadFilter: 'all', auditFilter: 'all', pending: 0 };
+const state = { tab: 'dashboard', hq: new URLSearchParams(), meta: null, leadFilter: 'all', auditFilter: 'all', pending: 0 };
+function readHash() { const [t, qs = ''] = location.hash.slice(1).split('?'); state.tab = (t === 'overview' ? 'dashboard' : t) || 'dashboard'; state.hq = new URLSearchParams(qs); }
+readHash();
+const allowed = (perm) => state.meta && (state.meta.me.permissions.includes('*') || state.meta.me.permissions.includes(perm));
 
 // ── Auth ─────────────────────────────────────────────────────────────────
 async function boot() {
   try {
     const me = await api('/admin/me');
     setCsrf(me.csrf);
+    state.meta = await api('/admin/crm/meta');
     shell();
   } catch {
     loginView();
@@ -28,15 +50,17 @@ function loginView(msg = '') {
     <a class="logo-box" href="/" style="display:inline-block"><span class="logo-crop" style="width:200px"><img src="/img/click2client-media-logo.webp" alt="Click2Client Media" width="2000" height="774"></span></a>
     <h1 style="font:700 24px var(--display);margin:22px 0 4px;letter-spacing:-0.02em">Admin portal</h1>
     <p class="small muted">Authorised Click2Client Media staff only.</p>
-    <div class="field" style="margin-top:20px"><label for="pw">Password</label><input class="input" id="pw" name="password" type="password" autocomplete="current-password" required autofocus></div>
+    <div class="field" style="margin-top:20px"><label for="em">Email <span class="muted">(team members; leave blank for the founder login)</span></label><input class="input" id="em" name="email" type="email" autocomplete="username"></div>
+    <div class="field" style="margin-top:12px"><label for="pw">Password</label><input class="input" id="pw" name="password" type="password" autocomplete="current-password" required autofocus></div>
     <p class="small" style="color:var(--fail);margin-top:10px" id="lerr" ${msg ? '' : 'hidden'}>${esc(msg)}</p>
     <button class="btn accent" style="width:100%;margin-top:18px;height:48px" type="submit">Sign in</button>
   </form></div>`;
   document.getElementById('lf').onsubmit = async (e) => {
     e.preventDefault();
     try {
-      const r = await api('/admin/login', { method: 'POST', body: { password: document.getElementById('pw').value } });
+      const r = await api('/admin/login', { method: 'POST', body: { email: document.getElementById('em').value.trim(), password: document.getElementById('pw').value } });
       setCsrf(r.csrf);
+      state.meta = await api('/admin/crm/meta');
       shell();
     } catch (ex) {
       const el = document.getElementById('lerr');
@@ -48,30 +72,63 @@ function loginView(msg = '') {
 
 // ── Shell ────────────────────────────────────────────────────────────────
 function shell() {
-  root.innerHTML = `
-    <header class="topbar"><div class="topbar-in">
+  const me = state.meta.me;
+  root.innerHTML = `<div class="app"><aside class="sb" id="sb">
       <a class="logo-box" href="/" aria-label="Click2Client Media website"><span class="logo-crop"><img src="/img/click2client-media-logo.webp" alt="Click2Client Media" width="2000" height="774"></span></a>
-      <nav class="tabs" id="tabs">${TABS.map(([k, l]) => `<a href="#${k}" data-tab="${k}">${l}${k === 'payments' ? '<span class="badge-n" id="pbadge" hidden></span>' : ''}</a>`).join('')}</nav>
-      <span class="spacer"></span>
-      <a class="btn ghost sm" href="/app#/new">Audit workspace</a>
-      <button class="btn sm" id="logout">Sign out</button>
-    </div></header>
-    <main class="view" id="view"></main>`;
-  document.getElementById('logout').onclick = async () => { await api('/admin/logout', { method: 'POST' }).catch(() => {}); setCsrf(''); loginView(); };
-  if (!state.bound) { addEventListener('hashchange', () => { state.tab = location.hash.slice(1) || 'overview'; state.pfEdit = null; state.blogEdit = null; for (const k in (state.ct || {})) state.ct[k].edit = null; if (state.pf) Object.assign(state.pf, { view: 'list', id: null }); route(); }); state.bound = true; }
+      ${NAV.map(([g, items]) => { const vis = items.filter((i) => allowed(i[3])); return vis.length ? `<div class="sb-group">${g ? `<div class="sb-label">${g}</div>` : ''}${vis.map(([k, l, ic]) => `<a class="nv" href="#${k}" data-tab="${k}">${icon(ic)}<span>${l}</span>${k === 'payments' ? '<span class="badge-n" id="pbadge" hidden></span>' : ''}</a>`).join('')}</div>` : ''; }).join('')}
+      <div class="sb-foot">${allowed('seo') ? '<a href="/app#/new">Audit workspace →</a><br>' : ''}<a href="/" target="_blank" rel="noopener">View website ↗</a></div></aside><div class="sb-bg" id="sbbg"></div>
+    <div class="main"><header class="top"><button class="icon-btn menu" id="menu" aria-label="Menu">${icon('menu')}</button>
+      <div class="gs">${icon('search')}<input id="gsi" type="search" placeholder="Search leads, clients, deals, payments, invoices, audits, blogs…" autocomplete="off" aria-label="Global search"><div class="drop" id="gsd" hidden></div></div><span style="flex:1"></span>
+      <div class="bellwrap"><button class="icon-btn" id="bell" aria-label="Notifications">${icon('bell')}<span class="dot" id="bdot" hidden></span></button><div class="drop" id="nd" hidden></div></div>
+      <div class="me"><span class="av">${esc((me.name || 'F')[0].toUpperCase())}</span><div><b>${esc(me.name)}</b><small>${esc(me.role === 'founder' ? 'Founder' : (me.role || '').replace(/^./, (c) => c.toUpperCase()))}</small></div></div>
+      <button class="btn sm" id="logout">Sign out</button></header>
+    <main class="view" id="view"></main></div></div>`;
+  document.getElementById('logout').onclick = async () => { clearInterval(state.noteTimer); await api('/admin/logout', { method: 'POST' }).catch(() => {}); setCsrf(''); state.meta = null; loginView(); };
+  const closeNav = () => document.body.classList.remove('nav-open');
+  document.getElementById('menu').onclick = () => document.body.classList.toggle('nav-open');
+  document.getElementById('sbbg').onclick = closeNav;
+  if (!state.bound) { addEventListener('hashchange', () => { readHash(); closeNav(); state.pfEdit = null; state.blogEdit = null; for (const k in (state.ct || {})) state.ct[k].edit = null; if (state.pf) Object.assign(state.pf, { view: 'list', id: null }); if (state.meta) route(); }); state.bound = true; }
+  wireTop();
   route();
+}
+
+// Global search + notification bell (both computed server-side from real records)
+function wireTop() {
+  const gi = document.getElementById('gsi'); const gd = document.getElementById('gsd'); const nd = document.getElementById('nd'); const bd = document.getElementById('bdot');
+  gi.oninput = debounce(async () => {
+    const q = gi.value.trim(); if (q.length < 2) { gd.hidden = true; return; }
+    try { const r = await api('/admin/crm/search?q=' + encodeURIComponent(q)); gd.innerHTML = r.results.length ? r.results.map((x) => `<a href="${esc(x.link)}"><span class="ty">${esc(x.type)}</span><span>${esc(x.title)}<small>${esc(x.sub || '')}</small></span></a>`).join('') : '<div class="none">No matches</div>'; gd.hidden = false; } catch (e) { gd.innerHTML = `<div class="none">${esc(e.message)}</div>`; gd.hidden = false; }
+  }, 250);
+  gd.onclick = () => { gd.hidden = true; gi.value = ''; };
+  const seen = () => { try { return JSON.parse(localStorage.getItem('c2c_seen') || '[]'); } catch { return []; } };
+  const paint = () => {
+    const items = state.notes || []; const s = seen(); const fresh = items.filter((i) => !s.includes(i.key));
+    bd.hidden = !fresh.length; bd.textContent = fresh.length;
+    nd.innerHTML = items.length ? items.map((i) => `<a class="${esc(i.level)}" href="${esc(i.link)}"><span class="ty">${esc(i.type.replace('-', ' '))}</span><span>${esc(i.text)}${s.includes(i.key) ? '' : ' <b style="color:var(--accent)">•</b>'}</span></a>`).join('') + '<a href="#" data-readall><span class="ty"></span><span class="muted">Mark all as read</span></a>' : '<div class="none">You are all caught up.</div>';
+  };
+  const load = async () => { try { state.notes = (await api('/admin/crm/notifications')).items; const pn = state.notes.find((i) => i.type === 'payment'); setBadge(pn ? Number(pn.key.split(':')[1]) : 0); paint(); } catch { /* bell is best-effort */ } };
+  document.getElementById('bell').onclick = (e) => { e.stopPropagation(); nd.hidden = !nd.hidden; };
+  nd.onclick = (e) => { if (e.target.closest('[data-readall]')) { e.preventDefault(); try { localStorage.setItem('c2c_seen', JSON.stringify((state.notes || []).map((i) => i.key))); } catch { /* storage may be blocked */ } paint(); } nd.hidden = true; };
+  document.addEventListener('click', (e) => { if (!e.target.closest('.gs')) gd.hidden = true; if (!e.target.closest('.bellwrap')) nd.hidden = true; });
+  clearInterval(state.noteTimer); state.noteTimer = setInterval(() => { if (!document.hidden && state.meta) load(); }, 60000);
+  load();
 }
 
 async function route() {
   const view = document.getElementById('view');
-  if (!view) return;
-  document.querySelectorAll('#tabs a').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
+  if (!view || !state.meta) return;
+  const nav = NAV.flatMap(([, i]) => i).find(([k]) => k === state.tab);
+  if (!nav || !allowed(nav[3])) { if (state.tab !== 'dashboard' && allowed('dashboard')) { location.hash = '#dashboard'; return; } }
+  document.querySelectorAll('.sb a.nv').forEach((a) => a.classList.toggle('on', a.dataset.tab === state.tab));
   view.onclick = null; view.onchange = null;
+  const ctx = { state, meta: state.meta };
   try {
-    const fn = { overview, payments, leads, audits, pages: pagesTab, courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: blogTab, settings }[state.tab] || overview;
+    const fn = { dashboard: (v) => dashboardTab(v, ctx), leads: (v) => leadsTab(v, ctx), payments, audits, courses: (v) => contentTab(v, 'course'), brands: (v) => contentTab(v, 'brand'), blog: (v) => blogTab(v, ctx), seo: (v) => seoTab(v, { head, state }), settings,
+      invoices: (v) => invoicesTab(v, ctx), finance: (v) => financeTab(v, ctx), calendar: (v) => calendarTab(v, ctx), pages: pagesTab, reports: (v) => reportsTab(v, ctx), team: (v) => teamTab(v, ctx), logs: (v) => logsTab(v, ctx),
+      ...Object.fromEntries(Object.entries(ENT).map(([r, key]) => [r, (v) => entityTab(v, key, ctx)])) }[state.tab] || ((v) => dashboardTab(v, ctx));
     await fn(view);
   } catch (e) {
-    if (e.status === 401) return loginView('Your session has ended. Please sign in again.');
+    if (e.status === 401) { clearInterval(state.noteTimer); state.meta = null; return loginView('Your session has ended. Please sign in again.'); }
     view.innerHTML = `<div class="card empty"><h3>Could not load this section</h3><p>${esc(e.message)}</p></div>`;
   }
 }
@@ -132,31 +189,6 @@ function selectionClick(e, view, opts) {
 }
 
 // ── Overview / analytics ─────────────────────────────────────────────────
-async function overview(view) {
-  const s = await api('/admin/stats');
-  setBadge(s.pendingVerification);
-  const conv = s.freeAudits ? Math.round((100 * s.verifiedOrders) / s.freeAudits) : null;
-  view.innerHTML = `${head('Dashboard', 'Overview', 'Leads, audits and revenue from the website.')}
-    <div class="kpis">
-      <div class="kpi hl"><div class="n">₹${Number(s.revenue).toLocaleString('en-IN')}</div><div class="l">Revenue (verified payments)</div></div>
-      <div class="kpi"><div class="n">${s.leads}</div><div class="l">Total leads</div></div>
-      <div class="kpi"><div class="n">${s.newLeads}</div><div class="l">New leads (uncontacted)</div></div>
-      <div class="kpi"><div class="n" style="color:${s.pendingVerification ? 'var(--fail)' : 'inherit'}">${s.pendingVerification}</div><div class="l">Payments awaiting verification</div></div>
-      <div class="kpi"><div class="n">${s.audits}</div><div class="l">Total audits completed</div></div>
-      <div class="kpi"><div class="n">${s.freeAudits}</div><div class="l">Free audits</div></div>
-      <div class="kpi"><div class="n">${s.paidAudits}</div><div class="l">Paid audits</div></div>
-      <div class="kpi"><div class="n">${conv == null ? '—' : conv + '%'}</div><div class="l">Free → paid conversion</div></div>
-      <div class="kpi"><div class="n" style="color:${scoreColor(s.avgScore)}">${s.avgScore ?? '—'}</div><div class="l">Average SEO score</div></div>
-      <div class="kpi"><div class="n">${s.wonLeads}</div><div class="l">Leads won</div></div>
-    </div>
-    <div class="two" style="margin-top:18px">
-      <div class="card card-pad"><h3>Most requested services</h3>${bars(s.byService)}</div>
-      <div class="card card-pad"><h3>Lead sources</h3>${bars(s.bySource.map((r) => ({ ...r, label: SRC[r.label] || r.label })))}</div>
-      <div class="card card-pad"><h3>Most audited industries</h3>${bars(s.byIndustry)}</div>
-      <div class="card card-pad"><h3>Audits by plan</h3>${bars(s.byPlan.map((r) => ({ ...r, label: planLabel(r.label, '') })))}</div>
-    </div>`;
-}
-
 function setBadge(n) {
   state.pending = n;
   const b = document.getElementById('pbadge');
@@ -217,44 +249,6 @@ async function payments(view) {
 }
 
 // ── Leads ────────────────────────────────────────────────────────────────
-async function leads(view) {
-  const { leads: all, statuses } = await api('/admin/leads');
-  const f = state.leadFilter;
-  const list = f === 'all' ? all : all.filter((l) => l.status === f);
-  view.innerHTML = `${head('CRM', 'Leads', `${all.length} lead${all.length === 1 ? '' : 's'} from forms, free audits and paid orders.`, `<button class="btn ghost sm" id="csv">Export CSV</button>`)}
-    <div class="filters">${['all', ...statuses].map((s) => `<button class="chip ${f === s ? 'on' : ''}" data-lf="${s}">${s === 'all' ? 'All' : LS[s]}<span class="n">${s === 'all' ? all.length : all.filter((l) => l.status === s).length}</span></button>`).join('')}</div>
-    ${list.length ? `<div class="card table-wrap">${bulkBar}<table class="t"><thead><tr>${selHead}<th>Date</th><th>Name</th><th>Contact</th><th>Company / website</th><th>Service</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody>
-      ${list.map((l) => { const w = wa(l.whatsapp || l.phone, `Hi ${l.name}, this is Click2Client Media.`); return `<tr data-id="${esc(l.id)}">
-        ${selCell(l.id)}
-        <td class="small nowrap">${fmtDate(l.created_at, true)}</td>
-        <td><b>${esc(l.name)}</b>${l.message ? `<div class="tiny muted" style="max-width:260px">${esc(l.message.slice(0, 160))}</div>` : ''}</td>
-        <td class="small">${l.email ? `<a href="mailto:${esc(l.email)}">${esc(l.email)}</a><br>` : ''}${esc(l.phone || '')}${w ? ` · <a href="${w}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</td>
-        <td class="small break">${esc(l.company || '')}${l.website ? `<br><span class="muted">${esc(hostOf(l.website))}</span>` : ''}${l.audit_id ? `<br><a href="/audit/${esc(l.audit_id)}" target="_blank">View audit</a>` : ''}</td>
-        <td class="small">${esc(l.service || '—')}</td>
-        <td class="small">${esc(SRC[l.source] || l.source || '')}</td>
-        <td><select class="mini" data-ls>${statuses.map((s) => `<option value="${s}" ${s === l.status ? 'selected' : ''}>${LS[s]}</option>`).join('')}</select></td>
-        <td>${delBtn}</td>
-      </tr>`; }).join('')}</tbody></table></div>` : '<div class="card empty"><p>No leads in this view.</p></div>'}`;
-  view.onclick = (e) => {
-    if (selectionClick(e, view, { kind: 'leads', noun: 'lead', warn: 'Only the lead entries are removed; any linked audits and orders are kept.', reload: () => leads(view) })) return;
-    const c = e.target.closest('[data-lf]');
-    if (c) { state.leadFilter = c.dataset.lf; leads(view); }
-    if (e.target.id === 'csv') {
-      const cols = ['created_at', 'name', 'email', 'phone', 'whatsapp', 'company', 'website', 'service', 'source', 'status', 'message'];
-      const csv = [cols.join(','), ...list.map((l) => cols.map((k) => `"${String(l[k] ?? '').replace(/"/g, '""')}"`).join(','))].join('\n');
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-      a.download = `click2client-leads-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-    }
-  };
-  view.onchange = async (e) => {
-    if (!e.target.matches('[data-ls]')) return;
-    try { await api(`/admin/leads/${e.target.closest('tr').dataset.id}`, { method: 'PATCH', body: { status: e.target.value } }); toast('Lead updated'); } catch (ex) { toast(ex.message); }
-  };
-}
-
-// ── Audits ───────────────────────────────────────────────────────────────
 async function audits(view) {
   const f = state.auditFilter;
   const { audits: list } = await api(`/admin/audits${f === 'all' ? '' : `?plan=${f}`}`);
@@ -670,174 +664,4 @@ async function pagesTab(view) {
 }
 
 // ── Blog ─────────────────────────────────────────────────────────────────
-async function blogTab(view) {
-  const { posts } = await api('/admin/blog');
-  posts.sort((a, b) => String(b.date).localeCompare(String(a.date)));
-  const editing = state.blogEdit === 'new' ? {} : posts.find((p) => p.id === state.blogEdit);
-  if (editing) return blogForm(view, editing);
-  view.innerHTML = `${head('Website', 'Blog', `${posts.filter((p) => p.published).length} published · ${posts.filter((p) => !p.published).length} draft. Published posts appear on <a href="/blog" target="_blank">/blog</a> and in the sitemap.`, '<a class="btn ghost sm" href="/blog" target="_blank">View blog ↗</a><button class="btn sm accent" data-new>+ New post</button>')}
-    ${posts.length ? `<div class="card table-wrap"><table class="t"><thead><tr><th>Date</th><th>Title</th><th>Category</th><th>Status</th><th></th></tr></thead><tbody>
-      ${posts.map((p) => `<tr data-id="${esc(p.id)}">
-        <td class="small nowrap">${esc(p.date)}</td>
-        <td><b>${esc(p.title)}</b><div class="tiny muted">/blog/${esc(p.id)}</div></td>
-        <td class="small">${esc(p.category || '—')}</td>
-        <td>${p.published ? '<span class="pill pass">Published</span>' : '<span class="pill unavailable">Draft</span>'}</td>
-        <td class="nowrap">${p.published ? `<a class="btn sm quiet" href="/blog/${esc(p.id)}" target="_blank">View</a>` : ''}<button class="btn sm ghost" data-edit>Edit</button>${delBtn}</td>
-      </tr>`).join('')}</tbody></table></div>` : '<div class="card empty"><h3>No posts yet</h3><p>Write your first article — it shows on /blog as soon as you publish it.</p></div>'}`;
-  view.onclick = async (e) => {
-    if (e.target.closest('[data-new]')) { state.blogEdit = 'new'; return blogTab(view); }
-    const tr = e.target.closest('tr[data-id]');
-    if (!tr) return;
-    if (e.target.closest('[data-edit]')) { state.blogEdit = tr.dataset.id; return blogTab(view); }
-    if (e.target.closest('[data-del]') && confirm(`Delete "${tr.querySelector('b').textContent}"? This cannot be undone.`)) {
-      try { await api(`/admin/blog/${encodeURIComponent(tr.dataset.id)}`, { method: 'DELETE' }); toast('Post deleted'); blogTab(view); } catch (ex) { toast(ex.message); }
-    }
-  };
-}
-
-// Readiness checks shown live while writing. They flag common problems; they do not
-// predict rankings, and nothing here guarantees Google or AI assistants will cite a post.
-const wordCount = (t) => (String(t).match(/\S+/g) || []).length;
-function blogChecks(v) {
-  const body = v.body || '', kw = (v.keyword || '').toLowerCase().trim();
-  const has = (t) => Boolean(kw) && String(t || '').toLowerCase().includes(kw);
-  const heads = [...body.matchAll(/^(#{2,3})\s+(.+)$/gm)].map((m) => ({ l: m[1].length, t: m[2].trim() }));
-  const links = [...body.matchAll(/(?<!!)\[[^\]]+\]\(([^)\s]+)\)/g)].map((m) => m[1]);
-  const internal = links.filter((u) => u.startsWith('/') || u.includes(location.host));
-  const external = links.filter((u) => /^https?:\/\//.test(u) && !u.includes(location.host));
-  const faqs = (v.faqs || []).filter((f) => f.q && f.a);
-  const firstSection = (body.split(/^##\s.*$/m)[1] || '').trim().split(/\n\s*\n/)[0] || '';
-  const unsourced = body.split(/\n\s*\n/).filter((p) => /\d+(\.\d+)?\s?%/.test(p) && !/\]\(https?:/.test(p) && !/according to|source:/i.test(p));
-  const len = (s, a, b) => (s || '').length >= a && (s || '').length <= b;
-  const c = (l, ok, tip) => ({ l, ok: Boolean(ok), tip });
-  return {
-    seo: [
-      c('Main keyword in the title', has(v.title), 'Work the keyword into the title naturally.'),
-      c('Keyword in the URL slug', has((v.slug || '').replace(/-/g, ' ')), 'Use a short slug built from the keyword.'),
-      c('Meta title is 30–60 characters', len(v.metaTitle, 30, 60), 'Write a 30–60 character SEO title.'),
-      c('Meta description is 70–160 characters', len(v.metaDescription, 70, 160), 'Summarise the page in 70–160 characters.'),
-      c('At least 2 “##” section headings', heads.filter((h) => h.l === 2).length >= 2, 'Split the article into clear sections.'),
-      c('At least 2 internal links', internal.length >= 2, 'Link to other pages on this site, e.g. [our SEO services](/services).'),
-      c('Canonical URL set', /^https:\/\//.test(v.canonical || ''), 'Click “Use default” under Canonical URL.'),
-    ],
-    aeo: [
-      c('3 or more FAQs', faqs.length >= 3, 'Add the real questions customers ask.'),
-      c('FAQ answers are short (60 words or fewer)', faqs.length && faqs.every((f) => wordCount(f.a) <= 60), 'Give a direct one-or-two-sentence answer.'),
-      c('A heading phrased as a question', heads.some((h) => /\?$/.test(h.t)), 'e.g. “## How do I get more Google reviews?”'),
-      c('First section opens with a short direct answer', firstSection && wordCount(firstSection) <= 60, 'Start the first “##” section with a 1–2 sentence answer, then explain.'),
-    ],
-    geo: [
-      c('Author named', v.author, 'Add the author name.'),
-      c('Clear definition near the top', /\b(is a|is an|is the|refers to|means)\b/i.test(body.slice(0, 1200)), 'Define the main concept in one plain sentence.'),
-      c('2 or more external source links', external.length >= 2, 'Link reputable sources that back up your claims.'),
-      c('Every statistic has a source', !unsourced.length, unsourced.length ? `Add a source or remove: “${unsourced[0].slice(0, 60)}…”` : ''),
-      c('Descriptive headings (not just “Introduction”/“Conclusion”)', heads.length && !heads.some((h) => /^(introduction|conclusion|overview|summary)$/i.test(h.t)), 'Make each heading say what the section answers.'),
-      c('Brand mentioned where relevant', /click2client/i.test(body), 'Mention Click2Client Media in an example or the closing call to action.'),
-    ],
-  };
-}
-function checksHtml(ch) {
-  const grp = (k, title, note) => { const a = ch[k], pct = Math.round((100 * a.filter((x) => x.ok).length) / a.length); return `<div style="margin-top:14px"><div class="row" style="justify-content:space-between"><b>${title}</b><span class="pill ${pct >= 80 ? 'pass' : 'unavailable'}">${pct}%</span></div><p class="tiny muted" style="margin:2px 0 6px">${note}</p>${a.map((x) => `<div class="small" style="padding:3px 0">${x.ok ? '✅' : '❌'} ${esc(x.l)}${x.ok || !x.tip ? '' : `<div class="tiny muted" style="margin-left:22px">${esc(x.tip)}</div>`}</div>`).join('')}</div>`; };
-  return grp('seo', 'SEO', 'Can search engines read and understand this page?') + grp('aeo', 'AEO — answer engines', 'Short, direct answers to real questions.') + grp('geo', 'GEO — AI search', 'Clear, sourced and trustworthy. No setting guarantees AI assistants will cite a post.');
-}
-
-function blogForm(view, p) {
-  const isNew = !p.id;
-  const F = (k, l, hint = '', extra = '') => `<div class="field"><label for="b-${k}">${l}</label><input class="input" id="b-${k}" name="${k}" value="${esc(p[k] || '')}" ${extra}>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
-  const faqRow = (f = {}) => `<div class="faq-row stack" style="gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px"><input class="input" data-fq placeholder="Question, e.g. How much does local SEO cost?" value="${esc(f.q || '')}"><textarea class="input" data-fa rows="2" placeholder="Short, direct answer (1–2 sentences)">${esc(f.a || '')}</textarea><button class="btn sm ghost del" type="button" data-faq-del style="justify-self:start">Remove</button></div>`;
-  view.innerHTML = `${head('Blog', isNew ? 'New post' : 'Edit post', '', '<button class="btn ghost sm" data-back>← All posts</button>')}
-    <div class="two" style="align-items:start;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)">
-      <form class="card card-pad stack" id="bf" style="gap:14px">
-        ${F('title', 'Title *', '', 'required maxlength="140"')}
-        ${F('excerpt', 'Summary', 'One or two sentences. Shown on the blog page.', 'maxlength="300"')}
-        <div class="field"><div class="row" style="justify-content:space-between"><label for="b-body">Article</label><label class="btn sm accent" style="cursor:pointer">⬆ Upload image into article<input type="file" data-inline accept="image/png,image/jpeg,image/webp" hidden></label></div><textarea class="input" id="b-body" name="body" rows="22" style="font:15px/1.6 var(--mono)">${esc(p.body || '')}</textarea>
-          <span class="hint">Leave a blank line between paragraphs. <code>## Heading</code> · <code>### Sub-heading</code> · <code>- bullet</code> · <code>1. numbered</code> · <code>&gt; quote</code> · <code>**bold**</code> · <code>*italic*</code> · <code>[link text](https://…)</code> · table: <code>| A | B |</code> then <code>|---|---|</code>. Use the upload button to add a picture where your cursor is.</span></div>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
-          ${F('category', 'Category', 'e.g. SEO, Meta Ads, Websites', 'maxlength="40"')}
-          ${F('author', 'Author', 'Named authors build trust with readers and AI search.', 'placeholder="Hari"')}
-          ${F('date', 'Publish date', '', 'type="date"')}
-          ${F('slug', 'URL slug', 'Leave empty to create it from the title.', `placeholder="${esc(p.id || 'auto')}"`)}
-        </div>
-        <h3 style="margin-top:6px">SEO</h3>
-        <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
-          ${F('keyword', 'Main keyword', 'The phrase this post should be found for.', 'maxlength="80"')}
-          ${F('tags', 'Tags', 'Comma separated.', 'maxlength="200"')}
-        </div>
-        <div class="field"><label for="b-metaTitle">SEO title <span class="hint" data-count="metaTitle"></span></label><input class="input" id="b-metaTitle" name="metaTitle" value="${esc(p.metaTitle || '')}" maxlength="120"><span class="hint">Shown in Google results. 30–60 characters. Leave empty to use the post title.</span></div>
-        <div class="field"><label for="b-metaDescription">SEO description <span class="hint" data-count="metaDescription"></span></label><textarea class="input" id="b-metaDescription" name="metaDescription" rows="2" maxlength="320">${esc(p.metaDescription || '')}</textarea><span class="hint">70–160 characters. Leave empty to use the summary.</span></div>
-        <div class="field"><label for="b-canonical">Canonical URL</label><div class="row"><input class="input" id="b-canonical" name="canonical" value="${esc(p.canonical || '')}" style="flex:1" placeholder="https://…"><button class="btn sm ghost" type="button" data-canon>Use default</button></div></div>
-        <div class="field"><label for="b-imageAlt">Cover image ALT text</label><input class="input" id="b-imageAlt" name="imageAlt" value="${esc(p.imageAlt || '')}" maxlength="200"><span class="hint">Describe the cover image for screen readers and search.</span></div>
-        <h3 style="margin-top:6px">AEO — FAQs for answer engines</h3>
-        <p class="small muted" style="margin:-8px 0 0">Shown at the end of the post and added as FAQ structured data. Answers must be supported by the article.</p>
-        <div class="stack" id="faqs" style="gap:8px">${(p.faqs || []).map(faqRow).join('')}</div>
-        <div><button class="btn sm ghost" type="button" data-faq-add>＋ Add FAQ</button></div>
-        <label class="small" style="display:inline-flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${p.published ? 'checked' : ''}> <b>Published</b> — visible on the website (unticked = draft)</label>
-        <div class="row"><button class="btn accent" type="submit">${isNew ? 'Create post' : 'Save post'}</button></div>
-      </form>
-      <div class="stack" style="gap:18px">
-        <div class="card card-pad"><h3>Cover image</h3><p class="small muted" style="margin-top:4px">Shown on the blog page, at the top of the article and when the link is shared. Wide images (16:9) work best. Resized automatically.</p>
-          ${isNew ? '<p class="small" style="margin-top:12px">Save the post first, then add a cover image.</p>' : `<div style="margin-top:12px">${p.cover ? `<img src="/blog-img/${esc(p.id)}?v=${p.cover}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;border:1px solid var(--line)">` : '<div class="small muted" style="aspect-ratio:16/9;display:grid;place-items:center;border:1px dashed var(--line-2);border-radius:10px">No cover yet</div>'}</div>
-          <div class="row wrap-row" style="margin-top:12px"><label class="btn sm accent" style="cursor:pointer">${p.cover ? 'Replace' : 'Upload'} cover<input type="file" data-cover accept="image/png,image/jpeg,image/webp" hidden></label>${p.cover ? '<button class="btn sm ghost" type="button" data-cover-del>Remove</button>' : ''}</div>`}
-        </div>
-        <div class="card card-pad" style="position:sticky;top:12px"><h3>Readiness checks</h3><p class="tiny muted" style="margin-top:4px">Updates as you type. These catch common problems — they are not ranking guarantees.</p><div id="bchk"></div></div>
-      </div>
-    </div>`;
-  if (!p.slug) view.querySelector('#b-slug').value = p.id || '';
-  const form = document.getElementById('bf');
-  const values = () => ({ ...Object.fromEntries(new FormData(form)), faqs: [...form.querySelectorAll('.faq-row')].map((r) => ({ q: r.querySelector('[data-fq]').value, a: r.querySelector('[data-fa]').value })) });
-  const refresh = () => {
-    const v = values();
-    for (const k of ['metaTitle', 'metaDescription']) { const el = form.querySelector(`[data-count="${k}"]`); if (el) el.textContent = `(${(v[k] || '').length})`; }
-    document.getElementById('bchk').innerHTML = checksHtml(blogChecks({ ...v, slug: v.slug || p.id || '' }));
-  };
-  refresh();
-  form.addEventListener('input', refresh);
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const f = new FormData(e.target);
-    const body = { ...values(), published: f.has('published') };
-    try {
-      const r = await api(isNew ? '/admin/blog' : `/admin/blog/${encodeURIComponent(p.id)}`, { method: isNew ? 'POST' : 'PUT', body });
-      toast(r.published ? 'Saved and published' : 'Saved as draft');
-      state.blogEdit = r.id;
-      blogTab(view);
-    } catch (ex) { toast(ex.message); }
-  };
-  view.onclick = async (e) => {
-    if (e.target.closest('[data-back]')) { state.blogEdit = null; return blogTab(view); }
-    if (e.target.closest('[data-faq-add]')) { form.querySelector('#faqs').insertAdjacentHTML('beforeend', faqRow()); return refresh(); }
-    if (e.target.closest('[data-faq-del]')) { e.target.closest('.faq-row').remove(); return refresh(); }
-    if (e.target.closest('[data-canon]')) {
-      const slug = form.querySelector('#b-slug').value.trim() || form.querySelector('#b-title').value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      form.querySelector('#b-canonical').value = `${location.origin}/blog/${slug}`; return refresh();
-    }
-    if (e.target.closest('[data-cover-del]') && confirm('Remove the cover image?')) {
-      try { await api(`/admin/blog/${encodeURIComponent(p.id)}/cover`, { method: 'DELETE' }); toast('Cover removed'); blogTab(view); } catch (ex) { toast(ex.message); }
-    }
-  };
-  view.onchange = async (e) => {
-    if (e.target.matches('[data-inline]')) { // picture inside the article, at the cursor
-      const file = e.target.files[0]; e.target.value = '';
-      if (!file) return;
-      try {
-        toast('Uploading…');
-        const r = await api('/admin/blog/media', { method: 'POST', body: { dataUrl: await shrinkImage(file) } });
-        const ta = form.querySelector('#b-body'), at = ta.selectionEnd ?? ta.value.length;
-        ta.setRangeText(`\n\n![Describe this image](${r.url})\n\n`, at, at, 'end');
-        toast('Image added — replace “Describe this image” with a short description (ALT text).');
-        refresh();
-      } catch (ex) { toast(ex.message || 'Could not read that image.'); }
-      return;
-    }
-    const file = e.target.matches('[data-cover]') && e.target.files[0];
-    if (!file) return;
-    try {
-      toast('Uploading…');
-      await api(`/admin/blog/${encodeURIComponent(p.id)}/cover`, { method: 'PUT', body: { dataUrl: await shrinkImage(file) } });
-      toast('Cover uploaded');
-      blogTab(view);
-    } catch (ex) { toast(ex.message || 'Could not read that image.'); }
-  };
-}
-
 boot();
