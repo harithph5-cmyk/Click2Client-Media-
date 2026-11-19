@@ -47,6 +47,12 @@ export async function searchPerformance(site, { page, days = 28 } = {}) {
   return (j.rows || []).map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
 }
 
+/** Site-wide top queries (used by the admin SEO agent for keyword research). */
+export async function topQueries(site, { days = 28, limit = 250 } = {}) {
+  const j = await g(`https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`, { startDate: day(days), endDate: day(2), dimensions: ['query'], rowLimit: limit });
+  return (j.rows || []).map((r) => ({ key: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }));
+}
+
 export async function inspectUrl(site, url) {
   const j = await g('https://searchconsole.googleapis.com/v1/urlInspection/index:inspect', { inspectionUrl: url, siteUrl: site });
   const i = j.inspectionResult?.indexStatusResult || {};
